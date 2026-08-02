@@ -1,6 +1,7 @@
 # SaveVault
 
 > Nome provisório. Backup contínuo e restauração inteligente de saves de jogos de PC e de emuladores.
+> Fork do [Ludusavi](https://github.com/mtkennerly/ludusavi) (MIT), em Rust. Windows.
 
 ## 1. Problema
 
@@ -27,9 +28,14 @@ destino é igual ao de origem, ou pedem que o usuário mapeie o caminho novo na 
 
 ## 2. Proposta
 
-Um app grátis e de código aberto que faz o que o Ludusavi faz (backup de save de jogo de PC:
-Steam, GOG, Epic, Heroic, Lutris, jogo avulso) **e** trata emulador como cidadão de primeira classe,
-com um motor de restauração que resolve o destino sozinho.
+Um **fork do Ludusavi** que herda tudo o que ele já faz de backup de jogo de PC (Steam, GOG, Epic,
+Heroic, Lutris, jogo avulso, saves no registro do Windows, versionamento, retenção, nuvem) e
+acrescenta duas coisas: **emulador como cidadão de primeira classe** e um **motor de restauração que
+resolve o destino sozinho**.
+
+A decisão de forkar, e não construir do zero nem orquestrar por fora, é o que mantém o esforço
+concentrado na única parte que ninguém resolveu. O Ludusavi é MIT, então isso é legítimo, e o
+histórico dele já está neste repositório com o `upstream` configurado.
 
 O contrato com o usuário na restauração é este:
 
@@ -77,28 +83,36 @@ Com isso, restaurar deixa de ser copiar caminho e passa a ser resolver quatro pe
 |---|---|
 | Qual emulador é este? | Assinatura de pasta: nome e estrutura de subpastas, executável, arquivo de config característico (por exemplo `PPSSPP` com `PSP/SAVEDATA`, `PCSX2` com `memcards`, `DuckStation` com `memcards` e `settings.ini`) |
 | Onde ele guarda dado do usuário? | Perfil por emulador com as variantes conhecidas: instalado, portátil, Flatpak, AppData, XDG. Quando o emulador expõe a raiz no próprio arquivo de config, ler de lá |
-| Qual jogo é este arquivo? | Identidade do jogo pelo código de mídia (serial), não pelo nome do arquivo: `SLUS-xxxxx` no PS1 e PS2, Title ID no Switch e no Xbox 360, `ULUS/NPJH` no PSP |
+| Qual jogo é este arquivo? | Identidade do jogo pelo código de mídia (serial), não pelo nome do arquivo: `SLUS-xxxxx` no PS1 e PS2, `BLUS/NPUB` no PS3, `CUSA-xxxxx` no PS4, Title ID no Switch e no Xbox 360, `ULUS/NPJH` no PSP |
 | Este destino já tem save? | Comparação por conteúdo e data, e decisão explícita do usuário quando os dois lados divergem |
 
 Nenhuma dessas quatro respostas pode ser inventada. Se o app não reconhecer a pasta com confiança,
 ele **pergunta** em vez de adivinhar e escrever no lugar errado. Um restore errado destrói progresso,
 que é exatamente o que o produto promete proteger.
 
-### Emuladores do escopo inicial
-
-Escolhidos pelo Maycon, mais os que compartilham o mesmo padrão de pasta e saem de graça:
+### Emuladores do escopo, fechado em oito
 
 | Emulador | Sistema | Identidade do jogo |
 |---|---|---|
 | PPSSPP | PSP | Código de disco (`ULUS`, `NPJH`) |
 | DuckStation | PS1 | Serial `SLUS`, `SCES` |
 | PCSX2 | PS2 | Serial `SLUS`, `SCES` |
+| RPCS3 | PS3 | `BLUS`, `BLES`, `NPUB` |
+| shadPS4 | PS4 | `CUSA-xxxxx` |
 | Sudachi | Switch | Title ID |
 | Eden | Switch | Title ID |
 | Xenia | Xbox 360 | Title ID |
 
-Candidatos para a rodada seguinte, a confirmar com o Maycon: RetroArch (é caso especial, agrega
-vários núcleos), Dolphin, Citra, Vita3K, melonDS, Ryujinx, RPCS3.
+Os dois novos são bons casos de teste do motor, não só mais itens na lista. O **RPCS3** separa
+`savedata` de `trophy` e de `home/<perfil>`, então força o modelo a distinguir tipo de arquivo dentro
+do mesmo jogo. O **shadPS4** guarda em `user/savedata/<perfil>/<CUSA>/<pasta do jogo>` e decide entre
+`AppData` e pasta portátil pela simples presença da pasta `user` ao lado do executável, que é
+exatamente a variante de instalação que quebra restauração baseada em caminho absoluto.
+
+**RetroArch está fora**, decidido, e não é "adiado por falta de tempo": ele agrega dezenas de núcleos
+com esquema próprio de nome de arquivo, e resolver isso é um segundo produto dentro do primeiro.
+
+Candidatos para uma rodada futura, sem compromisso: Dolphin, Citra, Vita3K, melonDS, Ryujinx.
 
 ## 6. Escopo
 
@@ -109,53 +123,73 @@ vários núcleos), Dolphin, Citra, Vita3K, melonDS, Ryujinx, RPCS3.
 | 1 | Descoberta automática de emuladores instalados na máquina | Sem isso o usuário configura na mão e o produto vira o que já existe |
 | 2 | Vigilância contínua das pastas de save, com backup versionado por evento de mudança | É o JTBD 1, e é a diferença entre backup e "eu lembrei de fazer backup" |
 | 3 | Restauração apontando só a pasta do emulador, com resolução automática do destino | É o diferencial |
-| 4 | Backup de jogo de PC reaproveitando o catálogo de +19.000 jogos do Ludusavi | Paridade. É o que o Maycon pediu: ter o que o Ludusavi tem, mais emulador |
+| 4 | Backup de jogo de PC, herdado do fork sem reescrever nada | Paridade de graça. O catálogo de +19.000 jogos, as lojas e os saves no registro do Windows já vêm prontos |
 | 5 | Resolução de conflito quando origem e destino divergem, mostrando data e jogo | Sem isso o app pode destruir progresso, que anula a proposta |
 | 6 | Destino de backup em pasta local e em pasta de nuvem já sincronizada (Drive, OneDrive, Dropbox) | Backup na mesma máquina não protege contra o cenário mais comum, que é formatar |
-| 7 | Windows | É a máquina do Maycon e o maior público de emulação em desktop |
+| 7 | Windows, só | É a máquina do Maycon e o maior público de emulação em desktop |
 
-### Fora da V1
+### V2
+
+Já dimensionado, e fora da V1 de propósito:
+
+| Entrega | Por quê |
+|---|---|
+| **Migração de save entre emuladores do mesmo sistema** (Sudachi para Eden, Yuzu para Sudachi, e o mesmo caso quando o Xenia ou o RPCS3 mudam de estrutura) | É a extensão natural do motor: se ele já sabe traduzir save em significado e significado em destino, migrar é resolver o destino num emulador diferente do de origem. Dói de verdade em quem acompanhou os forks do Switch. Fica na V2 porque exige o motor da V1 provado antes, e porque cada par de emuladores é uma regra de equivalência a validar caso a caso |
+| Linux e SteamOS | O código herdado do Ludusavi já é multiplataforma, então isso não é reescrita: é escrever os perfis de emulador para os caminhos XDG e Flatpak, e validar. É onde o diferencial brilha mais, porque no Steam Deck o caminho nunca é o mesmo do PC |
+
+### Fora do escopo por agora
 
 Registrado para não voltar como surpresa:
 
-- Linux, SteamOS e macOS. Entram na V2, e a arquitetura tem que nascer preparada para isso, mas
-  validar em três sistemas ao mesmo tempo mata a V1.
+- **RetroArch**, pelo motivo já explicado na seção 5.
+- macOS.
 - Android, que é o segundo maior público de PPSSPP e DuckStation e merece rodada própria.
-- Nuvem própria do produto. A V1 grava em pasta que o cliente de nuvem do usuário já sincroniza,
-  sem servidor, sem conta e sem custo de operação.
-- Sincronização bidirecional automática entre duas máquinas. A V1 faz backup e restauração
-  explícita, porque sync automático é onde as ferramentas existentes destroem save.
+- Nuvem própria do produto. Grava em pasta que o cliente de nuvem do usuário já sincroniza, ou usa o
+  rclone que já vem do fork. Sem servidor, sem conta e sem custo de operação.
+- Sincronização bidirecional automática entre duas máquinas. Backup e restauração são explícitos,
+  porque sync automático é onde as ferramentas existentes destroem save.
 - Download de ROM, gestão de BIOS, atualização de emulador.
+
+Nada de Windows-only significa **arrancar** o suporte a Linux e macOS que já existe no código
+herdado. Significa que a V1 não constrói, não testa e não promete esses sistemas. Quebrar o que já
+funciona lá dentro atrapalharia trazer melhoria do upstream depois.
 
 ### Não objetivos
 
 - Não é launcher, não é frontend de emulação, não substitui Playnite nem EmuDeck.
 - Não distribui conteúdo protegido: nem ROM, nem BIOS, nem firmware.
 
-## 7. Arquitetura: as opções
+## 7. Arquitetura: fork do Ludusavi
 
-O Ludusavi é MIT e escrito em Rust, então reusar é legítimo e é o caminho que o Maycon pediu.
-Três formas, com a recomendação primeiro:
+**Decidido: fork.** O repositório já tem o histórico completo do upstream
+(`mtkennerly/ludusavi`, MIT) e o remote `upstream` configurado, então trazer melhoria de lá é
+`git fetch upstream && git merge upstream/master`.
 
-| Opção | Como | Ganho | Custo |
-|---|---|---|---|
-| **A. Orquestrar o Ludusavi (recomendada)** | App novo chama o binário do Ludusavi via linha de comando para a parte de jogo de PC, e implementa o motor de emulador e o restore inteligente por conta própria | Entrega paridade de PC no dia um, e o catálogo de 19.000 jogos continua sendo mantido por terceiros de graça | Depende de contrato de linha de comando externo, e são dois binários no pacote |
-| B. Fork do Ludusavi | Adiciona o módulo de emulador dentro do código em Rust | Binário único, integração profunda | Assume a manutenção de todo o resto, e o Maycon herda um projeto grande em Rust |
-| C. Contribuir com o upstream | Propor suporte nativo a emulador no próprio Ludusavi | Bem para a comunidade | Perde o controle de escopo e de prazo, e o diferencial de restauração vira feature de outro produto |
+A stack sai decidida por consequência: **Rust**, interface em `iced`, linha de comando em `clap`.
+Sem Tauri e sem Electron, porque o app já existe e o que falta é camada dentro dele.
 
-A recomendação é a A, com a nota de que o motor de emulador nasce como módulo separado, de forma que
-migrar para B mais tarde continua possível.
+### Onde a camada nova encaixa no código herdado
 
-Duas coisas a validar tecnicamente antes de fechar a arquitetura:
+Levantado lendo o código, não presumido:
 
-1. Se o Ludusavi expõe saída legível por máquina (JSON) na linha de comando, e se cobre backup e
-   restauração nesse modo. É o que decide se a opção A se sustenta.
-2. Se a licença MIT permite empacotar o binário junto na distribuição do SaveVault, incluindo o
-   aviso de copyright exigido.
+| Ponto de extensão | Arquivo | O que muda |
+|---|---|---|
+| **Raiz de biblioteca** | `src/resource/manifest.rs`, enum `Store` (hoje `Steam`, `Epic`, `Gog`, `Heroic`, `Lutris`, `OtherWindows` e afins) | Emulador entra como novo tipo de raiz. É o conceito que o Ludusavi já usa para "onde procurar jogos", e é exatamente o que um emulador é |
+| **Catálogo de jogos** | `src/resource/manifest.rs` | Manifesto de emulador ao lado do manifesto do PCGamingWiki, com o perfil de cada um dos oito e as variantes de instalação. Arquivo de dados atualizável sem soltar versão nova |
+| **Varredura** | `src/scan/` | Descoberta por assinatura de pasta, e identidade do jogo por serial ou Title ID em vez de nome de arquivo |
+| **Metadado do backup** | `src/resource/config.rs` e a estrutura de backup documentada em `docs/help/backup-structure.md` | Guardar o **significado** do save junto do arquivo, que é o que a seção 5 descreve. É a mudança de fundo, e o resto do motor de restauração depende dela |
+| **Restauração** | `src/scan/` e a tela de restauração em `src/gui/` | O motor que resolve o destino, substituindo o `redirect` manual que existe hoje em `docs/help/redirects.md` |
+| **Vigilância contínua** | novo | O Ludusavi hoje depende de agendamento externo ou de `wrap` acionado por launcher. Vigiar por evento do sistema de arquivos é código novo |
 
-Stack do app em si ainda não decidida. As candidatas naturais são Rust com Tauri, que casa com o
-Ludusavi e gera binário pequeno, ou Electron, que é onde o Maycon já tem repertório nos outros
-projetos pessoais. Decisão pendente.
+Duas decisões técnicas que ficam para o refinamento, porque mudam o desenho e não só a
+implementação: se o metadado de significado nasce como extensão do formato de backup atual ou como
+arquivo paralelo (o primeiro é mais limpo, o segundo facilita o merge com o upstream), e se a
+vigilância roda no processo da interface ou num serviço separado.
+
+### Obrigações da licença
+
+O MIT exige manter o aviso de copyright e o texto da licença. O `LICENSE` do upstream veio no fork e
+fica. O README já credita o autor original e aponta o repositório de origem.
 
 ## 8. Métricas de sucesso
 
@@ -171,14 +205,28 @@ fica para a rodada de refinamento com o Maycon.
 | Restaurar no lugar errado e destruir progresso | Alto. Mata a proposta do produto | Backup automático do estado atual do destino antes de qualquer escrita, e restauração que pergunta quando não tem certeza |
 | O emulador muda a estrutura de pasta numa atualização | Médio. O perfil quebra em silêncio | Perfil de emulador em arquivo de dados versionado e atualizável sem soltar versão nova do app, com validação da assinatura antes de restaurar |
 | Emulador que não expõe identidade do jogo no nome do arquivo | Médio. Sobra save órfão | Aceitar o órfão explicitamente: restaurar por caminho relativo e avisar que a identificação não foi possível |
-| RetroArch, que agrega dezenas de núcleos com um esquema próprio | Médio | Fora da V1 de propósito. Entra depois, com perfil próprio |
 | Vigilância contínua pesar na máquina durante o jogo | Baixo | Vigiar por evento do sistema de arquivos, não por varredura, e agrupar eventos numa janela antes de gravar |
+| **O fork divergir tanto do upstream que trazer melhoria vire trabalho manual** | Médio. Perde o benefício que justificou forkar | Camada nova em módulo próprio, tocando o código herdado no mínimo e sempre por ponto de extensão que já existe (o enum `Store`, o manifesto). Mesclar o upstream com frequência, e não em lote de um ano |
+| Herdar um projeto grande em Rust que o Maycon não escreveu | Médio | Aceito com consciência: é o preço de não reimplementar 19.000 jogos. Mitiga tocando pouco no que já funciona, e a documentação de ajuda do upstream veio junto |
 
-## 10. Perguntas em aberto para o refinamento
+## 10. Decisões fechadas
 
-1. Nome. `SaveVault` é provisório.
-2. Stack: Tauri com Rust ou Electron.
-3. A lista de emuladores da V1 está fechada nesses seis, ou RetroArch é obrigatório desde o começo?
-4. Windows na V1 e Linux na V2 está bom, ou o Steam Deck precisa entrar junto?
-5. A restauração deve suportar "trazer save da versão antiga do emulador para a nova", que é migração
-   entre emuladores do mesmo sistema (por exemplo Sudachi para Eden), ou isso é V2?
+| Decisão | Escolha |
+|---|---|
+| Base do código | Fork do Ludusavi, MIT, Rust com `iced` |
+| Emuladores | Oito: PPSSPP, DuckStation, PCSX2, RPCS3, shadPS4, Sudachi, Eden, Xenia |
+| RetroArch | Fora |
+| Sistema operacional | Windows, só |
+| Migração entre emuladores | Dentro do produto, na V2 |
+| Nome | `SaveVault`, provisório, mantido por ora |
+
+## 11. Perguntas em aberto para o refinamento
+
+1. **Onde entra a interface da camada nova.** A tela de restauração do Ludusavi hoje é lista de jogos
+   com caixa de seleção. O fluxo "aponte a pasta do emulador" é outro fluxo, e a decisão é se ele vira
+   uma aba nova ou se reformula a tela que existe. Isso é o próximo passo natural, e é trabalho de
+   design.
+2. **Métricas.** Ainda não definidas (seção 8).
+3. **Ordem de implementação dos oito emuladores.** O motor precisa de um primeiro caso para nascer
+   contra algo real. O candidato é o PPSSPP, por ser o mais simples e o de estrutura mais estável, com
+   o shadPS4 logo depois por ser o que exercita a variante portátil.
