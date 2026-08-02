@@ -82,7 +82,7 @@ Com isso, restaurar deixa de ser copiar caminho e passa a ser resolver quatro pe
 | Pergunta | Como o app responde |
 |---|---|
 | Qual emulador é este? | Assinatura de pasta: nome e estrutura de subpastas, executável, arquivo de config característico (por exemplo `PPSSPP` com `PSP/SAVEDATA`, `PCSX2` com `memcards`, `DuckStation` com `memcards` e `settings.ini`) |
-| Onde ele guarda dado do usuário? | Perfil por emulador com as variantes conhecidas: instalado, portátil, Flatpak, AppData, XDG. Quando o emulador expõe a raiz no próprio arquivo de config, ler de lá |
+| Onde ele guarda dado do usuário? | Perfil por emulador com as variantes de instalação. Na V1, as de Windows: instalado em `AppData`, portátil ao lado do executável, e `Documentos`. Quando o emulador expõe a raiz no próprio arquivo de config, ler de lá. O modelo já nasce com espaço para XDG e Flatpak, que são a V2 |
 | Qual jogo é este arquivo? | Identidade do jogo pelo código de mídia (serial), não pelo nome do arquivo: `SLUS-xxxxx` no PS1 e PS2, `BLUS/NPUB` no PS3, `CUSA-xxxxx` no PS4, Title ID no Switch e no Xbox 360, `ULUS/NPJH` no PSP |
 | Este destino já tem save? | Comparação por conteúdo e data, e decisão explícita do usuário quando os dois lados divergem |
 
@@ -150,9 +150,9 @@ Registrado para não voltar como surpresa:
   porque sync automático é onde as ferramentas existentes destroem save.
 - Download de ROM, gestão de BIOS, atualização de emulador.
 
-Nada de Windows-only significa **arrancar** o suporte a Linux e macOS que já existe no código
-herdado. Significa que a V1 não constrói, não testa e não promete esses sistemas. Quebrar o que já
-funciona lá dentro atrapalharia trazer melhoria do upstream depois.
+Ser Windows-only **não** é arrancar o suporte a Linux e macOS que já existe no código herdado.
+É a V1 não construir, não testar e não prometer esses sistemas. Quebrar o que já funciona lá dentro
+atrapalharia trazer melhoria do upstream depois.
 
 ### Não objetivos
 
