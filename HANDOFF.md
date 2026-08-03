@@ -213,10 +213,14 @@ Se esta sessão está rodando sem o Maycon acompanhando:
 
 ## 8. Onde está o resto do contexto
 
+Tudo está em dois lugares de propósito, porque a próxima sessão pode abrir o repositório **ou**
+apontar para o hub.
+
 | Coisa | Onde |
 |---|---|
 | PRD completo | Produto `SaveVault` no hub (`kwA6qMaEK6YU4d88IdZy`), doc `zyOp7TCOp8y2rh67IIV0`. Cópia local em `docs/prd.md` |
-| Regras de desenvolvimento | `.claude/skills/desenvolvimento-savevault/SKILL.md` |
+| Esta passagem de bastão | Doc `UHtQ0xDkkZzaw03D2fSH` no mesmo produto, tipo `po`. É este arquivo |
+| Regras de desenvolvimento | `.claude/skills/desenvolvimento-savevault/SKILL.md`, e a skill `desenvolvimento-savevault` no hub (sincroniza com `npm run sync:skills`) |
 | Instruções carregadas automaticamente | `CLAUDE.md` na raiz |
 | Changelog e release | `CHANGELOG.md`, seção `SaveVault v0.1.0`; release `savevault-v0.1.0` no GitHub |
 | Ajuda herdada do Ludusavi | `docs/help/`, principalmente `roots.md`, `redirects.md` e `backup-structure.md` |
