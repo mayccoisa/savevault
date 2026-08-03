@@ -378,7 +378,7 @@ pub fn run(sub: Subcommand, no_manifest_update: bool, try_manifest_update: bool)
                 if !scan_info.can_report_game() {
                     None
                 } else {
-                    let display_title = config.display_name(name);
+                    let display_title = scan_info.display_name(&config).to_string();
                     Some((display_title, scan_info, backup_info, decision))
                 }
             };
@@ -595,7 +595,7 @@ pub fn run(sub: Subcommand, no_manifest_update: bool, try_manifest_update: bool)
                     && backup != &scanned_backup
                 {
                     log::trace!("step {i} completed (backup mismatch)");
-                    let display_title = config.display_name(name);
+                    let display_title = scan_info.display_name(&config).to_string();
                     return Some((
                         display_title,
                         scan_info,
@@ -626,7 +626,7 @@ pub fn run(sub: Subcommand, no_manifest_update: bool, try_manifest_update: bool)
                 if !scan_info.can_report_game() {
                     None
                 } else {
-                    let display_title = config.display_name(name);
+                    let display_title = scan_info.display_name(&config).to_string();
                     Some((display_title, scan_info, restore_info, decision, None))
                 }
             };
@@ -678,7 +678,7 @@ pub fn run(sub: Subcommand, no_manifest_update: bool, try_manifest_update: bool)
 
             for (name, scan_info, backup_info, decision, _) in info {
                 if !reporter.add_game(
-                    name,
+                    &name,
                     &scan_info,
                     backup_info.as_ref(),
                     &decision,
@@ -779,14 +779,14 @@ pub fn run(sub: Subcommand, no_manifest_update: bool, try_manifest_update: bool)
                     .map(|name| {
                         let mut layout = layout.game_layout(name);
                         let backups = layout.get_backups();
-                        let display_title = config.display_name(name);
+                        let display_title = layout.display_name(&config, name).to_string();
                         let backup_dir = layout.path;
                         (name, display_title, backup_dir, backups)
                     })
                     .collect();
 
                 for (name, display_title, backup_dir, backups) in info {
-                    reporter.add_backups(name, display_title, backup_dir, &backups);
+                    reporter.add_backups(name, &display_title, backup_dir, &backups);
                 }
                 reporter.print(&restore_dir);
             }
@@ -1317,6 +1317,14 @@ pub fn run(sub: Subcommand, no_manifest_update: bool, try_manifest_update: bool)
                 parse::SerializationFormat::Yaml => serde_yaml::to_string(&schema).unwrap(),
             };
             println!("{serialized}");
+        }
+        Subcommand::Emulators { api } => {
+            let report = crate::scan::emulator::diagnose(&config.roots);
+            if api {
+                println!("{}", serde_json::to_string_pretty(&report).unwrap());
+            } else {
+                print!("{}", report.render());
+            }
         }
         Subcommand::Gui { .. } => {
             unreachable!("`gui` command must be handled in main");

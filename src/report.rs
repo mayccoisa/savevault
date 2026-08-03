@@ -729,6 +729,7 @@ Overall:
                 game_name: s("foo"),
                 found_files: hash_map! {
                     "/file1".into(): ScannedFile {
+                        unresolved: None,
                         size: 102_400,
                         hash: "1".to_string(),
                         original_path: None,
@@ -738,6 +739,7 @@ Overall:
                         redirected: None,
                     },
                     "/file2".into(): ScannedFile {
+                        unresolved: None,
                         size: 51_200,
                         hash: "2".to_string(),
                         original_path: None,
@@ -798,6 +800,7 @@ Overall:
                 game_name: s("foo"),
                 found_files: hash_map! {
                     "/file1".into(): ScannedFile {
+                        unresolved: None,
                         size: 1,
                         hash: "1".to_string(),
                         original_path: None,
@@ -821,6 +824,7 @@ Overall:
                 game_name: s("bar"),
                 found_files: hash_map! {
                     "/file2".into(): ScannedFile {
+                        unresolved: None,
                         size: 3,
                         hash: "2".to_string(),
                         original_path: None,
@@ -866,6 +870,7 @@ Overall:
                 game_name: s("foo"),
                 found_files: hash_map! {
                     "/backup/file1".into(): ScannedFile {
+                        unresolved: None,
                         size: 102_400,
                         hash: "1".to_string(),
                         original_path: Some(StrictPath::new(s("/original/file1"))),
@@ -875,6 +880,7 @@ Overall:
                         redirected: None,
                     },
                     "/backup/file2".into(): ScannedFile {
+                        unresolved: None,
                         size: 51_200,
                         hash: "2".to_string(),
                         original_path: Some(StrictPath::new(s("/original/file2"))),
@@ -1207,6 +1213,7 @@ Overall:
                 game_name: s("foo"),
                 found_files: hash_map! {
                     "/backup/file1".into(): ScannedFile {
+                        unresolved: None,
                         size: 100,
                         hash: "1".to_string(),
                         original_path: Some(StrictPath::new(s("/original/file1"))),
@@ -1216,6 +1223,7 @@ Overall:
                         redirected: None,
                     },
                     "/backup/file2".into(): ScannedFile {
+                        unresolved: None,
                         size: 50,
                         hash: "2".to_string(),
                         original_path: Some(StrictPath::new(s("/original/file2"))),

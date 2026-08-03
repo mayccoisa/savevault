@@ -748,6 +748,7 @@ pub fn scan_game_for_backup(
                 found_files.insert(
                     scan_key,
                     ScannedFile {
+                        unresolved: None,
                         change,
                         size,
                         hash,
@@ -799,6 +800,7 @@ pub fn scan_game_for_backup(
                         found_files.insert(
                             scan_key,
                             ScannedFile {
+                                unresolved: None,
                                 change,
                                 size,
                                 hash,
@@ -835,6 +837,7 @@ pub fn scan_game_for_backup(
             found_files.insert(
                 previous_file.to_owned(),
                 ScannedFile {
+                    unresolved: None,
                     change: ScanChange::Removed,
                     size: 0,
                     hash: "".to_string(),
@@ -940,6 +943,14 @@ pub fn scan_game_for_backup(
             },
         );
     }
+    for (app, area, area_root) in emulator_areas_with_included_files(roots, &found_files) {
+        semantics.directories.insert(
+            area_root.render(),
+            DirectorySemantics {
+                kind: SemanticDirKind::Emulator { app, area },
+            },
+        );
+    }
 
     ScanInfo {
         game_name: name.to_string(),
@@ -951,6 +962,7 @@ pub fn scan_game_for_backup(
         dumped_registry,
         only_constructive_backups,
         semantics,
+        title: game.title.clone(),
     }
 }
 
@@ -993,6 +1005,37 @@ fn wine_prefixes_with_included_files(
             })
         {
             valid.push(prefix);
+        }
+    }
+
+    valid
+}
+
+/// The emulator data areas that actually contributed a file to this backup.
+///
+/// Same shape and same rule as [`wine_prefixes_with_included_files`]: only record a directory
+/// when a file being backed up really lives under it, so the backup does not claim semantics it
+/// does not have.
+fn emulator_areas_with_included_files(
+    roots: &[Root],
+    found_files: &HashMap<StrictPath, ScannedFile>,
+) -> Vec<(emulator::App, emulator::Area, StrictPath)> {
+    let mut valid: Vec<(emulator::App, emulator::Area, StrictPath)> = Vec::new();
+
+    for (app, data_root) in emulator::Roots::for_config(roots).iter() {
+        for spec in app.profile().areas {
+            let area_root = data_root.joined(spec.subdir);
+            if valid
+                .iter()
+                .any(|(seen_app, seen_area, seen)| *seen_app == app && *seen_area == spec.area && seen == &area_root)
+            {
+                continue;
+            }
+            if found_files.iter().any(|(scan_key, file)| {
+                file_is_included_in_backup(file) && scan_key.case_insensitive_tail_for(&area_root).is_some()
+            }) {
+                valid.push((app, spec.area, area_root));
+            }
         }
     }
 
@@ -1389,6 +1432,7 @@ mod tests {
                 game_name: s("game5"),
                 found_files: hash_map! {
                     format!("{}/tests/root3/game5/data/file1.txt", repo()).into(): ScannedFile {
+                        unresolved: None,
                         size: 1,
                         hash: "3a52ce780950d4d969792a2559cd519d7ee8c727".to_string(),
                         original_path: None,
@@ -1757,6 +1801,7 @@ mod tests {
             scan: ScanInfo {
                 found_files: hash_map! {
                     StrictPath::new("/backup/game4/file.dat"): ScannedFile {
+                        unresolved: None,
                         size: 0,
                         hash: EMPTY_HASH.to_string(),
                         original_path: Some(previous_source.clone()),
@@ -1804,6 +1849,7 @@ mod tests {
             scan: ScanInfo {
                 found_files: hash_map! {
                     StrictPath::new("/backup/game1/file1.txt"): ScannedFile {
+                        unresolved: None,
                         size: 1,
                         hash: "3a52ce780950d4d969792a2559cd519d7ee8c727".to_string(),
                         original_path: Some(stored_path.clone()),
@@ -2248,6 +2294,7 @@ mod tests {
         let ctx = semantic::Wine {
             preferred_prefix: None,
             known_folders: Some(kf),
+            emulators: Default::default(),
         };
         let result = game_file_target(
             &StrictPath::new("/home/user/prefix/drive_c/users/wineuser/Documents/game/save.dat"),
@@ -2283,6 +2330,7 @@ mod tests {
         let ctx = semantic::Wine {
             preferred_prefix: Some(prefix),
             known_folders: None,
+            emulators: Default::default(),
         };
         let result = game_file_target(
             &StrictPath::new("C:/Users/Alice/Documents/game/save.dat"),
@@ -2320,6 +2368,7 @@ mod tests {
         let ctx = semantic::Wine {
             preferred_prefix: Some(prefix),
             known_folders: None,
+            emulators: Default::default(),
         };
 
         let result = game_file_target(
@@ -2347,6 +2396,7 @@ mod tests {
                 wine_user: "wineuser".to_string(),
             }),
             known_folders: None,
+            emulators: Default::default(),
         };
 
         assert_eq!(
@@ -2381,6 +2431,7 @@ mod tests {
         let ctx = semantic::Wine {
             preferred_prefix: None,
             known_folders: Some(semantic::KnownFolders::default()),
+            emulators: Default::default(),
         };
         assert_eq!(
             None,
@@ -2405,6 +2456,7 @@ mod tests {
                 documents: Some("C:/Users/Alice/Documents".to_string()),
                 ..Default::default()
             }),
+            emulators: Default::default(),
         };
         let result = game_file_target(
             &StrictPath::new("/home/user/prefix/drive_c/users/user/Documents/game/save.dat"),
@@ -2444,6 +2496,7 @@ mod tests {
         let ctx = semantic::Wine {
             preferred_prefix: None,
             known_folders: Some(kf),
+            emulators: Default::default(),
         };
         let result = game_file_target(
             &StrictPath::new(&stored),
@@ -2480,6 +2533,7 @@ mod tests {
         let ctx = semantic::Wine {
             preferred_prefix: None,
             known_folders: Some(kf),
+            emulators: Default::default(),
         };
         let result = game_file_target(
             &StrictPath::new(&stored),
@@ -2518,6 +2572,7 @@ mod tests {
         let ctx = semantic::Wine {
             preferred_prefix: None,
             known_folders: Some(kf),
+            emulators: Default::default(),
         };
         let result = game_file_target(
             &StrictPath::new(&stored),
@@ -2551,6 +2606,7 @@ mod tests {
         let ctx = semantic::Wine {
             preferred_prefix: Some(prefix),
             known_folders: None,
+            emulators: Default::default(),
         };
         let sem = BackupSemantics::default(); // No Wine directories — uses heuristic
         let result = game_file_target(
@@ -2584,6 +2640,7 @@ mod tests {
         let ctx = semantic::Wine {
             preferred_prefix: Some(prefix),
             known_folders: None,
+            emulators: Default::default(),
         };
         let sem = BackupSemantics::default();
         let result = game_file_target(
@@ -2626,6 +2683,7 @@ mod tests {
         let ctx = semantic::Wine {
             preferred_prefix: Some(prefix),
             known_folders: None,
+            emulators: Default::default(),
         };
         let result = game_file_target(
             &StrictPath::new(&stored),

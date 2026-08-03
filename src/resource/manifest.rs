@@ -8,7 +8,7 @@ use crate::{
         cache::{self, Cache},
         config::{Config, CustomGame, ManifestConfig},
     },
-    scan::layout::escape_folder_name,
+    scan::{emulator, layout::escape_folder_name},
 };
 
 pub mod placeholder {
@@ -211,6 +211,14 @@ pub struct Game {
     pub sources: BTreeSet<Source>,
     #[serde(skip)]
     pub wine_prefix: Vec<String>,
+    /// Human-readable title, when the save itself carries one.
+    ///
+    /// Only emulator games have this: a PS1 memory card stores the title that the game wrote,
+    /// so the game can be shown by name instead of by media code. It is never part of a
+    /// manifest file, and it is never the game's key, because the key has to stay identical on
+    /// every machine even when the title cannot be read.
+    #[serde(skip)]
+    pub title: Option<String>,
 }
 
 impl Game {
@@ -656,7 +664,40 @@ impl Manifest {
         }
 
         self.load_secondary_manifests(config);
+        self.add_emulator_games(config);
         self.add_custom_games(config);
+    }
+
+    /// Injects one synthetic game per emulator save found on this machine.
+    ///
+    /// Emulator saves are in no manifest, and cannot be: the path depends on where the user put
+    /// the emulator. So they are synthesized on every scan, through the same door that custom
+    /// games and secondary manifests already use. Everything downstream then works untouched:
+    /// scanning, hashing, `mapping.yaml`, retention, differential backups, cloud, the game list,
+    /// the CLI and the filters.
+    pub fn add_emulator_games(&mut self, config: &Config) {
+        for (app, data_root) in emulator::Roots::for_config(&config.roots).iter() {
+            log::debug!("scanning emulator data folder: {} at {:?}", app.name(), data_root);
+
+            for save in emulator::discover_saves(app, data_root) {
+                let key = save.game.game_key(app);
+                let game = self.0.entry(key).or_default();
+                // Naming the source after the emulator is what gives the game list a filter
+                // per emulator for free: the filter renders a secondary source by its id.
+                game.sources.insert(Source::Secondary(app.name().to_string()));
+                if game.title.is_none() {
+                    game.title = save.title.clone();
+                }
+                // `globbable` and not `render`: the path is read back as a glob, so a bracket in
+                // the folder name (`D:/Emus [novo]/DuckStation`) would silently match nothing.
+                game.files
+                    .entry(save.file.globbable())
+                    .or_insert_with(|| GameFileEntry {
+                        tags: BTreeSet::from_iter([Tag::Save]),
+                        when: BTreeSet::new(),
+                    });
+            }
+        }
     }
 
     pub fn with_extensions(mut self, config: &Config) -> Self {
@@ -854,6 +895,7 @@ impl Manifest {
                 notes: _,
                 sources: _,
                 wine_prefix: _,
+                title: _,
             } = &v;
             alias.is_none()
                 && (!files.is_empty() || !registry.is_empty() || !steam.is_empty() || !gog.is_empty() || !id.is_empty())
@@ -919,6 +961,7 @@ mod tests {
 
         assert_eq!(
             Game {
+                title: None,
                 alias: None,
                 files: Default::default(),
                 install_dir: Default::default(),
@@ -977,6 +1020,7 @@ mod tests {
 
         assert_eq!(
             Game {
+                title: None,
                 alias: Some("other".to_string()),
                 files: btree_map! {
                     s("foo"): GameFileEntry {

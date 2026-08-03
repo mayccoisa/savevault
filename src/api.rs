@@ -257,7 +257,7 @@ impl Ludusavi {
             if !scan_info.can_report_game() {
                 None
             } else {
-                let display_title = self.config.display_name(name);
+                let display_title = scan_info.display_name(&self.config).to_string();
                 Some((display_title, scan_info, backup_info, decision))
             }
         };
@@ -396,7 +396,7 @@ impl Ludusavi {
                 && backup != &scanned_backup
             {
                 log::trace!("step {i} completed (backup mismatch)");
-                let display_title = self.config.display_name(name);
+                let display_title = scan_info.display_name(&self.config).to_string();
                 return Some((
                     display_title,
                     scan_info,
@@ -419,7 +419,7 @@ impl Ludusavi {
             if !scan_info.can_report_game() {
                 None
             } else {
-                let display_title = self.config.display_name(name);
+                let display_title = scan_info.display_name(&self.config).to_string();
                 Some((display_title, scan_info, restore_info, decision, None))
             }
         };
@@ -446,7 +446,7 @@ impl Ludusavi {
 
         for (name, scan_info, backup_info, decision, _) in info {
             reporter.add_game(
-                name,
+                &name,
                 &scan_info,
                 backup_info.as_ref(),
                 &decision,
@@ -470,14 +470,14 @@ impl Ludusavi {
             .map(|name| {
                 let mut layout = self.layout.game_layout(name);
                 let backups = layout.get_backups();
-                let display_title = self.config.display_name(name);
+                let display_title = layout.display_name(&self.config, name).to_string();
                 let backup_dir = layout.path;
                 (name, display_title, backup_dir, backups)
             })
             .collect();
 
         for (name, display_title, backup_dir, backups) in info {
-            reporter.add_backups(name, display_title, backup_dir, &backups);
+            reporter.add_backups(name, &display_title, backup_dir, &backups);
         }
 
         reporter.json_output().ok_or(Error::SomeEntriesFailed)

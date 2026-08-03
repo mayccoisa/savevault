@@ -428,6 +428,16 @@ pub enum Subcommand {
         #[clap(subcommand)]
         sub: ConfigSubcommand,
     },
+    /// Report what is known about the emulators on this system.
+    ///
+    /// Prints, for each supported emulator, the candidate data folders, whether each one matched
+    /// the folder signature, and the games found with their media code and title. Use this to
+    /// check what the app detects before trusting a backup or a restore.
+    Emulators {
+        /// Print information to stdout in machine-readable JSON.
+        #[clap(long)]
+        api: bool,
+    },
     /// Cloud sync.
     Cloud {
         #[clap(subcommand)]
@@ -574,6 +584,7 @@ impl Subcommand {
             Self::Find { .. } => false,
             Self::Manifest { .. } => false,
             Self::Config { .. } => false,
+            Self::Emulators { .. } => false,
             Self::Cloud { sub } => sub.force(),
             Self::Wrap { force, .. } => *force,
             Self::Api { .. } => false,
@@ -591,6 +602,7 @@ impl Subcommand {
             Self::Find { .. } => false,
             Self::Manifest { .. } => false,
             Self::Config { .. } => false,
+            Self::Emulators { .. } => false,
             Self::Cloud { sub } => sub.gui(),
             Self::Wrap { gui, .. } => *gui,
             Self::Api { .. } => false,

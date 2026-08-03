@@ -16,6 +16,13 @@ pub struct ScannedFile {
     /// An enclosing archive file, if any, depending on the `BackupFormat`.
     pub container: Option<StrictPath>,
     pub redirected: Option<StrictPath>,
+    /// Set when this file belongs to an emulator but its destination on this machine could not
+    /// be determined.
+    ///
+    /// Such a file must not be restored. Falling back to the absolute path recorded in the backup
+    /// would write into some other machine's user folder, succeed, and leave the user believing
+    /// the save was restored while the emulator reads nothing.
+    pub unresolved: Option<crate::scan::semantic::Unresolved>,
 }
 
 impl ScannedFile {
@@ -29,6 +36,7 @@ impl ScannedFile {
             change: Default::default(),
             container: None,
             redirected: None,
+            unresolved: None,
         }
     }
 
@@ -42,6 +50,7 @@ impl ScannedFile {
             change,
             container: None,
             redirected: None,
+            unresolved: None,
         }
     }
 

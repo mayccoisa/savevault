@@ -457,6 +457,7 @@ mod tests {
         let game2 = s("game2");
         let scan_key_1a = StrictPath::from("file1a.txt");
         let file1a = ScannedFile {
+            unresolved: None,
             size: 1,
             hash: "1".to_string(),
             original_path: Some(StrictPath::new(s("file1.txt"))),
@@ -467,6 +468,7 @@ mod tests {
         };
         let scan_key_1b = StrictPath::from("file1b.txt");
         let file1b = ScannedFile {
+            unresolved: None,
             size: 1,
             hash: "1b".to_string(),
             original_path: Some(StrictPath::new(s("file1.txt"))),
@@ -509,6 +511,7 @@ mod tests {
             detector.is_file_duplicated(
                 &scan_key_1a,
                 &ScannedFile {
+                    unresolved: None,
                     size: 1,
                     hash: "1a".to_string(),
                     original_path: None,
@@ -536,6 +539,7 @@ mod tests {
             detector.is_file_duplicated(
                 &scan_key_1b,
                 &ScannedFile {
+                    unresolved: None,
                     size: 1,
                     hash: "1b".to_string(),
                     original_path: None,

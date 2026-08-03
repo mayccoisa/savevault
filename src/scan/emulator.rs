@@ -436,8 +436,183 @@ impl Roots {
         self.entries.is_empty()
     }
 
+    /// Builds the list directly, so tests of the restore engine do not need a real install.
+    #[cfg(test)]
+    pub fn for_test(entries: Vec<(App, StrictPath)>) -> Self {
+        Self { entries }
+    }
+
     pub fn iter(&self) -> impl Iterator<Item = (App, &StrictPath)> {
         self.entries.iter().map(|(app, path)| (*app, path))
+    }
+}
+
+/// What the app currently believes about the emulators on this system.
+///
+/// This exists so that checking the profile against a real install is one command and one printout
+/// instead of a debugging session. The folder layouts here were taken from each emulator's own
+/// documentation, and documentation and reality drift.
+#[derive(Debug, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Diagnosis {
+    pub emulators: Vec<AppDiagnosis>,
+}
+
+#[derive(Debug, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AppDiagnosis {
+    pub name: &'static str,
+    /// Every folder looked at, and what the signature said about it.
+    pub candidates: Vec<CandidateDiagnosis>,
+    /// The folder that will actually be used, if the answer is unambiguous.
+    pub data_root: Option<String>,
+    /// Why no folder will be used, when that is the case.
+    pub problem: Option<String>,
+    pub games: Vec<GameDiagnosis>,
+}
+
+#[derive(Debug, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CandidateDiagnosis {
+    pub path: String,
+    pub exists: bool,
+    pub matches_signature: bool,
+    /// Whether it came from the user's configuration rather than from probing.
+    pub configured: bool,
+}
+
+#[derive(Debug, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GameDiagnosis {
+    pub key: String,
+    pub title: Option<String>,
+    pub area: Area,
+    pub file: String,
+}
+
+/// Collects the diagnosis. Read-only: it never writes anything.
+pub fn diagnose(roots: &[Root]) -> Diagnosis {
+    let resolved = Roots::for_config(roots);
+
+    let emulators = App::ALL
+        .iter()
+        .map(|app| {
+            let mut candidates: Vec<CandidateDiagnosis> = vec![];
+
+            for root in roots {
+                let Root::Emulator(emulator) = root else { continue };
+                if emulator.app.is_some_and(|configured| configured != *app) {
+                    continue;
+                }
+                let path = emulator.path.interpreted().unwrap_or_else(|_| emulator.path.clone());
+                candidates.push(CandidateDiagnosis {
+                    exists: path.is_dir(),
+                    matches_signature: app.matches_data_root(&path),
+                    path: path.render(),
+                    configured: true,
+                });
+            }
+
+            for anchor in app.profile().data_roots {
+                let Some(path) = anchor.resolve() else { continue };
+                if candidates.iter().any(|seen| seen.path == path.render()) {
+                    continue;
+                }
+                candidates.push(CandidateDiagnosis {
+                    exists: path.is_dir(),
+                    matches_signature: app.matches_data_root(&path),
+                    path: path.render(),
+                    configured: false,
+                });
+            }
+
+            let data_root = resolved.data_root(*app);
+            let problem = match (data_root, resolved.candidates(*app).len()) {
+                (Some(_), _) => None,
+                (None, 0) => Some(format!(
+                    "{} was not found on this system. Saves cannot be backed up or restored for it.",
+                    app.name()
+                )),
+                (None, found) => Some(format!(
+                    "{found} data folders were found for {}, so the destination is ambiguous. \
+                     Keep only the one you want as a root.",
+                    app.name()
+                )),
+            };
+
+            let games = data_root
+                .map(|root| {
+                    discover_saves(*app, root)
+                        .into_iter()
+                        .map(|save| GameDiagnosis {
+                            key: save.game.game_key(*app),
+                            title: save.title,
+                            area: save.area,
+                            file: save.file.render(),
+                        })
+                        .collect()
+                })
+                .unwrap_or_default();
+
+            AppDiagnosis {
+                name: app.name(),
+                candidates,
+                data_root: data_root.map(|x| x.render()),
+                problem,
+                games,
+            }
+        })
+        .collect();
+
+    Diagnosis { emulators }
+}
+
+impl Diagnosis {
+    /// Human-readable report.
+    pub fn render(&self) -> String {
+        use std::fmt::Write;
+        let mut out = String::new();
+
+        for app in &self.emulators {
+            let _ = writeln!(out, "{}", app.name);
+
+            for candidate in &app.candidates {
+                let verdict = match (candidate.exists, candidate.matches_signature) {
+                    (false, _) => "not present",
+                    (true, false) => "present, but does not look like this emulator's data folder",
+                    (true, true) => "matches",
+                };
+                let source = if candidate.configured { "configured" } else { "probed" };
+                let _ = writeln!(out, "  [{source}] {} : {verdict}", candidate.path);
+            }
+            if app.candidates.is_empty() {
+                let _ = writeln!(out, "  no candidate folders");
+            }
+
+            match (&app.data_root, &app.problem) {
+                (Some(root), _) => {
+                    let _ = writeln!(out, "  using: {root}");
+                }
+                (None, Some(problem)) => {
+                    let _ = writeln!(out, "  PROBLEM: {problem}");
+                }
+                (None, None) => {}
+            }
+
+            if app.games.is_empty() {
+                let _ = writeln!(out, "  no saves found");
+            } else {
+                let _ = writeln!(out, "  {} save file(s):", app.games.len());
+                for game in &app.games {
+                    let title = game.title.as_deref().unwrap_or("(no title in the save)");
+                    let _ = writeln!(out, "    {} | {title} | {:?} | {}", game.key, game.area, game.file);
+                }
+            }
+
+            let _ = writeln!(out);
+        }
+
+        out
     }
 }
 

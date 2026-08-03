@@ -1608,6 +1608,25 @@ impl Config {
             checked.insert(path);
         }
 
+        // Emulators. Built here rather than in the `candidates` table above because `Root::new`
+        // cannot know which emulator a folder belongs to, same reason as Lutris.
+        //
+        // The filter is the folder signature, not merely `is_dir`: an empty `DuckStation` folder,
+        // or one holding only BIOS files, is not a place saves live.
+        for app in crate::scan::emulator::App::ALL {
+            for candidate in app.installed_data_roots() {
+                let path = candidate.rendered();
+                if checked.contains(&path) || self.roots.iter().any(|root| root.path().equivalent(&path)) {
+                    continue;
+                }
+                roots.push(Root::Emulator(root::Emulator {
+                    path: path.clone(),
+                    app: Some(*app),
+                }));
+                checked.insert(path);
+            }
+        }
+
         roots
     }
 

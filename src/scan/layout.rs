@@ -10,7 +10,8 @@ use crate::{
     prelude::{AnyError, Error, INVALID_FILE_CHARS},
     resource::{
         config::{
-            BackupFormat, BackupFormats, RedirectConfig, Retention, ToggledPaths, ToggledRegistry, ZipCompression,
+            BackupFormat, BackupFormats, Config, RedirectConfig, Retention, ToggledPaths, ToggledRegistry,
+            ZipCompression,
         },
         manifest::Os,
     },
@@ -25,6 +26,13 @@ use crate::scan::ScannedRegistry;
 
 const SAFE: &str = "_";
 const SOLO: &str = ".";
+/// Where pre-restore undo points live, inside the game's backup folder.
+///
+/// Deliberately not a backup: it never appears in the backup list and never takes part in the
+/// retention of real backups, because the user did not ask for it.
+const UNDO_FOLDER: &str = "pre-restore";
+/// How many undo points to keep. Low on purpose: a Switch NAND dump would fill a disk.
+const UNDO_POINTS_KEPT: usize = 2;
 
 macro_rules! some_or_continue {
     ($maybe:expr) => {
@@ -39,6 +47,22 @@ fn encode_base64_for_folder(name: &str) -> String {
     use base64::prelude::*;
 
     BASE64_STANDARD.encode(name).replace('/', SAFE)
+}
+
+/// What to tell the user when an emulator save was not restored because its destination could not
+/// be determined. It has to say what to do, not just that something went wrong.
+fn unresolved_message(reason: semantic::Unresolved) -> String {
+    let app = reason.app().name();
+    match reason {
+        semantic::Unresolved::EmulatorMissing(_) => format!(
+            "{app} was not found on this system, so there is nowhere to put this save. \
+             Add the {app} data folder as a root and restore again."
+        ),
+        semantic::Unresolved::EmulatorAmbiguous(_) => format!(
+            "More than one {app} data folder was found, so the destination is ambiguous. \
+             Keep only the one you want as a root and restore again."
+        ),
+    }
 }
 
 pub fn escape_folder_name(name: &str) -> String {
@@ -259,6 +283,18 @@ pub enum SemanticDirKind {
     /// A Wine/Proton prefix. Redirect logic uses heuristics to find
     /// the wine user and drive mappings at restore time.
     Wine,
+    /// One area of an emulator's user data, such as its memory cards folder.
+    ///
+    /// This is what lets a restore re-anchor the file onto wherever the emulator lives on the
+    /// machine being restored to, instead of writing to the absolute path of the machine the
+    /// backup came from.
+    ///
+    /// Kept as a struct variant so that the unit `Wine` variant still serializes as the plain
+    /// string `wine`, which is what keeps every existing backup readable.
+    Emulator {
+        app: crate::scan::emulator::App,
+        area: crate::scan::emulator::Area,
+    },
 }
 
 #[derive(Clone, Debug, Default, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
@@ -373,6 +409,13 @@ pub struct IndividualMapping {
     pub name: String,
     pub drives: BTreeMap<String, String>,
     pub backups: VecDeque<FullBackup>,
+    /// Human-readable title, when the save itself carried one.
+    ///
+    /// Stored so that a restore can show the game by name on a machine where the emulator is not
+    /// installed yet. Absent for regular PC games, and never the identity of the backup: the
+    /// folder is still named after `name`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
 }
 
 impl IndividualMapping {
@@ -563,6 +606,18 @@ pub struct GameLayout {
 }
 
 impl GameLayout {
+    /// The name to show the user for this backup.
+    ///
+    /// Read from the backup itself, so an emulator game shows its title even on a machine where
+    /// the emulator is not installed.
+    pub fn display_name<'a>(&'a self, config: &'a Config, official: &'a str) -> &'a str {
+        let aliased = config.display_name(official);
+        if aliased != official {
+            return aliased;
+        }
+        self.mapping.title.as_deref().unwrap_or(aliased)
+    }
+
     #[cfg(test)]
     pub fn new(path: StrictPath, mapping: IndividualMapping) -> Self {
         Self { path, mapping }
@@ -680,6 +735,7 @@ impl GameLayout {
                 dumped_registry: None,
                 only_constructive_backups,
                 semantics: BackupSemantics::default(),
+                title: self.mapping.title.clone(),
             })
         }
     }
@@ -749,6 +805,33 @@ impl GameLayout {
         files
     }
 
+    /// Whether this backed-up file belongs to an emulator whose destination cannot be worked out
+    /// on this machine. See [`unresolved_message`] for what the user is told.
+    ///
+    /// A redirect the user configured by hand wins, as everywhere else: if it already produced a
+    /// destination, that is the user's explicit decision and there is nothing to refuse.
+    ///
+    /// Note that no context at all is the *dangerous* case, not a reason to allow the write: it
+    /// means no emulator was found on this machine, so an emulator file has nowhere to go. An
+    /// absent context is therefore treated as an empty set of emulator folders, which is exactly
+    /// what it is (`Wine::for_game` only returns `None` when there are none).
+    fn unresolved_emulator_target_for(
+        original_path: &StrictPath,
+        semantics: &BackupSemantics,
+        wine_redirect: Option<&semantic::Wine>,
+        redirected: &Option<StrictPath>,
+    ) -> Option<semantic::Unresolved> {
+        if redirected.is_some() {
+            return None;
+        }
+        let empty = crate::scan::emulator::Roots::default();
+        let emulators = wine_redirect.map(|context| &context.emulators).unwrap_or(&empty);
+        match semantic::emulator_restore_target(original_path, semantics, emulators) {
+            semantic::EmulatorTarget::Unresolved(reason) => Some(reason),
+            _ => None,
+        }
+    }
+
     fn restorable_files_from_full_backup(
         &self,
         backup: &FullBackup,
@@ -771,6 +854,7 @@ impl GameLayout {
                 Some(&backup.semantics),
                 wine_redirect,
             );
+            let unresolved = Self::unresolved_emulator_target_for(&original_path, &backup.semantics, wine_redirect, &redirected);
             let ignorable_path = redirected.as_ref().unwrap_or(&original_path);
             match backup.format() {
                 BackupFormat::Simple => {
@@ -791,6 +875,7 @@ impl GameLayout {
                             hash: v.hash.clone(),
                             ignored: toggled_paths.is_ignored(&self.mapping.name, ignorable_path),
                             redirected,
+                            unresolved,
                             original_path: Some(original_path),
                             container: None,
                         },
@@ -812,6 +897,7 @@ impl GameLayout {
                             hash: v.hash.clone(),
                             ignored: toggled_paths.is_ignored(&self.mapping.name, ignorable_path),
                             redirected,
+                            unresolved,
                             original_path: Some(original_path),
                             container: Some(self.path.joined(&backup.name)),
                         },
@@ -846,6 +932,8 @@ impl GameLayout {
                 Some(&backup.semantics),
                 wine_redirect,
             );
+            let unresolved =
+                Self::unresolved_emulator_target_for(&original_path, &backup.semantics, wine_redirect, &redirected);
             let ignorable_path = redirected.as_ref().unwrap_or(&original_path);
             match backup.format() {
                 BackupFormat::Simple => {
@@ -866,6 +954,7 @@ impl GameLayout {
                             hash: v.hash.clone(),
                             ignored: toggled_paths.is_ignored(&self.mapping.name, ignorable_path),
                             redirected,
+                            unresolved,
                             original_path: Some(original_path),
                             container: None,
                         },
@@ -887,6 +976,7 @@ impl GameLayout {
                             hash: v.hash.clone(),
                             ignored: toggled_paths.is_ignored(&self.mapping.name, ignorable_path),
                             redirected,
+                            unresolved,
                             original_path: Some(original_path),
                             container: Some(self.path.joined(&backup.name)),
                         },
@@ -931,6 +1021,7 @@ impl GameLayout {
                 files.insert(
                     scan_key,
                     ScannedFile {
+                        unresolved: None,
                         change: crate::scan::ScanChange::Unknown,
                         size,
                         hash,
@@ -1606,6 +1697,10 @@ impl GameLayout {
         }
 
         self.migrate_backups(true);
+        // Carry the title into the backup, so a restore can name the game without the emulator.
+        if scan.title.is_some() {
+            self.mapping.title = scan.title.clone();
+        }
         match self.plan_backup(scan, now, format, retention) {
             None => {
                 log::info!("[{}] no need for new backup", &scan.game_name);
@@ -1752,6 +1847,71 @@ impl GameLayout {
             dumped_registry,
             only_constructive_backups: false,
             semantics: BackupSemantics::default(),
+            // Read back from the backup, so the game shows by name even when the emulator is
+            // not installed on this machine.
+            title: self.mapping.title.clone(),
+        }
+    }
+
+    /// Copies aside every live file that this restore is about to overwrite.
+    ///
+    /// Kept out of the backup list on purpose: these are not backups the user asked for, they are
+    /// an escape hatch, so they live in their own folder and do not take part in retention of
+    /// real backups. Only the most recent few are kept, because a Switch NAND dump would fill a
+    /// disk otherwise.
+    fn snapshot_before_restore(&self, scan: &ScanInfo) -> Result<(), AnyError> {
+        let doomed: Vec<(&StrictPath, &ScannedFile)> = scan
+            .found_files
+            .iter()
+            .filter(|(_, file)| file.unresolved.is_none() && file.change().is_changed() && !file.ignored)
+            .filter(|(scan_key, file)| file.effective(scan_key).is_file())
+            .collect();
+
+        if doomed.is_empty() {
+            return Ok(());
+        }
+
+        let folder = self
+            .path
+            .joined(UNDO_FOLDER)
+            .joined(Self::generate_file_friendly_timestamp(&chrono::Utc::now()));
+        log::info!(
+            "[{}] taking undo point for {} file(s): {:?}",
+            &self.mapping.name,
+            doomed.len(),
+            &folder
+        );
+
+        for (scan_key, file) in doomed {
+            let live = file.effective(scan_key);
+            let Some(tail) = live.leaf() else { continue };
+            let saved = folder.joined(format!("{}__{}", encode_base64_for_folder(&live.render()), tail));
+            live.copy_to_path(&self.mapping.name, &saved)?;
+        }
+
+        self.prune_undo_points();
+
+        Ok(())
+    }
+
+    /// Keeps only the most recent undo points.
+    fn prune_undo_points(&self) {
+        let root = self.path.joined(UNDO_FOLDER);
+        let Ok(entries) = root.read_dir() else {
+            return;
+        };
+
+        let mut folders: Vec<std::path::PathBuf> = entries
+            .flatten()
+            .filter(|entry| entry.file_type().is_ok_and(|kind| kind.is_dir()))
+            .map(|entry| entry.path())
+            .collect();
+        folders.sort();
+
+        while folders.len() > UNDO_POINTS_KEPT {
+            let stale = folders.remove(0);
+            log::debug!("[{}] pruning undo point: {:?}", &self.mapping.name, &stale);
+            let _ = std::fs::remove_dir_all(&stale);
         }
     }
 
@@ -1766,11 +1926,35 @@ impl GameLayout {
         #[cfg_attr(not(target_os = "windows"), allow(unused_mut))]
         let mut failed_registry = HashMap::new();
 
+        // Undo point, taken BEFORE the first write. If it cannot be taken, the restore does not
+        // happen at all: the order of these two things is the difference between a bug and a
+        // lost save. Restoring is destructive (`copy_to_path` even clears the read-only
+        // attribute), and now that the destination is worked out by the app rather than typed by
+        // the user, a wrong destination has to be recoverable.
+        if let Err(e) = self.snapshot_before_restore(scan) {
+            log::error!("[{}] aborting restore, undo point failed: {e:?}", &scan.game_name);
+            return BackupInfo::total_failure(scan, BackupError::Raw(format!("Could not create the undo point: {e}")));
+        }
+
         let mut containers: HashMap<StrictPath, zip::ZipArchive<std::fs::File>> = HashMap::new();
         let mut failed_containers: HashMap<StrictPath, BackupError> = HashMap::new();
 
         for (scan_key, file) in &scan.found_files {
             let target = file.effective(scan_key);
+
+            // An emulator file whose destination could not be worked out must not be written.
+            // The alternative is writing to the absolute path from the machine that made the
+            // backup, which on this machine is somebody else's folder: it would succeed and the
+            // user would believe the save was restored.
+            if let Some(reason) = file.unresolved {
+                log::warn!(
+                    "[{}] refusing to restore, emulator destination unresolved ({reason:?}): {:?}",
+                    self.mapping.name,
+                    scan_key,
+                );
+                failed_files.insert(scan_key.clone(), BackupError::Raw(unresolved_message(reason)));
+                continue;
+            }
 
             if !file.change().is_changed() || file.ignored {
                 log::info!(
@@ -2520,6 +2704,7 @@ mod tests {
                     wine_user: wine_user.to_string(),
                 }),
                 known_folders: None,
+                emulators: Default::default(),
             }
         }
 
@@ -2549,7 +2734,7 @@ mod tests {
         #[test]
         fn can_plan_backup_kind_when_merged_single_full() {
             let layout = GameLayout {
-                mapping: IndividualMapping {
+                mapping: IndividualMapping { title: None,
                     backups: VecDeque::from_iter(vec![FullBackup::default()]),
                     ..Default::default()
                 },
@@ -2561,7 +2746,7 @@ mod tests {
         #[test]
         fn can_plan_backup_kind_when_locked_single_full() {
             let layout = GameLayout {
-                mapping: IndividualMapping {
+                mapping: IndividualMapping { title: None,
                     backups: VecDeque::from_iter(vec![FullBackup {
                         locked: true,
                         ..Default::default()
@@ -2576,7 +2761,7 @@ mod tests {
         #[test]
         fn can_plan_backup_kind_when_multiple_full() {
             let layout = GameLayout {
-                mapping: IndividualMapping {
+                mapping: IndividualMapping { title: None,
                     backups: VecDeque::from_iter(vec![FullBackup::default()]),
                     ..Default::default()
                 },
@@ -2588,7 +2773,7 @@ mod tests {
         #[test]
         fn can_plan_backup_kind_when_single_full_with_differential() {
             let layout = GameLayout {
-                mapping: IndividualMapping {
+                mapping: IndividualMapping { title: None,
                     backups: VecDeque::from_iter(vec![FullBackup::default()]),
                     ..Default::default()
                 },
@@ -2600,7 +2785,7 @@ mod tests {
         #[test]
         fn can_plan_backup_kind_when_single_full_with_differential_rollover() {
             let layout = GameLayout {
-                mapping: IndividualMapping {
+                mapping: IndividualMapping { title: None,
                     backups: VecDeque::from_iter(vec![FullBackup {
                         children: VecDeque::from(vec![DifferentialBackup::default()]),
                         ..Default::default()
@@ -2615,7 +2800,7 @@ mod tests {
         #[test]
         fn can_plan_backup_kind_when_multiple_full_with_differential_room_remaining() {
             let layout = GameLayout {
-                mapping: IndividualMapping {
+                mapping: IndividualMapping { title: None,
                     backups: VecDeque::from_iter(vec![
                         FullBackup {
                             children: VecDeque::from(vec![
@@ -2639,7 +2824,7 @@ mod tests {
         #[test]
         fn can_plan_backup_kind_when_multiple_full_with_differential_at_limit() {
             let layout = GameLayout {
-                mapping: IndividualMapping {
+                mapping: IndividualMapping { title: None,
                     backups: VecDeque::from_iter(vec![
                         FullBackup {
                             children: VecDeque::from(vec![
@@ -2666,7 +2851,7 @@ mod tests {
         #[test]
         fn can_plan_backup_kind_when_single_full_with_differential_at_limit_but_locked() {
             let layout = GameLayout {
-                mapping: IndividualMapping {
+                mapping: IndividualMapping { title: None,
                     backups: VecDeque::from_iter(vec![FullBackup {
                         children: VecDeque::from(vec![
                             DifferentialBackup::default(),
@@ -2774,7 +2959,7 @@ mod tests {
                 ..Default::default()
             };
             let layout = GameLayout {
-                mapping: IndividualMapping {
+                mapping: IndividualMapping { title: None,
                     drives: drives(),
                     backups: VecDeque::from_iter(vec![FullBackup {
                         name: SOLO.to_string(),
@@ -2821,7 +3006,7 @@ mod tests {
                 ..Default::default()
             };
             let layout = GameLayout {
-                mapping: IndividualMapping {
+                mapping: IndividualMapping { title: None,
                     drives: drives(),
                     backups: VecDeque::from_iter(vec![FullBackup {
                         name: SOLO.to_string(),
@@ -2877,7 +3062,7 @@ mod tests {
                 ..Default::default()
             };
             let layout = GameLayout {
-                mapping: IndividualMapping {
+                mapping: IndividualMapping { title: None,
                     backups: VecDeque::from_iter(vec![FullBackup {
                         name: SOLO.to_string(),
                         when: past(),
@@ -2922,7 +3107,7 @@ mod tests {
                 ..Default::default()
             };
             let layout = GameLayout {
-                mapping: IndividualMapping {
+                mapping: IndividualMapping { title: None,
                     backups: VecDeque::from_iter(vec![FullBackup {
                         name: SOLO.to_string(),
                         when: past(),
@@ -2971,7 +3156,7 @@ mod tests {
                 })
             });
             let layout = GameLayout {
-                mapping: IndividualMapping {
+                mapping: IndividualMapping { title: None,
                     backups: VecDeque::from_iter(vec![FullBackup {
                         name: SOLO.to_string(),
                         when: past(),
@@ -3006,7 +3191,7 @@ mod tests {
                 ..Default::default()
             };
             let layout = GameLayout {
-                mapping: IndividualMapping {
+                mapping: IndividualMapping { title: None,
                     backups: VecDeque::from_iter(vec![FullBackup {
                         name: SOLO.to_string(),
                         when: past(),
@@ -3034,7 +3219,7 @@ mod tests {
         #[test]
         fn can_forget_excess_backups_without_locks() {
             let mut layout = GameLayout {
-                mapping: IndividualMapping {
+                mapping: IndividualMapping { title: None,
                     backups: VecDeque::from_iter(vec![
                         FullBackup {
                             name: "1".to_string(),
@@ -3081,7 +3266,7 @@ mod tests {
         #[test]
         fn can_forget_excess_backups_without_locks_using_duplicate_name() {
             let mut layout = GameLayout {
-                mapping: IndividualMapping {
+                mapping: IndividualMapping { title: None,
                     backups: VecDeque::from_iter(vec![
                         FullBackup {
                             name: SOLO.to_string(),
@@ -3113,7 +3298,7 @@ mod tests {
         #[test]
         fn can_forget_excess_backups_with_locks() {
             let mut layout = GameLayout {
-                mapping: IndividualMapping {
+                mapping: IndividualMapping { title: None,
                     backups: VecDeque::from_iter(vec![
                         FullBackup {
                             name: "1".to_string(),
@@ -3224,7 +3409,7 @@ mod tests {
         fn can_report_restorable_files_for_full_backup_in_simple_format() {
             let layout = GameLayout {
                 path: StrictPath::new(format!("{}/tests/backup/game1", repo_raw())),
-                mapping: IndividualMapping {
+                mapping: IndividualMapping { title: None,
                     name: "game1".to_string(),
                     drives: drives_x(),
                     backups: VecDeque::from(vec![FullBackup {
@@ -3241,6 +3426,7 @@ mod tests {
             assert_eq!(
                 hash_map! {
                     make_restorable_path("backup-1", "file1.txt"): ScannedFile {
+                        unresolved: None,
                         size: 1,
                         hash: "old".into(),
                         original_path: Some(make_original_path("/file1.txt")),
@@ -3251,6 +3437,7 @@ mod tests {
 
                     },
                     make_restorable_path("backup-1", "file2.txt"): ScannedFile {
+                        unresolved: None,
                         size: 2,
                         hash: "old".into(),
                         original_path: Some(make_original_path("/file2.txt")),
@@ -3276,7 +3463,7 @@ mod tests {
         fn can_report_restorable_files_for_full_backup_in_zip_format() {
             let layout = GameLayout {
                 path: StrictPath::new(format!("{}/tests/backup/game1", repo_raw())),
-                mapping: IndividualMapping {
+                mapping: IndividualMapping { title: None,
                     name: "game1".to_string(),
                     drives: drives_x(),
                     backups: VecDeque::from(vec![FullBackup {
@@ -3293,6 +3480,7 @@ mod tests {
             assert_eq!(
                 hash_map! {
                     make_restorable_path_zip("file1.txt"): ScannedFile {
+                        unresolved: None,
                         size: 1,
                         hash: "old".into(),
                         original_path: Some(make_original_path("/file1.txt")),
@@ -3303,6 +3491,7 @@ mod tests {
 
                     },
                     make_restorable_path_zip("file2.txt"): ScannedFile {
+                        unresolved: None,
                         size: 2,
                         hash: "old".into(),
                         original_path: Some(make_original_path("/file2.txt")),
@@ -3328,7 +3517,7 @@ mod tests {
         fn can_report_restorable_files_for_differential_backup_in_simple_format() {
             let layout = GameLayout {
                 path: StrictPath::new(format!("{}/tests/backup/game1", repo_raw())),
-                mapping: IndividualMapping {
+                mapping: IndividualMapping { title: None,
                     name: "game1".to_string(),
                     drives: drives_x(),
                     backups: VecDeque::from(vec![FullBackup {
@@ -3356,6 +3545,7 @@ mod tests {
             assert_eq!(
                 hash_map! {
                     make_restorable_path("backup-1", "unchanged.txt"): ScannedFile {
+                        unresolved: None,
                         size: 1,
                         hash: "old".into(),
                         original_path: Some(make_original_path("/unchanged.txt")),
@@ -3366,6 +3556,7 @@ mod tests {
 
                     },
                     make_restorable_path("backup-2", "changed.txt"): ScannedFile {
+                        unresolved: None,
                         size: 2,
                         hash: "new".into(),
                         original_path: Some(make_original_path("/changed.txt")),
@@ -3376,6 +3567,7 @@ mod tests {
 
                     },
                     make_restorable_path("backup-2", "added.txt"): ScannedFile {
+                        unresolved: None,
                         size: 5,
                         hash: "new".into(),
                         original_path: Some(make_original_path("/added.txt")),
@@ -3410,7 +3602,7 @@ mod tests {
                 format!("{diff_source_prefix}/drive_c/users/steamuser/Documents/Saved Games/Hades/Profile3.sav");
             let layout = GameLayout {
                 path: StrictPath::new(format!("{}/tests/backup/game1", repo_raw())),
-                mapping: IndividualMapping {
+                mapping: IndividualMapping { title: None,
                     name: "Hades".to_string(),
                     drives: drives_x(),
                     backups: VecDeque::from(vec![FullBackup {
@@ -3471,7 +3663,7 @@ mod tests {
         fn can_report_restorable_files_for_differential_backup_in_zip_format() {
             let layout = GameLayout {
                 path: StrictPath::new(format!("{}/tests/backup/game1", repo_raw())),
-                mapping: IndividualMapping {
+                mapping: IndividualMapping { title: None,
                     name: "game1".to_string(),
                     drives: drives_x(),
                     backups: VecDeque::from(vec![FullBackup {
@@ -3499,6 +3691,7 @@ mod tests {
             assert_eq!(
                 hash_map! {
                     make_restorable_path_zip("unchanged.txt"): ScannedFile {
+                        unresolved: None,
                         size: 1,
                         hash: "old".into(),
                         original_path: Some(make_original_path("/unchanged.txt")),
@@ -3509,6 +3702,7 @@ mod tests {
 
                     },
                     make_restorable_path_zip("changed.txt"): ScannedFile {
+                        unresolved: None,
                         size: 2,
                         hash: "new".into(),
                         original_path: Some(make_original_path("/changed.txt")),
@@ -3519,6 +3713,7 @@ mod tests {
 
                     },
                     make_restorable_path_zip("added.txt"): ScannedFile {
+                        unresolved: None,
                         size: 5,
                         hash: "new".into(),
                         original_path: Some(make_original_path("/added.txt")),
@@ -3572,6 +3767,7 @@ mod tests {
             let mut layout = GameLayout::new(
                 StrictPath::new(format!("{}/tests/backup/game1", repo())),
                 IndividualMapping {
+                    title: None,
                     name: "game1".to_string(),
                     drives: drives_x(),
                     backups: VecDeque::from(vec![FullBackup {
@@ -3606,6 +3802,7 @@ mod tests {
                     game_name: s("game1"),
                     found_files: hash_map! {
                         restorable_file_simple(SOLO, "file1.txt"): ScannedFile {
+                            unresolved: None,
                             size: 1,
                             hash: "3a52ce780950d4d969792a2559cd519d7ee8c727".into(),
                             original_path: Some(make_original_path("/file1.txt")),
@@ -3616,6 +3813,7 @@ mod tests {
 
                     },
                         restorable_file_simple(SOLO, "file2.txt"): ScannedFile {
+                            unresolved: None,
                             size: 2,
                             hash: "9d891e731f75deae56884d79e9816736b7488080".into(),
                             original_path: Some(make_original_path("/file2.txt")),
@@ -3752,7 +3950,7 @@ mod tests {
         #[test]
         fn can_validate_a_simple_full_backup_when_valid() {
             let layout = GameLayout {
-                mapping: IndividualMapping {
+                mapping: IndividualMapping { title: None,
                     drives: drives_x_always(),
                     backups: VecDeque::from(vec![FullBackup {
                         name: SOLO.into(),
@@ -3772,7 +3970,7 @@ mod tests {
         #[test]
         fn can_validate_a_simple_full_backup_when_invalid() {
             let layout = GameLayout {
-                mapping: IndividualMapping {
+                mapping: IndividualMapping { title: None,
                     drives: drives_x_always(),
                     backups: VecDeque::from(vec![FullBackup {
                         name: SOLO.into(),
@@ -3791,7 +3989,7 @@ mod tests {
         #[test]
         fn can_validate_a_simple_diff_backup_when_valid() {
             let layout = GameLayout {
-                mapping: IndividualMapping {
+                mapping: IndividualMapping { title: None,
                     drives: drives_x_always(),
                     backups: VecDeque::from(vec![FullBackup {
                         name: SOLO.into(),
@@ -3819,7 +4017,7 @@ mod tests {
         #[test]
         fn can_validate_a_simple_diff_backup_when_invalid() {
             let layout = GameLayout {
-                mapping: IndividualMapping {
+                mapping: IndividualMapping { title: None,
                     drives: drives_x_always(),
                     backups: VecDeque::from(vec![FullBackup {
                         name: SOLO.into(),
@@ -3846,7 +4044,7 @@ mod tests {
         #[test]
         fn can_validate_a_zip_full_backup_when_valid() {
             let layout = GameLayout {
-                mapping: IndividualMapping {
+                mapping: IndividualMapping { title: None,
                     drives: drives_x_always(),
                     backups: VecDeque::from(vec![FullBackup {
                         name: "test.zip".into(),
@@ -3866,7 +4064,7 @@ mod tests {
         #[test]
         fn can_validate_a_zip_full_backup_when_invalid() {
             let layout = GameLayout {
-                mapping: IndividualMapping {
+                mapping: IndividualMapping { title: None,
                     drives: drives_x_always(),
                     backups: VecDeque::from(vec![FullBackup {
                         name: "test.zip".into(),
@@ -3885,7 +4083,7 @@ mod tests {
         #[test]
         fn can_validate_a_zip_diff_backup_when_valid() {
             let layout = GameLayout {
-                mapping: IndividualMapping {
+                mapping: IndividualMapping { title: None,
                     drives: drives_x_always(),
                     backups: VecDeque::from(vec![FullBackup {
                         name: "test.zip".into(),
@@ -3913,7 +4111,7 @@ mod tests {
         #[test]
         fn can_validate_a_zip_diff_backup_when_invalid() {
             let layout = GameLayout {
-                mapping: IndividualMapping {
+                mapping: IndividualMapping { title: None,
                     drives: drives_x_always(),
                     backups: VecDeque::from(vec![FullBackup {
                         name: "test.zip".into(),
@@ -3942,11 +4140,14 @@ mod tests {
             let layout = BackupLayout::new(StrictPath::new(format!("{}/tests/backup", repo_raw())));
 
             let before = IndividualMapping {
+
+                title: None,
                 name: "migrate-legacy-backup".to_string(),
                 drives: drives_x_static(),
                 ..Default::default()
             };
             let after = IndividualMapping {
+                title: None,
                 name: "migrate-legacy-backup".to_string(),
                 drives: drives_x_static(),
                 backups: VecDeque::from(vec![FullBackup {
@@ -3977,6 +4178,7 @@ mod tests {
         #[test]
         fn can_migrate_initial_empty_backup_without_children() {
             let before = IndividualMapping {
+                title: None,
                 name: "migrate-initial-empty-backup".to_string(),
                 drives: drives_x_static(),
                 backups: VecDeque::from(vec![
@@ -4000,6 +4202,7 @@ mod tests {
                 ]),
             };
             let after = IndividualMapping {
+                title: None,
                 name: "migrate-initial-empty-backup".to_string(),
                 drives: drives_x_static(),
                 backups: VecDeque::from(vec![FullBackup {
@@ -4037,6 +4240,7 @@ mod tests {
         #[test]
         fn can_migrate_initial_empty_backup_with_children() {
             let before = IndividualMapping {
+                title: None,
                 name: "migrate-initial-empty-backup".to_string(),
                 drives: drives_x_static(),
                 backups: VecDeque::from(vec![FullBackup {
@@ -4058,6 +4262,7 @@ mod tests {
                 }]),
             };
             let after = IndividualMapping {
+                title: None,
                 name: "migrate-initial-empty-backup".to_string(),
                 drives: drives_x_static(),
                 backups: VecDeque::from(vec![FullBackup {

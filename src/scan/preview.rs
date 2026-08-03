@@ -30,9 +30,27 @@ pub struct ScanInfo {
     pub only_constructive_backups: bool,
     /// Source environment metadata for generating cross-platform redirects.
     pub semantics: BackupSemantics,
+    /// Human-readable title, when the save itself carries one.
+    ///
+    /// Emulator saves do: a PS1 memory card stores the title the game wrote. It travels into the
+    /// backup as well, so that a restore scan can show the game by name even on a machine where
+    /// the emulator is not installed yet, which is exactly the "I just formatted" case.
+    pub title: Option<String>,
 }
 
 impl ScanInfo {
+    /// The name to show the user for this game.
+    ///
+    /// An alias the user configured wins, because it is an explicit choice. Otherwise the title
+    /// carried by the save, and only then the game's key.
+    pub fn display_name<'a>(&'a self, config: &'a crate::resource::config::Config) -> &'a str {
+        let aliased = config.display_name(&self.game_name);
+        if aliased != self.game_name.as_str() {
+            return aliased;
+        }
+        self.title.as_deref().unwrap_or(aliased)
+    }
+
     pub fn sum_bytes(&self, backup_info: Option<&BackupInfo>) -> u64 {
         let successful_bytes = self
             .found_files
@@ -408,11 +426,13 @@ mod tests {
         let scan = ScanInfo {
             found_files: hash_map! {
                 "a".into(): ScannedFile {
+                    unresolved: None,
                     ignored: true,
                     change: ScanChange::Different,
                     ..Default::default()
                 },
                 "b".into(): ScannedFile {
+                    unresolved: None,
                     ignored: true,
                     change: ScanChange::Same,
                     ..Default::default()
@@ -463,6 +483,7 @@ mod tests {
         let scan = ScanInfo {
             found_files: hash_map! {
                 "/new".into(): ScannedFile {
+                    unresolved: None,
                     redirected: Some(StrictPath::new("/old")),
                     change: ScanChange::New,
                     ..Default::default()
@@ -477,6 +498,7 @@ mod tests {
         let scan = ScanInfo {
             found_files: hash_map! {
                 "/new".into(): ScannedFile {
+                    unresolved: None,
                     redirected: Some(StrictPath::new("/old")),
                     change: ScanChange::New,
                     ..Default::default()
@@ -636,6 +658,7 @@ mod tests {
         let scan = ScanInfo {
             found_files: hash_map! {
                 "a".into(): ScannedFile {
+                    unresolved: None,
                     ignored: false,
                     change: ScanChange::Removed,
                     ..Default::default()
@@ -662,11 +685,13 @@ mod tests {
         let scan = ScanInfo {
             found_files: hash_map! {
                 "a".into(): ScannedFile {
+                    unresolved: None,
                     ignored: false,
                     change: ScanChange::Removed,
                     ..Default::default()
                 },
                 "b".into(): ScannedFile {
+                    unresolved: None,
                     ignored: true,
                     change: ScanChange::Same,
                     ..Default::default()
