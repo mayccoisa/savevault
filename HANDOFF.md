@@ -282,6 +282,39 @@ emuladores precisam é desenhar o formato que vai ter que quebrar. Quando fizer,
 `schemaVersion`, e versão desconhecida deve **rejeitar o perfil inteiro** em vez de entender pela
 metade: perfil meio entendido resolve destino errado e destrói save.
 
+### 5.7 Layout do backup: uma pasta por emulador — FEITO em 2026-08-03
+
+Pedido do Maycon, com motivo concreto vindo do backup real dele: sete pastas de DuckStation e duas
+de PPSSPP espalhadas em ordem alfabética no meio de 138 jogos de PC. Agora é
+`backup/<Emulador>/<jogo>`.
+
+Duas garantias que não devem ser "simplificadas":
+
+- **De qual emulador o jogo é vem do scan, nunca do nome do jogo.** A chave é
+  `"<Emulador> <identidade>"`, então adivinhar pelo nome parece óbvio, e está errado: um jogo de PC
+  chamado `Eden Ring` cairia dentro da pasta do emulador Eden. A primeira implementação foi por
+  nome e o teste a reprovou.
+- **Mover a pasta é seguro porque o backup é encontrado pelo nome dentro do `mapping.yaml`**, nunca
+  por onde a pasta está, e esse arquivo guarda os caminhos **originais** do jogo, não caminhos
+  dentro do backup. Se a mudança falhar, o backup continua onde está: layout arrumado nunca vale
+  falhar em salvar progresso.
+
+A migração dos backups antigos acontece no próximo backup daquele jogo.
+
+### 5.8 A assinatura marcava o dado do usuário — CORRIGIDO em 2026-08-03
+
+**O defeito mais sério encontrado até agora, e ele só apareceu rodando.** Ao apagar `memcards/`
+para testar a restauração, o PCSX2 deixou de ser reconhecido e a restauração recusou com "emulador
+não encontrado".
+
+A causa: a pasta de **saves** estava na assinatura. Ou seja, a hora em que o usuário mais precisa
+restaurar, que é exatamente a hora em que essa pasta sumiu, era a hora em que o programa se
+recusava a agir. O produto recusava o cenário que existe para resolver.
+
+Regra que ficou: **a assinatura aponta para a instalação (configuração, pastas de sistema do
+emulador), nunca para o dado do usuário.** Ao acrescentar um emulador, a pergunta é "o que continua
+aqui depois de o save sumir?".
+
 ## 6. Pendências de verificação, herdadas
 
 Confirmado na documentação oficial: pasta de dados do DuckStation, `portable.txt`, e o formato do

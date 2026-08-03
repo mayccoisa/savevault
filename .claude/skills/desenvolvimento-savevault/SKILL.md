@@ -1,7 +1,7 @@
 ---
 name: desenvolvimento-savevault
 description: Regras de desenvolvimento do SaveVault (fork do Ludusavi em Rust, backup e restauração inteligente de saves de PC e de emuladores), destiladas de erros reais cometidos em produção — armadilhas do fork (gh resolve para o upstream, tags colidem), invariantes de segurança da restauração, como estender structs que os testes constroem por extenso, e como provar uma fatia ponta a ponta sem emulador instalado. Use SEMPRE que for mexer no SaveVault, principalmente ao acrescentar um emulador novo.
-version: 1.1.0
+version: 1.2.0
 ---
 
 # Desenvolvimento do SaveVault
@@ -62,7 +62,7 @@ reg import tests/ludusavi.reg
 cd C:\proj\savevault; cargo test --lib -- --skip scan::registry --skip _with_registry --skip _registry_
 ```
 
-Baseline conhecido em 2026-08-03 (v0.2.0): **279 passam, 0 falham**, 24 filtrados.
+Baseline conhecido em 2026-08-03 (v0.4.0): **303 passam, 0 falham**, 24 filtrados.
 
 ### 4. Compilar exige MSVC e espaço em disco
 
@@ -148,6 +148,33 @@ emulador, e o emulador vive dentro da struct da raiz. Então:
    (`ScanInfo.title` e `IndividualMapping.title`).
 6. **Arquivo não identificado não desaparece.** Vira `GameId::Unidentified(nome)`. Ele contém
    progresso; sumir em silêncio é pior que um nome feio.
+
+## A assinatura marca a INSTALAÇÃO, nunca o dado do usuário
+
+A pergunta ao escrever uma assinatura é: **o que continua nesta pasta depois de o save sumir?**
+
+Custou caro descobrir. `memcards/` estava na assinatura do PCSX2. Apagando essa pasta para testar
+a restauração, o emulador deixou de ser reconhecido e a restauração recusou com "emulador não
+encontrado" — ou seja, o programa se recusava a agir exatamente no cenário que ele existe para
+resolver, porque a hora de restaurar é a hora em que o save não está lá.
+
+Aponte para arquivo de configuração (`settings.ini`, `inis/PCSX2.ini`) e pastas de sistema do
+emulador (`PSP/SYSTEM`, `dev_flash`, `config`). Pasta de save entra no máximo como alternativa em
+`any_of`, para quem ainda não abriu o emulador nesta máquina.
+
+## Onde o backup do emulador mora, e por que não se decide pelo nome
+
+O backup de emulador vai para `backup/<Emulador>/<jogo>`, e **de qual emulador o jogo é vem do
+scan** (`BackupSemantics::emulator`), nunca do nome.
+
+Adivinhar pelo nome parece óbvio, porque a chave é `"<Emulador> <identidade>"`. É armadilha: um
+jogo de PC chamado **`Eden Ring`** cai dentro da pasta do emulador Eden. A primeira implementação
+foi por nome, e o teste a reprovou.
+
+Mover a pasta de um backup é seguro, e vale saber por quê: um backup é encontrado pelo nome gravado
+**dentro** do `mapping.yaml`, nunca por onde a pasta está, e esse arquivo guarda os caminhos
+originais do jogo, não caminhos dentro do backup. Ainda assim, se a mudança falhar, o backup
+continua onde está: layout arrumado nunca vale falhar em salvar progresso.
 
 ## Assinatura de pasta: marca positiva não basta, às vezes precisa de marca NEGATIVA
 
@@ -304,7 +331,7 @@ real da máquina.
 
 ## Antes de publicar release
 
-1. `cargo test --lib` com os `--skip` de registro: 279 verdes.
+1. `cargo test --lib` com os `--skip` de registro: 303 verdes.
 2. `cargo clippy --all-targets`: exit 0. Dois avisos são herdados (`src/scan.rs:2239` e
    `examples/api.rs:6`) e não são para consertar.
 3. Entrada no `CHANGELOG.md`, na seção do SaveVault no topo, escrita **para quem usa** e não para
