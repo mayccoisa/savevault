@@ -5,6 +5,10 @@ Everything under "Inherited from Ludusavi" is the upstream history, with its own
 
 ## SaveVault (não publicado)
 
+* Added:
+  * **shadPS4 (PlayStation 4).** Saves and trophies are backed up and restored, as two separate
+    things, and each game shows its real name, read from the save itself. Restoring finds the user
+    this machine actually uses, instead of recreating the other machine's user folder.
 * Fixed:
   * **Restoring a Switch save now finds your profile on this machine.** Eden gives each user
     profile an id of its own, and that id is different on every machine. Until now the save went

@@ -62,7 +62,7 @@ reg import tests/ludusavi.reg
 cd C:\proj\savevault; cargo test --lib -- --skip scan::registry --skip _with_registry --skip _registry_
 ```
 
-Baseline conhecido em 2026-08-03 (depois da v0.4.0): **308 passam, 0 falham**, 24 filtrados.
+Baseline conhecido em 2026-08-03 (depois da v0.4.0): **311 passam, 0 falham**, 24 filtrados.
 
 ### 4. Compilar exige MSVC e espaço em disco
 
@@ -375,3 +375,10 @@ que não foi confirmado contra instalação real fica registrado como pendência
 escondido no código como se fosse certeza.
 
 Quando o app não reconhece uma pasta com confiança, ele **pergunta ou recusa**, nunca adivinha.
+
+**Fonte é o código do emulador, não fórum.** O caminho do shadPS4 estava anotado como
+`user/savedata/<perfil>/<CUSA>`, que é o que dizem os guias de comunidade, e o código diz
+`home/<id do usuário>/savedata/<serial>`: o id vem **antes** de `savedata`. Com o caminho errado, o
+backup não acharia save nenhum e ninguém saberia por quê. Antes de escrever o perfil, abra o
+arquivo do emulador que monta o caminho (`gh api repos/<org>/<repo>/contents/...` resolve, e é mais
+confiável que a busca).

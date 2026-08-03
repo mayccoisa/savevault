@@ -170,13 +170,31 @@ V1 resolve hoje: não basta reancorar a pasta de dados, é preciso reancorar o *
 Não foi inventada uma agora de propósito: exige decidir o que fazer quando a máquina de destino
 tem zero perfis, um perfil, ou vários, e isso é decisão de produto.
 
-### 5.2 shadPS4 (PS4) — prova a variante portátil
+### 5.2 shadPS4 (PS4) — FEITO em 2026-08-03
 
-- Fato já pesquisado: `user/savedata/<perfil>/<CUSA>/<pasta do jogo>`, e a escolha entre AppData e
-  portátil se dá pela presença da pasta `user` ao lado do executável.
-- A identidade é o **nome da pasta** (`CUSA-xxxxx`), não o nome de um arquivo. Isso pede um
-  `Identity` novo, do tipo "código no nome do diretório". É a primeira extensão real da abstração:
-  se ela exigir mais que um `Identity` novo, vale parar e revisar o desenho.
+Entrou **sem estender o motor**: reusou `Identity::PlaystationFolder` (o CUSA tem a mesma forma de
+quatro letras e cinco dígitos), o `*` do RPCS3 e a leitura de `PARAM.SFO`. É a evidência de que a
+abstração aguenta um console novo sem código novo, só dado.
+
+**O fato pesquisado antes estava errado, e o código do emulador corrigiu.** O caminho anotado aqui
+era `user/savedata/<perfil>/<CUSA>/...`, que é o que dizem os guias de comunidade. Em
+`src/core/libraries/save_data/save_instance.cpp`, `MakeDirSavePath` monta
+`<home>/<id do usuário>/savedata/<serial>/<nome do diretório>`: o id do usuário vem **antes** de
+`savedata`. Com o caminho da comunidade, o backup não acharia save nenhum. Vale a regra: fato de
+layout se confirma no código do emulador, não em fórum.
+
+Duas coisas específicas do PS4:
+
+- **O `param.sfo` mora em `sce_sys/`, dentro de cada save**, e não na raiz da pasta do jogo. Como o
+  jogo (`CUSA00207`) agrupa vários saves (`SPRJ0005`), o título é procurado também **um nível
+  abaixo** da pasta que identifica o jogo. Sem isso o usuário vê o serial cru.
+- **O `trophy/` da raiz não é progresso do usuário**: guarda ícones e XML que vêm do jogo. O que o
+  usuário conquistou está em `home/<id do usuário>/trophy/<NPWR...>.xml`
+  (`src/core/libraries/np/np_trophy.cpp`), e é essa a área declarada.
+
+Provado com `scripts/dev/make-fake-shadps4.ps1` nos três casos, com dois jogos e um troféu:
+backup agrupado sob `shadPS4/`, restauração numa instalação com **outro** id de usuário (1 → 3)
+reancorando os 5 arquivos, e emulador ausente recusando sem criar pasta fantasma.
 
 ### 5.3 Xenia (Xbox 360), Sudachi e Eden (Switch)
 

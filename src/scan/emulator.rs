@@ -35,6 +35,7 @@ pub enum App {
     Eden,
     Ppsspp,
     Rpcs3,
+    ShadPs4,
 }
 
 /// Uma área declarada de dado de usuário dentro da pasta de dados do emulador.
@@ -443,6 +444,51 @@ const RPCS3: Profile = Profile {
     ],
 };
 
+/// Fonte: código do próprio shadPS4, que é aberto.
+///
+/// - Em `src/common/path_util.cpp`, a pasta de dados é tentada **primeiro** como portátil, na
+///   subpasta `user` ao lado do executável (`PORTABLE_DIR = "user"`), e senão em
+///   `%APPDATA%\shadPS4` no Windows (`SHGetFolderPath(CSIDL_APPDATA)`).
+/// - As subpastas são criadas **na inicialização**, por `create_path`, antes de existir save
+///   nenhum: `shader`, `sys_modules`, `log`, `data`, `home`. É por isso que a assinatura pode
+///   apontar para elas, conforme a regra da nota em [`Signature`].
+/// - Em `src/core/libraries/save_data/save_instance.cpp`, `MakeDirSavePath` monta
+///   `<home>/<id do usuário>/savedata/<serial do jogo>/<nome do diretório>`. Repare na ordem: o
+///   id do usuário vem **antes** de `savedata`, e não depois, ao contrário do que dizem os
+///   guias de comunidade.
+/// - O progresso de troféu do usuário é `<home>/<id do usuário>/trophy/<NPWR...>.xml`, em
+///   `src/core/libraries/np/np_trophy.cpp`. A pasta `trophy/` da raiz **não** é isso: ela guarda
+///   ícones e XML que vêm do jogo, e não o que o usuário conquistou.
+///
+/// O `*` no meio do caminho é o id do usuário, que o emulador cria e que **muda de máquina para
+/// máquina**. Ele é resolvido na máquina de destino, no momento da restauração.
+const SHADPS4: Profile = Profile {
+    name: "shadPS4",
+    data_roots: &[Anchor::Common(CommonPath::Data, "shadPS4")],
+    // O modo portátil é uma PASTA `user` ao lado do executável, e não um arquivo marcador: a
+    // pasta apontada É essa `user`, então não há o que marcar aqui.
+    portable_markers: &[],
+    signature: Signature {
+        all_of: &[Marker::Dir("shader"), Marker::Dir("sys_modules")],
+        any_of: &[Marker::Dir("home"), Marker::Dir("log")],
+        none_of: &[],
+    },
+    areas: &[
+        AreaSpec {
+            area: Area::Saves,
+            subdir: "home/*/savedata",
+            extensions: &[],
+            identity: Identity::PlaystationFolder,
+        },
+        AreaSpec {
+            area: Area::Trophies,
+            subdir: "home/*/trophy",
+            extensions: &["xml"],
+            identity: Identity::FilenamePlaystationId,
+        },
+    ],
+};
+
 impl App {
     pub const ALL: &'static [Self] = &[
         Self::DuckStation,
@@ -450,6 +496,7 @@ impl App {
         Self::Eden,
         Self::Ppsspp,
         Self::Rpcs3,
+        Self::ShadPs4,
     ];
 
     pub fn profile(&self) -> &'static Profile {
@@ -459,6 +506,7 @@ impl App {
             Self::Eden => &EDEN,
             Self::Ppsspp => &PPSSPP,
             Self::Rpcs3 => &RPCS3,
+            Self::ShadPs4 => &SHADPS4,
         }
     }
 
@@ -471,7 +519,7 @@ impl App {
     /// Existe para a tela poder mostrá-los como "em breve" em vez de fingir que o escopo é só o
     /// que já foi feito. É dado honesto: o usuário vê o que ainda não vai funcionar, e não
     /// descobre isso apontando a pasta e não acontecendo nada.
-    pub const PLANNED: &'static [&'static str] = &["shadPS4", "Sudachi", "Xenia"];
+    pub const PLANNED: &'static [&'static str] = &["Sudachi", "Xenia"];
 
     /// Esta pasta é a pasta de dados deste emulador?
     pub fn matches_data_root(&self, data_root: &StrictPath) -> bool {
@@ -852,10 +900,30 @@ fn discover_in_game_folders(
 }
 
 /// O nome do jogo que a própria pasta de save declara, quando há um `PARAM.SFO` ali.
+/// Onde o metadado do save pode estar, dentro da pasta do jogo.
+///
+/// O PSP e o PS3 põem o `PARAM.SFO` na raiz da pasta; o PS4 põe em `sce_sys/param.sfo` (a
+/// constante `sce_sys` está em `save_instance.cpp`, no código do shadPS4). É o mesmo formato, e
+/// por isso a mesma leitura serve aos três.
+const TITLE_METADATA_FILES: &[&str] = &["PARAM.SFO", "sce_sys/param.sfo"];
+
 fn read_declared_title(folder: &StrictPath) -> Option<String> {
-    let file = folder.joined("PARAM.SFO");
-    let bytes = std::fs::read(file.as_std_path_buf().ok()?).ok()?;
-    param_sfo::title(&bytes)
+    if let Some(title) = title_declared_in(folder) {
+        return Some(title);
+    }
+
+    // Um nível abaixo, porque no PS4 a pasta do jogo (`CUSA00207`) agrupa os saves e o metadado
+    // fica dentro de cada save (`SPRJ0005/sce_sys/param.sfo`). Todos os saves do mesmo jogo
+    // declaram o mesmo título, então o primeiro que responder serve.
+    child_dirs(folder).iter().find_map(title_declared_in)
+}
+
+fn title_declared_in(folder: &StrictPath) -> Option<String> {
+    TITLE_METADATA_FILES.iter().find_map(|name| {
+        let file = folder.joined(name);
+        let bytes = std::fs::read(file.as_std_path_buf().ok()?).ok()?;
+        param_sfo::title(&bytes)
+    })
 }
 
 /// Atribui um arquivo a um ou mais jogos, conforme a regra de identidade da área.
@@ -1653,6 +1721,59 @@ mod tests {
 
         // O troféu é área própria: o usuário pode restaurar um sem o outro.
         assert!(found.iter().any(|x| x.area == Area::Trophies));
+    }
+
+    /// Uma pasta de dados de shadPS4, que é a mesma no modo instalado e no portátil.
+    fn shadps4_install(user: &str) -> FakeInstall {
+        FakeInstall::new()
+            .dir("shader")
+            .dir("sys_modules")
+            .dir("log")
+            .dir(&format!("home/{user}/savedata"))
+            .dir(&format!("home/{user}/trophy"))
+    }
+
+    #[test]
+    fn recognizes_a_shadps4_folder() {
+        let install = shadps4_install("1");
+        assert!(App::ShadPs4.matches_data_root(&install.root));
+        assert_eq!(Some(App::ShadPs4), App::detect(&install.root));
+    }
+
+    /// A assinatura marca a INSTALAÇÃO: apagar o save não pode fazer o emulador sumir, senão a
+    /// restauração recusa justamente na máquina que precisa dela.
+    #[test]
+    fn recognizes_a_shadps4_install_whose_saves_are_gone() {
+        let install = FakeInstall::new().dir("shader").dir("sys_modules").dir("log");
+        assert!(App::ShadPs4.matches_data_root(&install.root));
+    }
+
+    /// A ordem do caminho é `home/<id do usuário>/savedata/<serial>`, com o id do usuário ANTES
+    /// de `savedata`. Os guias de comunidade dizem o contrário; quem manda é o código.
+    #[test]
+    fn discovers_ps4_saves_and_trophies_under_any_user_id() {
+        let install = shadps4_install("1")
+            .file(
+                "home/1/savedata/CUSA00207/SPRJ0005/sce_sys/param.sfo",
+                &param_sfo_with_title("BLOODBORNE"),
+            )
+            .file("home/1/savedata/CUSA00207/SPRJ0005/userdata0", b"save")
+            .file("home/1/trophy/NPWR12345_00.xml", b"<trophy/>");
+
+        let found = discover_saves(App::ShadPs4, &install.root);
+
+        let saves: Vec<_> = found.iter().filter(|x| x.area == Area::Saves).collect();
+        assert_eq!(2, saves.len());
+        for save in &saves {
+            assert_eq!(GameId::Media("CUSA00207".to_string()), save.game);
+            // O `param.sfo` do PS4 mora em `sce_sys/`, e não na raiz da pasta do save.
+            assert_eq!(Some("BLOODBORNE".to_string()), save.title);
+        }
+        assert!(saves[0].area_root.equivalent(&install.root.joined("home/1/savedata")));
+
+        let trophies: Vec<_> = found.iter().filter(|x| x.area == Area::Trophies).collect();
+        assert_eq!(1, trophies.len());
+        assert_eq!(GameId::Media("NPWR12345".to_string()), trophies[0].game);
     }
 
     #[test]
