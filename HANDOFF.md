@@ -196,13 +196,36 @@ Provado com `scripts/dev/make-fake-shadps4.ps1` nos três casos, com dois jogos 
 backup agrupado sob `shadPS4/`, restauração numa instalação com **outro** id de usuário (1 → 3)
 reancorando os 5 arquivos, e emulador ausente recusando sem criar pasta fantasma.
 
-### 5.3 Xenia (Xbox 360), Sudachi e Eden (Switch)
+### 5.3 Sudachi (Switch) e Xenia (Xbox 360) — FEITOS em 2026-08-03
 
-- Identidade por Title ID cru, aceitando que não haja título legível na V1.
-- Sudachi e Eden são forks do mesmo emulador: provavelmente compartilham estrutura, e é o caso que
-  vai exercitar a detecção quando **dois** emuladores casam com a mesma pasta.
-  `App::detect` hoje devolve `None` no empate, de propósito. Confirmar se é o comportamento certo
-  aqui ou se o usuário precisa escolher.
+Com estes dois, **o escopo de emuladores fechou**: `App::PLANNED` está vazio e nada na aba diz "em
+breve".
+
+**Sudachi: o empate previsto aconteceu, e `None` não servia.** Ele é da mesma linhagem do Eden, com
+a **mesma** assinatura, então toda pasta de yuzu passou a casar dois perfis, e `App::detect`
+devolvia `None`: a pasta ficava invisível para quem não escolheu o emulador na aba. O desempate é
+**evidência do disco, não preferência**: o nome da pasta de dados (`...\eden`, `...\sudachi`). Sem
+nome que sirva, continua `None`. A área e a assinatura viraram `SWITCH_SAVE_AREAS` e
+`SWITCH_SIGNATURE`, compartilhadas: é o mesmo dado, e se um fork divergir a divergência aparece no
+diff.
+
+Sudachi entrou **sem caminho padrão**, de propósito. O código também está indisponível, e o
+`%APPDATA%\sudachi` que circula em guias não pôde ser confirmado em fonte do projeto. Anotar o
+palpite faria o programa dizer "não encontrado" com toda a confiança numa máquina onde o emulador
+está; vazio faz o usuário apontar a pasta uma vez, e a assinatura confere. Ver pendência na seção 6.
+
+**Xenia trouxe a única extensão real desta leva: `AreaSpec.only_subdirs`.** O caminho é
+`content/<title id>/<tipo de conteúdo>/`, e o tipo `00004000` é o **jogo instalado**, ao lado do
+save (`00000001`). Sem filtrar, o backup levaria dezenas de GB de jogo em silêncio, e o usuário só
+descobriria pelo tamanho.
+
+E a armadilha do Switch reapareceu um nível abaixo: o código do tipo de conteúdo tem **oito**
+hexadecimais, exatamente como o Title ID do Xbox. Sem parar a descida ali, `00000001` casaria a
+forma, roubaria a identidade do jogo e ainda filtraria o próprio save. Daí o `settled`: depois de
+passar pelo filtro, nada mais é filtrado e nada mais rouba identidade. Travado por teste.
+
+Provados com `scripts/dev/make-fake-xenia.ps1` e `make-fake-eden.ps1` nos três casos, incluindo o
+jogo de 4 KB fingindo de instalado, que ficou de fora do backup.
 
 ### 5.4 PPSSPP (PSP) e RPCS3 (PS3) — FEITOS em 2026-08-03
 
@@ -390,11 +413,21 @@ Do **Eden**, com a agravante de que o código-fonte da linhagem está indisponí
 10. Se o Eden aceita a pasta `user` ao lado do executável como instalação portátil, como a
     linhagem do yuzu aceita. O rastreador do projeto sugere que a pasta de dados é sempre
     `%APPDATA%\eden`, então o perfil **não** promete portátil.
-11. A assinatura é `nand/` mais `config/`, que o **Sudachi** também terá, por ser fork da mesma
-    linhagem. Quando ele entrar, os dois vão casar com a mesma pasta e `App::detect` vai devolver
-    `None`. A distinção terá que vir do **nome da própria pasta de dados** (`eden` × `sudachi`),
-    que hoje não é um marcador possível: `Marker` só olha para dentro. É o caso previsto na
-    seção 5.3.
+11. ~~O empate com o Sudachi.~~ **Resolvido em 5.3**: o desempate é o nome da pasta de dados.
+
+Do **Sudachi**, com a mesma agravante:
+
+12. O caminho padrão da pasta de dados no Windows. Os guias dizem `%APPDATA%\sudachi`, e nenhuma
+    fonte do projeto confirma, então o perfil entrou **sem caminho padrão**: o usuário aponta a
+    pasta. Confirmando, basta acrescentar o `Anchor` — nada mais muda.
+
+Do **Xenia**:
+
+13. Se `content/` existe antes do primeiro jogo rodar. É a marca da assinatura; se nascer depois,
+    uma instalação nova e nunca aberta não é detectada. O `any_of` com `cache/` e
+    `xenia.config.toml` reduz o risco, mas não o elimina.
+14. Se o Xenia canário (`xenia-canary`), que é a build que a maioria usa, mantém o mesmo
+    `content/<title id>/<tipo>/`. O perfil foi tirado do repositório principal.
 
 **O Maycon vai testar no outro PC dele**, que tem DuckStation real. O caminho é:
 

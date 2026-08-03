@@ -62,7 +62,7 @@ reg import tests/ludusavi.reg
 cd C:\proj\savevault; cargo test --lib -- --skip scan::registry --skip _with_registry --skip _registry_
 ```
 
-Baseline conhecido em 2026-08-03 (depois da v0.4.0): **311 passam, 0 falham**, 24 filtrados.
+Baseline conhecido em 2026-08-03 (depois da v0.4.0): **314 passam, 0 falham**, 24 filtrados.
 
 ### 4. Compilar exige MSVC e espaço em disco
 
@@ -232,6 +232,30 @@ no lugar errado não é. Uniformizar os dois lados parece limpeza e joga fora a 
 como raiz uma pasta que já estava adicionada: mandava o usuário fazer o que ele já tinha feito. Ao
 acrescentar um motivo de recusa, pergunte **o que o usuário faz a seguir**; se a resposta for a
 mesma de um motivo existente, é o mesmo motivo, e se não for, é variante nova.
+
+## A pasta do jogo nem sempre é só save
+
+`AreaSpec.only_subdirs` limita quais subpastas da pasta do jogo são varridas. Existe pelo Xenia,
+onde o **jogo instalado** (`00004000`) mora na mesma pasta de título que o save (`00000001`): sem
+o filtro, o backup levaria dezenas de GB em silêncio, e o usuário só perceberia pelo tamanho.
+
+Ao acrescentar um emulador, a pergunta é: **o que mais mora nesta pasta além de progresso?** Se
+houver jogo, DLC ou cache ali, é `only_subdirs`, não "depois a gente vê".
+
+O filtro vale **um nível**, e isso é essencial: o código do tipo de conteúdo do Xenia tem oito
+hexadecimais, igual ao Title ID, então continuar casando a forma abaixo dele faria `00000001`
+roubar a identidade do jogo e filtrar o próprio save. É a irmã gêmea da armadilha do índice do
+Switch: **quando a identidade é um número de tamanho fixo, procure quem mais no caminho tem aquele
+tamanho** — inclusive abaixo.
+
+## Dois emuladores podem casar a mesma pasta, e `None` não resolve
+
+Eden e Sudachi são o mesmo emulador por baixo e têm a **mesma** assinatura. `App::detect` devolvia
+`None` no empate, o que parecia prudente e deixava toda pasta da linhagem invisível.
+
+O desempate tem que ser **evidência**, nunca preferência: hoje é o nome da pasta de dados
+(`...\eden`, `...\sudachi`). Sem nome que sirva, `None` de novo. A regra geral: no empate, procure
+um fato no disco que separe os dois; se não houver, recuse.
 
 ## Voltar de versão quebra a configuração
 

@@ -6,6 +6,11 @@ Everything under "Inherited from Ludusavi" is the upstream history, with its own
 ## SaveVault (não publicado)
 
 * Added:
+  * **Sudachi (Nintendo Switch)** and **Xenia (Xbox 360).** With these, every emulator on the list
+    is now supported: nothing is left saying "coming soon".
+  * **Xenia backups leave the installed game behind.** On the Xbox 360 the installed game sits in
+    the same folder as the save, so backing up that folder would quietly copy tens of gigabytes.
+    Only the saves are taken.
   * **shadPS4 (PlayStation 4).** Saves and trophies are backed up and restored, as two separate
     things, and each game shows its real name, read from the save itself. Restoring finds the user
     this machine actually uses, instead of recreating the other machine's user folder.

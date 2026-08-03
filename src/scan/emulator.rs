@@ -36,6 +36,8 @@ pub enum App {
     Ppsspp,
     Rpcs3,
     ShadPs4,
+    Sudachi,
+    Xenia,
 }
 
 /// Uma área declarada de dado de usuário dentro da pasta de dados do emulador.
@@ -195,6 +197,9 @@ pub enum Identity {
     /// meio, cujo identificador muda de máquina para máquina, e cada fork do emulador é livre
     /// para acrescentar um nível. Casar por forma sobrevive aos dois.
     TitleIdFolder,
+    /// Do nome de uma **pasta** que é o Title ID do Xbox 360 (8 dígitos hexadecimais). Mesma
+    /// ideia do [`Self::TitleIdFolder`], com o comprimento do outro console.
+    XboxTitleFolder,
     /// Do nome de uma **pasta** que começa com um identificador da PlayStation (quatro letras e
     /// cinco dígitos), com o nome do jogo lido do `PARAM.SFO` que mora dentro dela.
     ///
@@ -214,6 +219,7 @@ impl Identity {
     fn folder_matcher(&self) -> Option<fn(&str) -> Option<String>> {
         match self {
             Self::TitleIdFolder => Some(title_id_in),
+            Self::XboxTitleFolder => Some(xbox_title_id_in),
             Self::PlaystationFolder => Some(param_sfo::title_id_prefix),
             Self::PsxCard | Self::FilenameMediaCode | Self::FilenamePlaystationId => None,
         }
@@ -236,6 +242,10 @@ pub struct AreaSpec {
     /// que é o caso quando é a pasta que identifica o jogo e o conteúdo dela é opaco.
     pub extensions: &'static [&'static str],
     pub identity: Identity,
+    /// Quando a pasta do jogo agrupa mais coisa que save, só estas subpastas dela são varridas.
+    /// Vazio significa "tudo". Existe para o Xenia, onde o jogo **instalado** mora ao lado do
+    /// save, dentro da mesma pasta de título, separado só pelo código do tipo de conteúdo.
+    pub only_subdirs: &'static [&'static str],
 }
 
 /// Tudo o que se sabe sobre um emulador. É dado, não lógica.
@@ -275,12 +285,14 @@ const DUCKSTATION: Profile = Profile {
             subdir: "memcards",
             extensions: &["mcd", "mcr"],
             identity: Identity::PsxCard,
+            only_subdirs: &[],
         },
         AreaSpec {
             area: Area::Savestates,
             subdir: "savestates",
             extensions: &["sav"],
             identity: Identity::FilenameMediaCode,
+            only_subdirs: &[],
         },
     ],
 };
@@ -316,12 +328,14 @@ const PCSX2: Profile = Profile {
             // `Mcd001.ps2` não carrega serial nenhum. Identidade opaca é melhor que palpite;
             // ver a pendência do PCSX2 no HANDOFF.md.
             identity: Identity::FilenameMediaCode,
+            only_subdirs: &[],
         },
         AreaSpec {
             area: Area::Savestates,
             subdir: "sstates",
             extensions: &["p2s"],
             identity: Identity::FilenameMediaCode,
+            only_subdirs: &[],
         },
     ],
 };
@@ -342,6 +356,30 @@ const PCSX2: Profile = Profile {
 /// foi derrubado por DMCA), então a profundidade exata é o que **não** está confirmado contra
 /// instalação real: ver a pendência do Eden no HANDOFF.md. Casar por forma é o que faz o perfil
 /// continuar valendo se a profundidade for outra.
+/// A área de save da linhagem do yuzu, compartilhada pelos forks.
+///
+/// É literalmente o mesmo dado, e não uma coincidência: por isso está declarada uma vez. Se um
+/// fork divergir, ele passa a declarar a sua, e a divergência fica visível no diff.
+const SWITCH_SAVE_AREAS: &[AreaSpec] = &[AreaSpec {
+    area: Area::Saves,
+    // O perfil é resolvido na máquina de DESTINO, e não reaplicado do backup. Sem isso o save
+    // ia parar numa pasta de perfil que o emulador de lá não usa: correto no disco, invisível
+    // para o jogo. Ver `PROFILE_SEGMENT` para o porquê da forma em vez da posição.
+    subdir: "nand/user/save/{profile}",
+    // O conteúdo do save do Switch é opaco e sem extensão fixa: quem identifica é a pasta.
+    extensions: &[],
+    identity: Identity::TitleIdFolder,
+    only_subdirs: &[],
+}];
+
+/// A assinatura da linhagem do yuzu. Eden e Sudachi casam a **mesma** pasta, de propósito: são o
+/// mesmo emulador por baixo, e é a pasta de dados apontada que os separa, não a forma dela.
+const SWITCH_SIGNATURE: Signature = Signature {
+    all_of: &[Marker::Dir("nand"), Marker::Dir("config")],
+    any_of: &[],
+    none_of: &[],
+};
+
 const EDEN: Profile = Profile {
     name: "Eden",
     data_roots: &[Anchor::Common(CommonPath::Data, "eden")],
@@ -349,20 +387,53 @@ const EDEN: Profile = Profile {
     // marcador. Como isso não está confirmado para o Eden, aqui não se promete portátil: o
     // usuário aponta a pasta como raiz e a assinatura decide.
     portable_markers: &[],
+    signature: SWITCH_SIGNATURE,
+    areas: SWITCH_SAVE_AREAS,
+};
+
+/// O Sudachi é outro fork da linhagem do yuzu, com a mesma estrutura de dados do [`EDEN`].
+///
+/// **Sem caminho padrão de propósito.** O código do Sudachi também está indisponível, e o caminho
+/// que circula em guias de comunidade (`%APPDATA%\sudachi`) não pôde ser confirmado em fonte do
+/// projeto. Anotar um palpite aqui faria o programa dizer "não encontrado" com toda a confiança
+/// numa máquina onde o emulador está instalado; deixar vazio faz o usuário apontar a pasta uma
+/// vez, e a assinatura confere se é ela mesma. Ver a pendência no HANDOFF.md.
+const SUDACHI: Profile = Profile {
+    name: "Sudachi",
+    data_roots: &[],
+    portable_markers: &[],
+    signature: SWITCH_SIGNATURE,
+    areas: SWITCH_SAVE_AREAS,
+};
+
+/// Fonte: código do próprio Xenia, que é aberto.
+///
+/// - Em `src/xenia/app/xenia_main.cc`, a raiz de armazenamento é a pasta do executável quando há
+///   `portable.txt` ao lado dele, e senão `<pasta do usuário>\Xenia`. O conteúdo fica em
+///   `content/` dentro dela.
+/// - Em `src/xenia/kernel/xam/content_manager.cc`, `ResolvePackageRoot` monta
+///   `content_root/<title id>/<tipo de conteúdo>/`, os dois em 8 dígitos hexadecimais maiúsculos.
+/// - Em `src/xenia/xbox.h`, `XContentType::kSavedGame = 0x00000001`. **É por isso que existe
+///   `only_subdirs`**: ao lado do save, na mesma pasta de título, mora
+///   `kInstalledGame = 0x00004000`, que é o jogo inteiro. Varrer a pasta do título sem filtrar
+///   levaria dezenas de GB para o backup.
+const XENIA: Profile = Profile {
+    name: "Xenia",
+    // A pasta do usuário no Windows é `Documentos`, e a portátil é a do executável. Como a
+    // segunda depende de onde o usuário descompactou, ela é apontada à mão.
+    data_roots: &[Anchor::Common(CommonPath::Document, "Xenia")],
+    portable_markers: &["portable.txt"],
     signature: Signature {
-        all_of: &[Marker::Dir("nand"), Marker::Dir("config")],
-        any_of: &[],
+        all_of: &[Marker::Dir("content")],
+        any_of: &[Marker::Dir("cache"), Marker::File("xenia.config.toml")],
         none_of: &[],
     },
     areas: &[AreaSpec {
         area: Area::Saves,
-        // O perfil é resolvido na máquina de DESTINO, e não reaplicado do backup. Sem isso o save
-        // ia parar numa pasta de perfil que o Eden de lá não usa: correto no disco, invisível
-        // para o jogo. Ver `PROFILE_SEGMENT` para o porquê da forma em vez da posição.
-        subdir: "nand/user/save/{profile}",
-        // O conteúdo do save do Switch é opaco e sem extensão fixa: quem identifica é a pasta.
+        subdir: "content",
         extensions: &[],
-        identity: Identity::TitleIdFolder,
+        identity: Identity::XboxTitleFolder,
+        only_subdirs: &["00000001"],
     }],
 };
 
@@ -395,6 +466,7 @@ const PPSSPP: Profile = Profile {
             subdir: "PSP/SAVEDATA",
             extensions: &[],
             identity: Identity::PlaystationFolder,
+            only_subdirs: &[],
         },
         AreaSpec {
             area: Area::Savestates,
@@ -403,6 +475,7 @@ const PPSSPP: Profile = Profile {
             // sem ela o usuário restaura e não reconhece o que é cada estado.
             extensions: &["ppst", "jpg"],
             identity: Identity::FilenamePlaystationId,
+            only_subdirs: &[],
         },
     ],
 };
@@ -434,12 +507,14 @@ const RPCS3: Profile = Profile {
             subdir: "dev_hdd0/home/*/savedata",
             extensions: &[],
             identity: Identity::PlaystationFolder,
+            only_subdirs: &[],
         },
         AreaSpec {
             area: Area::Trophies,
             subdir: "dev_hdd0/home/*/trophy",
             extensions: &[],
             identity: Identity::PlaystationFolder,
+            only_subdirs: &[],
         },
     ],
 };
@@ -479,12 +554,14 @@ const SHADPS4: Profile = Profile {
             subdir: "home/*/savedata",
             extensions: &[],
             identity: Identity::PlaystationFolder,
+            only_subdirs: &[],
         },
         AreaSpec {
             area: Area::Trophies,
             subdir: "home/*/trophy",
             extensions: &["xml"],
             identity: Identity::FilenamePlaystationId,
+            only_subdirs: &[],
         },
     ],
 };
@@ -497,6 +574,8 @@ impl App {
         Self::Ppsspp,
         Self::Rpcs3,
         Self::ShadPs4,
+        Self::Sudachi,
+        Self::Xenia,
     ];
 
     pub fn profile(&self) -> &'static Profile {
@@ -507,6 +586,8 @@ impl App {
             Self::Ppsspp => &PPSSPP,
             Self::Rpcs3 => &RPCS3,
             Self::ShadPs4 => &SHADPS4,
+            Self::Sudachi => &SUDACHI,
+            Self::Xenia => &XENIA,
         }
     }
 
@@ -519,7 +600,7 @@ impl App {
     /// Existe para a tela poder mostrá-los como "em breve" em vez de fingir que o escopo é só o
     /// que já foi feito. É dado honesto: o usuário vê o que ainda não vai funcionar, e não
     /// descobre isso apontando a pasta e não acontecendo nada.
-    pub const PLANNED: &'static [&'static str] = &["Sudachi", "Xenia"];
+    pub const PLANNED: &'static [&'static str] = &[];
 
     /// Esta pasta é a pasta de dados deste emulador?
     pub fn matches_data_root(&self, data_root: &StrictPath) -> bool {
@@ -528,12 +609,38 @@ impl App {
 
     /// Qual emulador é esta pasta, se algum.
     ///
-    /// Devolve `None` quando nenhum reconhece **e também** quando mais de um reconhece, porque
-    /// escolher no empate seria adivinhar em cima de dado do usuário.
+    /// Devolve `None` quando nenhum reconhece **e também** quando mais de um reconhece sem que a
+    /// própria pasta diga qual é, porque escolher no empate seria adivinhar em cima de dado do
+    /// usuário.
+    ///
+    /// O empate deixou de ser hipótese com o Sudachi: ele e o Eden são o mesmo emulador por
+    /// baixo, com a mesma assinatura, então **toda** pasta da linhagem do yuzu empata. Sem
+    /// desempate, o folder ficaria invisível para quem não escolheu o emulador na aba. O critério
+    /// é evidência do disco, e não preferência: o nome da pasta de dados
+    /// (`...\eden`, `...\sudachi`). Sem isso, continua `None`.
     pub fn detect(data_root: &StrictPath) -> Option<Self> {
-        let mut found = Self::ALL.iter().filter(|app| app.matches_data_root(data_root));
-        let first = *found.next()?;
-        found.next().is_none().then_some(first)
+        let matching: Vec<Self> = Self::ALL
+            .iter()
+            .copied()
+            .filter(|app| app.matches_data_root(data_root))
+            .collect();
+
+        match matching.as_slice() {
+            [] => None,
+            [only] => Some(*only),
+            several => {
+                let leaf = data_root.leaf()?;
+                let named: Vec<Self> = several
+                    .iter()
+                    .copied()
+                    .filter(|app| app.name().eq_ignore_ascii_case(&leaf))
+                    .collect();
+                match named.as_slice() {
+                    [only] => Some(*only),
+                    _ => None,
+                }
+            }
+        }
     }
 
     /// A pasta de dados de uma instalação apontada pelo usuário.
@@ -778,7 +885,7 @@ fn discover_in_area(app: App, spec: &AreaSpec, area_root: &StrictPath) -> Vec<Di
     let mut found = vec![];
 
     if let Some(matcher) = spec.identity.folder_matcher() {
-        return discover_in_game_folders(app, spec, matcher, area_root, area_root, None, None);
+        return discover_in_game_folders(app, spec, matcher, area_root, area_root, None, None, false);
     }
 
     let Ok(entries) = area_root.read_dir() else {
@@ -822,6 +929,12 @@ fn title_id_in(name: &str) -> Option<String> {
     (name.len() == 16 && name.chars().all(|c| c.is_ascii_hexdigit())).then(|| name.to_ascii_uppercase())
 }
 
+/// O Title ID do Xbox 360 tem 8 dígitos hexadecimais (`4D5307E6`), e o Xenia o escreve assim na
+/// pasta (`fmt::format("{:08X}", title_id)`).
+fn xbox_title_id_in(name: &str) -> Option<String> {
+    (name.len() == 8 && name.chars().all(|c| c.is_ascii_hexdigit())).then(|| name.to_ascii_uppercase())
+}
+
 /// Desce a área procurando a pasta que identifica o jogo.
 ///
 /// `game` carrega o jogo já reconhecido acima na árvore: uma vez dentro da pasta do título, tudo
@@ -836,6 +949,9 @@ fn discover_in_game_folders(
     current: &StrictPath,
     game: Option<&GameId>,
     title: Option<&str>,
+    // `settled`: já se passou pelo filtro de `AreaSpec::only_subdirs`. Daqui para baixo é tudo
+    // save do jogo que ficou para trás: nada mais é filtrado, e nada mais rouba a identidade.
+    settled: bool,
 ) -> Vec<DiscoveredSave> {
     let mut found = vec![];
 
@@ -854,13 +970,35 @@ fn discover_in_game_folders(
     // Determinismo: a ordem de listagem do sistema de arquivos não é garantida.
     children.sort_by_key(|child| child.2.render());
 
+    // Dentro da pasta do jogo, nem toda subpasta é progresso. No Xenia, o jogo agrupa **tudo**
+    // por tipo de conteúdo, e o jogo instalado inteiro (dezenas de GB) mora ao lado do save.
+    // Sem este filtro o backup levaria o jogo junto.
+    //
+    // O filtro vale só um nível: o código do tipo de conteúdo do Xenia (`00000001`) tem OITO
+    // hexadecimais, exatamente como o Title ID, então sem parar aqui ele casaria a forma, roubaria
+    // a identidade do jogo e filtraria o próprio save. É a mesma armadilha do índice do Switch.
+    let restrict_to_subdirs = !settled
+        && !spec.only_subdirs.is_empty()
+        && current.leaf().is_some_and(|name| matcher(&name).is_some());
+
     for (is_dir, name, path) in children {
         if is_dir {
+            if restrict_to_subdirs {
+                if !spec.only_subdirs.contains(&name.as_str()) {
+                    continue;
+                }
+
+                found.extend(discover_in_game_folders(
+                    app, spec, matcher, area_root, &path, game, title, true,
+                ));
+                continue;
+            }
+
             // O casamento MAIS PROFUNDO vence. Não é detalhe: no Switch o primeiro nível abaixo
             // da área é o índice do espaço de save, que também tem 16 hexadecimais
             // (`0000000000000000`) e portanto também casa a forma. Sem esta regra, todo jogo do
             // usuário seria atribuído a um "jogo" só, o índice. Foi assim que o teste pegou.
-            let matched = matcher(&name).map(GameId::Media);
+            let matched = (!settled).then(|| matcher(&name).map(GameId::Media)).flatten();
             // O nome do jogo é declarado num arquivo dentro da pasta do jogo, quando o formato
             // tem um. Lido uma vez por pasta de jogo, e não por arquivo.
             let declared = matched.is_some().then(|| read_declared_title(&path)).flatten();
@@ -875,6 +1013,7 @@ fn discover_in_game_folders(
                 &path,
                 deeper.as_ref(),
                 title,
+                settled,
             ));
             continue;
         }
@@ -972,7 +1111,7 @@ fn attribute(app: App, spec: &AreaSpec, area_root: &StrictPath, file: &StrictPat
         }
         // Tratadas antes de chegar aqui, em `discover_saves`, porque a unidade não é o arquivo:
         // é a pasta, e ela precisa de descida recursiva.
-        Identity::TitleIdFolder | Identity::PlaystationFolder => vec![],
+        Identity::TitleIdFolder | Identity::XboxTitleFolder | Identity::PlaystationFolder => vec![],
         Identity::FilenamePlaystationId => {
             let stem = file_stem(file);
             let game = match param_sfo::title_id_prefix(&stem) {
@@ -1562,7 +1701,20 @@ mod tests {
     fn recognizes_an_eden_data_root() {
         let install = eden_install();
         assert!(App::Eden.matches_data_root(&install.root));
-        assert_eq!(Some(App::Eden), App::detect(&install.root));
+    }
+
+    /// Eden e Sudachi são o mesmo emulador por baixo, e a assinatura não os separa. Quem separa é
+    /// o nome da pasta de dados, que é evidência do disco. Sem nome que sirva, `None`: escolher
+    /// no empate seria adivinhar em cima de save.
+    #[test]
+    fn tells_apart_two_forks_of_the_same_emulator_by_the_folder_name() {
+        let anonima = eden_install();
+        assert_eq!(None, App::detect(&anonima.root));
+
+        for (nome, esperado) in [("eden", App::Eden), ("Sudachi", App::Sudachi)] {
+            let install = FakeInstall::new().dir(&format!("{nome}/nand")).dir(&format!("{nome}/config"));
+            assert_eq!(Some(esperado), App::detect(&install.root.joined(nome)));
+        }
     }
 
     #[test]
@@ -1774,6 +1926,35 @@ mod tests {
         let trophies: Vec<_> = found.iter().filter(|x| x.area == Area::Trophies).collect();
         assert_eq!(1, trophies.len());
         assert_eq!(GameId::Media("NPWR12345".to_string()), trophies[0].game);
+    }
+
+    fn xenia_install() -> FakeInstall {
+        FakeInstall::new().dir("content").dir("cache")
+    }
+
+    #[test]
+    fn recognizes_a_xenia_folder() {
+        let install = xenia_install();
+        assert!(App::Xenia.matches_data_root(&install.root));
+        assert_eq!(Some(App::Xenia), App::detect(&install.root));
+    }
+
+    /// O motivo de `only_subdirs` existir, e ele é grande: no Xenia o jogo **instalado**
+    /// (`00004000`) mora na mesma pasta de título que o save (`00000001`). Varrer a pasta do
+    /// título inteira levaria dezenas de GB de jogo para o backup, em silêncio.
+    #[test]
+    fn backs_up_the_xbox_save_without_dragging_the_installed_game_along() {
+        let install = xenia_install()
+            .file("content/4D5307E6/00000001/savegame/save.bin", b"save")
+            .file("content/4D5307E6/00004000/000D0000/jogo.xex", b"jogo enorme")
+            .file("content/584108A9/00000001/slot0/progress.bin", b"save");
+
+        let found = discover_saves(App::Xenia, &install.root);
+
+        assert_eq!(2, found.len());
+        assert_eq!(GameId::Media("4D5307E6".to_string()), found[0].game);
+        assert_eq!(GameId::Media("584108A9".to_string()), found[1].game);
+        assert!(!found.iter().any(|save| save.file.render().contains("jogo.xex")));
     }
 
     #[test]
