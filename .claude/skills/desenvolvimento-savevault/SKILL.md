@@ -20,7 +20,7 @@ destino, ela está errada.
 
 | Coisa | Lugar |
 |---|---|
-| Repositório | `C:\proj\savevault`, remoto `mayccoisa/savevault` (privado), `upstream` = `mtkennerly/ludusavi` |
+| Repositório | `C:\proj\savevault`, remoto `mayccoisa/savevault` (publico desde 2026-08-03, para a checagem de atualizacao funcionar), `upstream` = `mtkennerly/ludusavi` |
 | PRD | Produto **SaveVault** no hub, `kwA6qMaEK6YU4d88IdZy`, doc `zyOp7TCOp8y2rh67IIV0`; cópia local em `docs/prd.md` |
 | Handoff e próximos passos | `HANDOFF.md` na raiz do repositório |
 | Motor de emuladores | `src/scan/emulator.rs` (perfil como dado) e `src/scan/emulator/psx_card.rs` |
@@ -62,7 +62,7 @@ reg import tests/ludusavi.reg
 cd C:\proj\savevault; cargo test --lib -- --skip scan::registry --skip _with_registry --skip _registry_
 ```
 
-Baseline conhecido: **263 passam, 0 falham**, 24 filtrados.
+Baseline conhecido em 2026-08-03 (v0.2.0): **279 passam, 0 falham**, 24 filtrados.
 
 ### 4. Compilar exige MSVC e espaço em disco
 
@@ -279,7 +279,7 @@ real da máquina.
 
 ## Antes de publicar release
 
-1. `cargo test --lib` com os `--skip` de registro: 263 verdes.
+1. `cargo test --lib` com os `--skip` de registro: 279 verdes.
 2. `cargo clippy --all-targets`: exit 0. Dois avisos são herdados (`src/scan.rs:2239` e
    `examples/api.rs:6`) e não são para consertar.
 3. Entrada no `CHANGELOG.md`, na seção do SaveVault no topo, escrita **para quem usa** e não para
