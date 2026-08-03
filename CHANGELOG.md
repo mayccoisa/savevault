@@ -6,6 +6,9 @@ Everything under "Inherited from Ludusavi" is the upstream history, with its own
 ## SaveVault (não publicado)
 
 * Added:
+  * **A filter for where the save comes from.** In the backup and restore lists, "Comes from" lets
+    you show only this PC, or only one emulator, so you can check your console games without
+    scrolling past hundreds of PC games. It only appears once you have an emulator set up.
   * **Sudachi (Nintendo Switch)** and **Xenia (Xbox 360).** With these, every emulator on the list
     is now supported: nothing is left saying "coming soon".
   * **Xenia backups leave the installed game behind.** On the Xbox 360 the installed game sits in

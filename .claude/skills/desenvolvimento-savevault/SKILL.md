@@ -62,7 +62,7 @@ reg import tests/ludusavi.reg
 cd C:\proj\savevault; cargo test --lib -- --skip scan::registry --skip _with_registry --skip _registry_
 ```
 
-Baseline conhecido em 2026-08-03 (depois da v0.4.0): **314 passam, 0 falham**, 24 filtrados.
+Baseline conhecido em 2026-08-03 (depois da v0.4.0): **316 passam, 0 falham**, 24 filtrados.
 
 ### 4. Compilar exige MSVC e espaço em disco
 

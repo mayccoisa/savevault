@@ -353,6 +353,22 @@ Regra que ficou: **a assinatura aponta para a instalação (configuração, past
 emulador), nunca para o dado do usuário.** Ao acrescentar um emulador, a pergunta é "o que continua
 aqui depois de o save sumir?".
 
+### 5.6b Filtro "De onde vem" — FEITO em 2026-08-03
+
+A aba de Emuladores organiza a **configuração**, mas a lista de jogos continuava misturando PC e
+console, e é lá que o usuário confere o que foi salvo. O filtro novo (`game_filter::Origin`) tem
+uma opção para o PC e uma para cada emulador conhecido, montada de `App::ALL`: emulador novo
+aparece sozinho.
+
+Duas decisões que carregam o comportamento:
+
+- **Quem decide é o que o scan gravou (`scan.semantics.emulator()`), nunca o nome do jogo.** Pela
+  terceira vez nesta base, filtrar pelo nome poria `Eden Ring`, jogo de PC, dentro do emulador
+  Eden, porque a chave de um jogo de emulador é `"<Emulador> <identidade>"`. Travado por teste em
+  `game_filter.rs`.
+- **O controle só aparece se houver raiz de emulador configurada.** Para quem só tem jogo de PC,
+  ele não separaria nada, e seria mais um controle na barra de filtros para não usar nunca.
+
 ### 5.9 O perfil do Eden — CORRIGIDO em 2026-08-03
 
 Era a limitação séria registrada em 5.1b: o save voltava para a pasta do perfil da máquina de

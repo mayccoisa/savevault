@@ -2365,6 +2365,17 @@ impl App {
                         // A tela de emuladores não tem lista de jogos filtrável.
                         Screen::Emulators | Screen::Other => {}
                     },
+                    game_filter::Event::EditedFilterOrigin(value) => match self.screen {
+                        Screen::Backup => {
+                            self.backup_screen.log.search.origin.choice = value;
+                        }
+                        Screen::Restore => {
+                            self.restore_screen.log.search.origin.choice = value;
+                        }
+                        Screen::CustomGames => {}
+                        // A tela de emuladores não tem lista de jogos filtrável.
+                        Screen::Emulators | Screen::Other => {}
+                    },
                 }
 
                 task.unwrap_or_else(Task::none)

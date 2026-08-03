@@ -1189,6 +1189,16 @@ impl Translator {
         self.field(&self.source_label())
     }
 
+    /// O "de onde vem" que não é emulador. Não é "outro": é o computador, e chamar de outro faria
+    /// o caso comum parecer a exceção.
+    pub fn filter_origin_pc(&self) -> String {
+        translate("filter-origin-pc")
+    }
+
+    pub fn filter_origin_field(&self) -> String {
+        self.field(&translate("filter-origin"))
+    }
+
     pub fn primary_manifest_label(&self) -> String {
         translate("label-primary-manifest")
     }

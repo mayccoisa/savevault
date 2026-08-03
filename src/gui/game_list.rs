@@ -433,6 +433,12 @@ impl GameList {
                         histories,
                         config.scan.show_deselected_games,
                         self.manifests(manifest),
+                        // Sem emulador configurado, o filtro não separaria nada: seria um
+                        // controle a mais para quem não tem o problema que ele resolve.
+                        config
+                            .roots
+                            .iter()
+                            .any(|root| matches!(root, crate::resource::config::Root::Emulator(_))),
                     )
                 })
                 .push({

@@ -159,6 +159,9 @@ label-alias = Alias
 label-original-name = Original name
 # Which manifest a game's data came from
 label-source = Source
+# Filter: whether the save comes from this PC or from an emulator
+filter-origin = Comes from
+filter-origin-pc = This PC
 # This refers to the main Ludusavi manifest: https://github.com/mtkennerly/ludusavi-manifest
 label-primary-manifest = Primary manifest
 # This refers to how we integrate a custom game with the manifest data.

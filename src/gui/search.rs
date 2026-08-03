@@ -32,6 +32,7 @@ pub struct FilterComponent {
     pub enablement: Filter<game_filter::Enablement>,
     pub change: Filter<game_filter::Change>,
     pub manifest: Filter<game_filter::Manifest>,
+    pub origin: Filter<game_filter::Origin>,
 }
 
 fn template<'a, T: 'static + Default + Copy + Eq + PartialEq + ToString>(
@@ -97,6 +98,7 @@ impl FilterComponent {
         self.enablement.active = false;
         self.change.active = false;
         self.manifest.active = false;
+        self.origin.active = false;
     }
 
     pub fn is_dirty(&self) -> bool {
@@ -106,6 +108,7 @@ impl FilterComponent {
             || self.enablement.active
             || self.change.active
             || self.manifest.active
+            || self.origin.active
     }
 
     pub fn qualifies(
@@ -135,7 +138,9 @@ impl FilterComponent {
                 .choice
                 .qualifies(manifest.0.get(&scan.game_name), customized);
 
-        fuzzy && unique && complete && changed && enable && manifest
+        let origin = !self.origin.active || self.origin.choice.qualifies(scan);
+
+        fuzzy && unique && complete && changed && enable && manifest && origin
     }
 
     pub fn toggle_filter(&mut self, filter: FilterKind, enabled: bool) {
@@ -145,6 +150,7 @@ impl FilterComponent {
             FilterKind::Enablement => self.enablement.active = enabled,
             FilterKind::Change => self.change.active = enabled,
             FilterKind::Manifest => self.manifest.active = enabled,
+            FilterKind::Origin => self.origin.active = enabled,
         }
     }
 
@@ -154,6 +160,7 @@ impl FilterComponent {
         histories: &TextHistories,
         show_deselected_games: bool,
         manifests: Vec<game_filter::Manifest>,
+        any_emulator: bool,
     ) -> Option<Element> {
         if !self.show {
             return None;
@@ -208,6 +215,17 @@ impl FilterComponent {
                             game_filter::Enablement::ALL,
                             move |value| Message::Filter {
                                 event: game_filter::Event::EditedFilterEnablement(value),
+                            },
+                        )
+                    })
+                    .push_if(any_emulator, || {
+                        template_with_label(
+                            &self.origin,
+                            TRANSLATOR.filter_origin_field(),
+                            FilterKind::Origin,
+                            game_filter::Origin::all(),
+                            move |value| Message::Filter {
+                                event: game_filter::Event::EditedFilterOrigin(value),
                             },
                         )
                     })
