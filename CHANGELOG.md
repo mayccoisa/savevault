@@ -3,6 +3,18 @@
 SaveVault is a fork of [Ludusavi](https://github.com/mtkennerly/ludusavi) by Michael Kennerly.
 Everything under "Inherited from Ludusavi" is the upstream history, with its own version numbers.
 
+## SaveVault v0.3.0 (2026-08-03)
+
+* Added:
+  * **RPCS3 (PlayStation 3).** Saves and trophies are backed up and restored, as two separate
+    things, so you can bring back your progress without touching your trophies, or the other way
+    around. Each game shows its real name, read from the save itself.
+  * **Restoring a PS3 save finds your profile on this machine.** RPCS3 gives each user profile an
+    id of its own, and that id is different on every machine. SaveVault puts the save in the
+    profile this machine actually uses, instead of recreating the other machine's profile folder,
+    which would look right on disk and be invisible to the game. If there is more than one profile
+    here, it stops and asks you to choose rather than guessing.
+
 ## SaveVault v0.2.1 (2026-08-03)
 
 * Added:
