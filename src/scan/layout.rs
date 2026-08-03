@@ -273,6 +273,17 @@ impl BackupSemantics {
     pub fn is_empty(&self) -> bool {
         self.directories.is_empty()
     }
+
+    /// Which emulator this game's saves belong to, if any.
+    ///
+    /// This is the recorded fact, not a guess from the game's name, and it is what decides where
+    /// the backup folder goes.
+    pub fn emulator(&self) -> Option<crate::scan::emulator::App> {
+        self.directories.values().find_map(|dir| match dir.kind {
+            SemanticDirKind::Emulator { app, .. } => Some(app),
+            SemanticDirKind::Wine => None,
+        })
+    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
@@ -1672,6 +1683,54 @@ impl GameLayout {
         Some(())
     }
 
+    /// Put this game's backup folder inside a folder named after its emulator.
+    ///
+    /// Without it, emulator games sit scattered among the PC games: on a real backup of 138 games,
+    /// seven DuckStation folders and two PPSSPP ones end up sorted alphabetically among them.
+    ///
+    /// Which emulator it is comes from the scan, never from the game's name. Guessing by name
+    /// looks tempting, since the key is `"<Emulator> <id>"`, but a PC game called `Eden Ring`
+    /// would then be filed under the Eden emulator. A test guards that case.
+    ///
+    /// Moving an existing folder is safe because a backup is found by the name recorded inside its
+    /// `mapping.yaml`, never by where the folder sits, and that file records the game's ORIGINAL
+    /// paths, not paths inside the backup. If the move fails, the backup goes on where it is: a
+    /// tidier layout is never worth failing to save someone's progress.
+    fn regroup_under_emulator(&mut self, scan: &ScanInfo) {
+        let Some(app) = scan.semantics.emulator() else {
+            return;
+        };
+        let Some(parent) = self.path.parent() else { return };
+        let Some(leaf) = self.path.leaf() else { return };
+
+        // Já está agrupado.
+        if parent.leaf().as_deref() == Some(app.name()) {
+            return;
+        }
+
+        let name = leaf.strip_prefix(&format!("{} ", app.name())).unwrap_or(&leaf).to_string();
+        let wanted = parent.joined(app.name()).joined(&escape_folder_name(&name));
+
+        if wanted.exists() {
+            log::warn!("[{}] not regrouping: {wanted:?} already exists", scan.game_name);
+            return;
+        }
+        if let Err(e) = parent.joined(app.name()).create_dirs() {
+            log::warn!("[{}] unable to create emulator folder: {e:?}", scan.game_name);
+            return;
+        }
+
+        if self.path.exists() {
+            if let Err(e) = self.path.move_to(&wanted) {
+                log::warn!("[{}] unable to regroup {:?}: {e:?}", scan.game_name, self.path);
+                return;
+            }
+            log::info!("[{}] regrouped: {:?} -> {wanted:?}", scan.game_name, self.path);
+        }
+
+        self.path = wanted;
+    }
+
     pub fn back_up(
         &mut self,
         scan: &ScanInfo,
@@ -1689,6 +1748,8 @@ impl GameLayout {
             log::info!("[{}] nothing constructive to back up", &scan.game_name);
             return None;
         }
+
+        self.regroup_under_emulator(scan);
 
         log::trace!("[{}] preparing for backup", &scan.game_name);
         if let Err(e) = prepare_backup_target(&self.path) {
@@ -2404,8 +2465,12 @@ impl BackupLayout {
             return HashMap::new();
         };
 
+        // Depth 2, not 1: emulator games live one level down, inside a folder named after the
+        // emulator. A game folder is recognised by having a `mapping.yaml`, so the extra level
+        // costs one directory listing per emulator and cannot mistake a grouping folder for a
+        // game.
         for game_dir in walkdir::WalkDir::new(base_interpreted)
-            .max_depth(1)
+            .max_depth(2)
             .follow_links(false)
             .into_iter()
             .skip(1) // the base path itself
@@ -2587,6 +2652,106 @@ mod tests {
 
         fn layout() -> BackupLayout {
             BackupLayout::new(StrictPath::new(format!("{}/tests/backup", repo_raw())))
+        }
+
+        /// A scan whose files came from an emulator area, which is the fact that decides where
+        /// the backup folder goes.
+        fn emulator_scan(name: &str, app: crate::scan::emulator::App) -> ScanInfo {
+            ScanInfo {
+                game_name: name.to_string(),
+                found_files: hash_map! {
+                    repo_file("new").into(): ScannedFile::with_change(1, "n", ScanChange::New),
+                },
+                semantics: BackupSemantics {
+                    directories: btree_map! {
+                        "C:/emu/memcards".to_string(): DirectorySemantics {
+                            kind: SemanticDirKind::Emulator { app, area: crate::scan::emulator::Area::Memcards },
+                        },
+                    },
+                },
+                ..Default::default()
+            }
+        }
+
+        /// An emulator backup lands inside a folder named after the emulator.
+        #[test]
+        fn an_emulator_backup_goes_under_the_emulator_folder() {
+            let dir = tempfile::tempdir().unwrap();
+            let base = StrictPath::from(dir.path().to_path_buf());
+
+            let mut layout = BackupLayout::new(base.clone()).game_layout("DuckStation SLUS-00067");
+            layout.back_up(
+                &emulator_scan("DuckStation SLUS-00067", crate::scan::emulator::App::DuckStation),
+                &now(),
+                &BackupFormats::default(),
+                Retention::default(),
+                false,
+            );
+
+            assert_eq!(base.joined("DuckStation").joined("SLUS-00067"), layout.path);
+            assert!(layout.path.joined("mapping.yaml").is_file());
+        }
+
+        /// The trap that guessing by name would fall into: `Eden Ring` is a PC game, and the key
+        /// of an emulator game is `"<Emulator> <id>"`, so a name-based rule would file it under
+        /// the Eden emulator. The decision comes from the scan, so it does not.
+        #[test]
+        fn a_pc_game_named_like_an_emulator_is_not_grouped() {
+            let dir = tempfile::tempdir().unwrap();
+            let base = StrictPath::from(dir.path().to_path_buf());
+
+            let mut layout = BackupLayout::new(base.clone()).game_layout("Eden Ring");
+            layout.back_up(
+                &ScanInfo {
+                    game_name: "Eden Ring".to_string(),
+                    found_files: hash_map! {
+                        repo_file("new").into(): ScannedFile::with_change(1, "n", ScanChange::New),
+                    },
+                    ..Default::default()
+                },
+                &now(),
+                &BackupFormats::default(),
+                Retention::default(),
+                false,
+            );
+
+            assert_eq!(base.joined("Eden Ring"), layout.path);
+        }
+
+        /// A backup made before the grouping existed is moved on the next backup, and stays
+        /// restorable, because a game is found by the name inside its `mapping.yaml` and never by
+        /// where the folder sits.
+        #[test]
+        fn an_older_emulator_backup_is_moved_and_still_found() {
+            let dir = tempfile::tempdir().unwrap();
+            let base = StrictPath::from(dir.path().to_path_buf());
+
+            let old = base.joined("DuckStation SLUS-00067");
+            old.create_dirs().unwrap();
+            IndividualMapping::new("DuckStation SLUS-00067".to_string()).save(&old);
+
+            let mut layout = BackupLayout::new(base.clone()).game_layout("DuckStation SLUS-00067");
+            assert_eq!(old, layout.path);
+
+            layout.back_up(
+                &emulator_scan("DuckStation SLUS-00067", crate::scan::emulator::App::DuckStation),
+                &now(),
+                &BackupFormats::default(),
+                Retention::default(),
+                false,
+            );
+
+            let wanted = base.joined("DuckStation").joined("SLUS-00067");
+            assert_eq!(wanted, layout.path);
+            assert!(!old.exists());
+            // Comparado por equivalência, e não por texto: o caminho vem da listagem do sistema
+            // de arquivos, então a barra é a do Windows.
+            assert!(
+                BackupLayout::load(&base)
+                    .get("DuckStation SLUS-00067")
+                    .is_some_and(|found| found.equivalent(&wanted)),
+                "o backup agrupado tem que continuar sendo encontrado"
+            );
         }
 
         fn game_layout(name: &str, path: &str) -> GameLayout {

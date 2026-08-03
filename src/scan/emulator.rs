@@ -572,6 +572,22 @@ impl GameId {
     }
 }
 
+impl App {
+    /// De qual emulador é esta chave de jogo, se de algum.
+    ///
+    /// A chave é `"<Emulador> <identidade>"`, montada por [`GameId::game_key`]. Reconhecê-la de
+    /// volta é o que permite agrupar o backup numa pasta por emulador, sem gravar nada novo no
+    /// backup e sem inventar um segundo lugar onde essa informação viva.
+    pub fn from_game_key(key: &str) -> Option<(Self, String)> {
+        Self::ALL.iter().find_map(|app| {
+            let prefix = format!("{} ", app.name());
+            key.strip_prefix(&prefix)
+                .filter(|rest| !rest.is_empty())
+                .map(|rest| (*app, rest.to_string()))
+        })
+    }
+}
+
 /// Um arquivo de save encontrado, já atribuído a um jogo.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct DiscoveredSave {
