@@ -131,9 +131,11 @@ emulador, e o emulador vive dentro da struct da raiz. Então:
 
 1. **Acrescentar a variante em `emulator::App`** e um `const` de `Profile` em `src/scan/emulator.rs`.
    O perfil é **dado**: locais padrão, marcador de portátil, assinatura de pasta, e as áreas.
-2. **Assinatura de pasta com dois marcadores no mínimo.** Um só não distingue: `memcards/` existe no
-   DuckStation **e** no PCSX2. O DuckStation usa `memcards/` mais (`settings.ini` ou
-   `portable.txt`).
+2. **Assinatura pela INSTALAÇÃO, e distinguindo do vizinho.** Duas regras, e as duas custaram
+   caro: a marca não pode ser a pasta de saves (ver a seção própria abaixo: o save some justamente
+   quando o usuário vai restaurar), e uma marca só não distingue emuladores que compartilham
+   convenção (`portable.txt` é do DuckStation **e** do PCSX2). Na prática: configuração e pastas
+   de sistema em `all_of`/`any_of`, e o que o vizinho tem e este não tem em `none_of`.
 3. **Identidade do jogo vem do conteúdo, não do nome do arquivo.** Foi essa decisão que fez o modo
    "um cartão por título do jogo" funcionar sem código extra: um cartão chamado
    `Final Fantasy VII_1.mcd` é identificado como `SLUS-00594` porque o serial está **dentro** do
