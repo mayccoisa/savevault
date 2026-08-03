@@ -3,6 +3,20 @@
 SaveVault is a fork of [Ludusavi](https://github.com/mtkennerly/ludusavi) by Michael Kennerly.
 Everything under "Inherited from Ludusavi" is the upstream history, with its own version numbers.
 
+## SaveVault v0.4.0 (2026-08-03)
+
+* Added:
+  * **Emulator backups now sit in a folder named after the emulator.** Instead of dozens of
+    `DuckStation ...` and `PPSSPP ...` folders sorted among your PC games, there is one
+    `DuckStation` folder and one `PPSSPP` folder, with the games inside. Backups you already made
+    are moved into place the next time you back that game up; nothing is lost and nothing needs to
+    be redone.
+* Fixed:
+  * **Restoring failed in exactly the case it exists for.** If the emulator's save folder had been
+    deleted, SaveVault stopped recognising the emulator and refused to restore, saying it was not
+    found. It now identifies an emulator by its installation rather than by the saves, so a
+    machine that lost its saves can get them back.
+
 ## SaveVault v0.3.0 (2026-08-03)
 
 * Added:
