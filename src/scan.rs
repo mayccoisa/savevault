@@ -1028,7 +1028,11 @@ fn emulator_areas_with_included_files(
             // be expanded here as well. Joining it literally records an anchor that still
             // contains `*`, which no file is ever under, so no anchor gets recorded at all: the
             // backup silently loses the very thing that makes restoring re-anchor.
-            for area_root in emulator::resolve_area_dirs(data_root, spec.subdir) {
+            // Tem que casar com o que `discover_saves` varreu, senão a âncora gravada não é a
+            // pasta de onde o arquivo saiu.
+            for area_root in
+                emulator::resolve_area_dirs_with(data_root, spec.subdir, emulator::ProfileFallback::Container)
+            {
                 if valid
                     .iter()
                     .any(|(seen_app, seen_area, seen)| *seen_app == app && *seen_area == spec.area && seen == &area_root)

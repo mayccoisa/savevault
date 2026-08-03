@@ -1,7 +1,7 @@
 ---
 name: desenvolvimento-savevault
 description: Regras de desenvolvimento do SaveVault (fork do Ludusavi em Rust, backup e restauração inteligente de saves de PC e de emuladores), destiladas de erros reais cometidos em produção — armadilhas do fork (gh resolve para o upstream, tags colidem), invariantes de segurança da restauração, como estender structs que os testes constroem por extenso, e como provar uma fatia ponta a ponta sem emulador instalado. Use SEMPRE que for mexer no SaveVault, principalmente ao acrescentar um emulador novo.
-version: 1.2.0
+version: 1.3.0
 ---
 
 # Desenvolvimento do SaveVault
@@ -62,7 +62,7 @@ reg import tests/ludusavi.reg
 cd C:\proj\savevault; cargo test --lib -- --skip scan::registry --skip _with_registry --skip _registry_
 ```
 
-Baseline conhecido em 2026-08-03 (v0.4.0): **303 passam, 0 falham**, 24 filtrados.
+Baseline conhecido em 2026-08-03 (depois da v0.4.0): **308 passam, 0 falham**, 24 filtrados.
 
 ### 4. Compilar exige MSVC e espaço em disco
 
@@ -217,8 +217,21 @@ defeito deste produto, porque parece sucesso.
 Com dois perfis no destino, a restauração **recusa** (`Unresolved::AreaAmbiguous`). Vale aqui a
 mesma regra de sempre: ambiguidade não vira palpite.
 
-O Eden tem a mesma doença (`nand/user/save/<índice>/<perfil>/<title id>`) e **ainda não** tem a
-cura: aplicar exige distinguir o índice do perfil, que têm a mesma forma.
+**Por posição ou por forma.** Quando a profundidade do caminho não está confirmada na fonte, fixar
+a posição é aposta. Por isso existe também o segmento `{profile}` (`emulator::PROFILE_SEGMENT`),
+que acha a pasta de perfil pela **forma** (32 hexadecimais) em até três níveis: é o que o Eden usa
+em `nand/user/save/{profile}`, porque o código do yuzu está indisponível e um fork é livre para
+acrescentar um nível.
+
+**E a resolução é assimétrica, de propósito** (`ProfileFallback`): sem perfil identificado, o
+**backup** varre a partir do container e a **restauração recusa**. Copiar demais é seguro; escrever
+no lugar errado não é. Uniformizar os dois lados parece limpeza e joga fora a garantia.
+
+**Recusar exige dizer a coisa certa.** "Sem perfil" tem variante própria
+(`Unresolved::ProfileMissing`) porque, caindo em `EmulatorMissing`, a mensagem mandava adicionar
+como raiz uma pasta que já estava adicionada: mandava o usuário fazer o que ele já tinha feito. Ao
+acrescentar um motivo de recusa, pergunte **o que o usuário faz a seguir**; se a resposta for a
+mesma de um motivo existente, é o mesmo motivo, e se não for, é variante nova.
 
 ## Voltar de versão quebra a configuração
 
@@ -331,9 +344,22 @@ O caso 3 é o que pegou o defeito. Nunca pule.
 Rodar em modo portátil (`ludusavi.portable` ao lado do executável) para não tocar na configuração
 real da máquina.
 
-## Antes de publicar release
+## Release só quando o usuário pedir
 
-1. `cargo test --lib` com os `--skip` de registro: 303 verdes.
+**Não gere release, tag nem build de release por iniciativa própria.** Terminar uma fatia, fechar
+um emulador ou deixar a suíte verde **não** autoriza publicar. A publicação acontece só quando o
+usuário pede com todas as letras ("gera a release", "manda pra produção", "quero testar aí").
+
+O motivo é o ciclo dele: ele acumula desenvolvimento e testa uma versão só. Release a cada fatia
+enche o repositório de versão que ninguém instalou e transforma cada commit num evento.
+
+O fluxo normal enquanto isso: commit no master com os testes verdes, entrada no `CHANGELOG.md` sob
+**`## SaveVault (não publicado)`**, e avisar o que ficou pronto. Quando o usuário pedir a release,
+essa seção ganha número e data.
+
+## Antes de publicar release (quando o usuário pedir)
+
+1. `cargo test --lib` com os `--skip` de registro, no baseline da seção 3.
 2. `cargo clippy --all-targets`: exit 0. Dois avisos são herdados (`src/scan.rs:2239` e
    `examples/api.rs:6`) e não são para consertar.
 3. Entrada no `CHANGELOG.md`, na seção do SaveVault no topo, escrita **para quem usa** e não para

@@ -208,10 +208,7 @@ não reaplicado do backup. Sem isso, restaurar noutra máquina recriaria a pasta
 de origem: correta na aparência, no disco, e **invisível para o jogo**. Com mais de um perfil na
 máquina de destino, a restauração **recusa** (`Unresolved::AreaAmbiguous`) em vez de escolher.
 
-Isto é a mesma doença registrada como limitação do Eden, e agora existe a cura. **Aplicar ao Eden
-é o próximo passo natural** e ainda não foi feito: lá o caminho é
-`nand/user/save/<índice>/<perfil>/<title id>`, e o índice e o perfil precisam ser distinguidos antes
-de trocar o perfil por `*`.
+Isto é a mesma doença registrada como limitação do Eden, e foi curada lá também: ver 5.9.
 
 Troféu é `Area::Trophies`, separada de propósito: é o que permite restaurar save sem troféu, ou o
 contrário. Era exatamente para isto que `Area` existia.
@@ -314,6 +311,33 @@ recusava a agir. O produto recusava o cenário que existe para resolver.
 Regra que ficou: **a assinatura aponta para a instalação (configuração, pastas de sistema do
 emulador), nunca para o dado do usuário.** Ao acrescentar um emulador, a pergunta é "o que continua
 aqui depois de o save sumir?".
+
+### 5.9 O perfil do Eden — CORRIGIDO em 2026-08-03
+
+Era a limitação séria registrada em 5.1b: o save voltava para a pasta do perfil da máquina de
+**origem**, que existe no disco e o jogo não enxerga.
+
+A cura é a do RPCS3, com uma diferença que importa. O PS3 fixa o perfil pela **posição**
+(`dev_hdd0/home/*/savedata`); no Eden isso seria uma aposta, porque o código do yuzu está
+indisponível e a profundidade nunca pôde ser confirmada, e o perfil foi casado pela **forma**:
+`AreaSpec.subdir` aceita o segmento `{profile}` (`emulator::PROFILE_SEGMENT`), que procura, em até
+três níveis, a pasta cujo nome tem 32 hexadecimais. Assim `nand/user/save/{profile}` continua
+valendo se um fork acrescentar um nível.
+
+**A decisão de desenho que não deve ser "simplificada": a resolução é assimétrica**
+(`ProfileFallback`). Sem perfil identificado, o **backup** varre a partir da pasta container, e a
+**restauração recusa**. Copiar demais é seguro; escrever no lugar errado não é. Uniformizar os dois
+lados parece limpeza e joga fora justamente a garantia.
+
+E o veredito de "sem perfil" ganhou variante própria (`Unresolved::ProfileMissing`). Antes caía em
+`EmulatorMissing`, que dizia "o Eden não foi encontrado, adicione a pasta de dados como raiz" — com
+o Eden ali, e a raiz já adicionada. A mensagem mandava o usuário fazer o que ele já tinha feito.
+Encontrado rodando o caso, não lendo código.
+
+Provado com `scripts/dev/make-fake-eden.ps1` (que agora aceita `-Profile` e `-Empty`, para simular
+outra máquina): backup dos dois jogos, restauração numa instalação com **outro** id de perfil
+reancorando os 4 arquivos sozinha, recusa com dois perfis, e recusa com nenhum, sempre com saída 1 e
+**nenhuma pasta fantasma**.
 
 ## 6. Pendências de verificação, herdadas
 

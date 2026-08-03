@@ -176,12 +176,19 @@ pub enum Unresolved {
     /// profile) that matches more than one folder, so which profile the save belongs to is
     /// unknown.
     AreaAmbiguous(emulator::App),
+    /// The emulator was found, but it has no user profile folder yet, and the save belongs inside
+    /// one. Distinct from [`Self::EmulatorMissing`] because the fix is different: nothing to
+    /// configure here, only the emulator itself can create the profile.
+    ProfileMissing(emulator::App),
 }
 
 impl Unresolved {
     pub fn app(&self) -> emulator::App {
         match self {
-            Self::EmulatorMissing(app) | Self::EmulatorAmbiguous(app) | Self::AreaAmbiguous(app) => *app,
+            Self::EmulatorMissing(app)
+            | Self::EmulatorAmbiguous(app)
+            | Self::AreaAmbiguous(app)
+            | Self::ProfileMissing(app) => *app,
         }
     }
 }
@@ -228,17 +235,19 @@ pub fn emulator_restore_target(
             });
         };
 
-        // The subdir can carry a variable segment: the PS3's user profile id, which the emulator
-        // generates and which differs from machine to machine. Resolving it HERE, on the machine
-        // being restored to, is what puts the save in the profile folder that this emulator
-        // actually uses. Reapplying the recorded profile id would recreate the source machine's
-        // profile folder: correct-looking on disk, and invisible to the game.
-        let current_area = if subdir.contains('*') {
+        // The subdir can carry a variable segment: the user profile id, which the emulator
+        // generates and which differs from machine to machine. The PS3 pins it by position
+        // (`dev_hdd0/home/*/savedata`) and the Switch by shape (`{profile}`), but the reason is
+        // the same. Resolving it HERE, on the machine being restored to, is what puts the save in
+        // the profile folder that this emulator actually uses. Reapplying the recorded profile id
+        // would recreate the source machine's profile folder: correct-looking on disk, and
+        // invisible to the game.
+        let current_area = if subdir.contains('*') || subdir.contains(emulator::PROFILE_SEGMENT) {
             let mut candidates = emulator::resolve_area_dirs(current_root, subdir);
             match candidates.len() {
                 1 => candidates.remove(0),
                 // No profile at all, or several: picking one would be guessing with save data.
-                0 => return EmulatorTarget::Unresolved(Unresolved::EmulatorMissing(app)),
+                0 => return EmulatorTarget::Unresolved(Unresolved::ProfileMissing(app)),
                 _ => return EmulatorTarget::Unresolved(Unresolved::AreaAmbiguous(app)),
             }
         } else {
@@ -411,6 +420,91 @@ mod tests {
 
         assert_eq!(
             EmulatorTarget::Unresolved(Unresolved::AreaAmbiguous(App::Rpcs3)),
+            target
+        );
+    }
+
+    /// Uma pasta de dados de Eden com os perfis pedidos, já criados.
+    fn eden_root_with(profiles: &[&str]) -> (tempfile::TempDir, StrictPath) {
+        let install = tempfile::tempdir().unwrap();
+        let root = StrictPath::from(install.path().to_path_buf());
+        for profile in profiles {
+            std::fs::create_dir_all(
+                root.joined(format!("nand/user/save/0000000000000000/{profile}"))
+                    .as_std_path_buf()
+                    .unwrap(),
+            )
+            .unwrap();
+        }
+        (install, root)
+    }
+
+    fn eden_save_semantics(recorded: &str) -> BackupSemantics {
+        BackupSemantics {
+            directories: btree_map! {
+                recorded.to_string(): DirectorySemantics {
+                    kind: SemanticDirKind::Emulator { app: App::Eden, area: Area::Saves },
+                },
+            },
+        }
+    }
+
+    /// O caso do Switch, que é o do PS3 com o perfil noutra profundidade e casado por forma. Era
+    /// a limitação registrada do Eden: o save voltava para a pasta do perfil da máquina de
+    /// ORIGEM, que existe no disco e o jogo não enxerga.
+    #[test]
+    fn re_anchors_a_switch_save_onto_this_machines_profile() {
+        let (_guard, root) = eden_root_with(&["FFFFFFFF0000000000000000FFFFFFFF"]);
+
+        let recorded = "D:/Eden/nand/user/save/0000000000000000/ABCDEF0123456789ABCDEF0123456789";
+        let target = emulator_restore_target(
+            &StrictPath::new(format!("{recorded}/0100000000010000/progress.dat")),
+            &eden_save_semantics(recorded),
+            &emulator::Roots::for_test(vec![(App::Eden, root.clone())]),
+        );
+
+        let EmulatorTarget::Redirected(path) = target else {
+            panic!("esperava redirecionamento, veio {target:?}");
+        };
+        assert!(path.equivalent(&root.joined(
+            "nand/user/save/0000000000000000/FFFFFFFF0000000000000000FFFFFFFF/0100000000010000/progress.dat"
+        )));
+    }
+
+    #[test]
+    fn refuses_a_switch_save_when_the_machine_has_two_profiles() {
+        let (_guard, root) = eden_root_with(&[
+            "AAAAAAAA0000000000000000AAAAAAAA",
+            "BBBBBBBB0000000000000000BBBBBBBB",
+        ]);
+
+        let recorded = "D:/Eden/nand/user/save/0000000000000000/ABCDEF0123456789ABCDEF0123456789";
+        let target = emulator_restore_target(
+            &StrictPath::new(format!("{recorded}/0100000000010000/progress.dat")),
+            &eden_save_semantics(recorded),
+            &emulator::Roots::for_test(vec![(App::Eden, root)]),
+        );
+
+        assert_eq!(EmulatorTarget::Unresolved(Unresolved::AreaAmbiguous(App::Eden)), target);
+    }
+
+    /// Sem perfil nenhum na máquina de destino, a restauração RECUSA em vez de despejar o save
+    /// acima do perfil. É o lado assimétrico de `ProfileFallback`: o backup varre demais de
+    /// propósito, a escrita não.
+    #[test]
+    fn refuses_a_switch_save_when_the_machine_has_no_profile() {
+        let (_guard, root) = eden_root_with(&[]);
+        std::fs::create_dir_all(root.joined("nand/user/save").as_std_path_buf().unwrap()).unwrap();
+
+        let recorded = "D:/Eden/nand/user/save/0000000000000000/ABCDEF0123456789ABCDEF0123456789";
+        let target = emulator_restore_target(
+            &StrictPath::new(format!("{recorded}/0100000000010000/progress.dat")),
+            &eden_save_semantics(recorded),
+            &emulator::Roots::for_test(vec![(App::Eden, root)]),
+        );
+
+        assert_eq!(
+            EmulatorTarget::Unresolved(Unresolved::ProfileMissing(App::Eden)),
             target
         );
     }

@@ -355,7 +355,10 @@ const EDEN: Profile = Profile {
     },
     areas: &[AreaSpec {
         area: Area::Saves,
-        subdir: "nand/user/save",
+        // O perfil é resolvido na máquina de DESTINO, e não reaplicado do backup. Sem isso o save
+        // ia parar numa pasta de perfil que o Eden de lá não usa: correto no disco, invisível
+        // para o jogo. Ver `PROFILE_SEGMENT` para o porquê da forma em vez da posição.
+        subdir: "nand/user/save/{profile}",
         // O conteúdo do save do Switch é opaco e sem extensão fixa: quem identifica é a pasta.
         extensions: &[],
         identity: Identity::TitleIdFolder,
@@ -620,7 +623,7 @@ pub fn discover_saves(app: App, data_root: &StrictPath) -> Vec<DiscoveredSave> {
     let mut found = vec![];
 
     for spec in app.profile().areas {
-        for area_root in resolve_area_dirs(data_root, spec.subdir) {
+        for area_root in resolve_area_dirs_with(data_root, spec.subdir, ProfileFallback::Container) {
             found.extend(discover_in_area(app, spec, &area_root));
         }
     }
@@ -628,38 +631,99 @@ pub fn discover_saves(app: App, data_root: &StrictPath) -> Vec<DiscoveredSave> {
     found
 }
 
+/// O segmento que casa a pasta de perfil de usuário **pela forma**, em qualquer profundidade.
+///
+/// Existe para a linhagem do yuzu, onde o caminho é `nand/user/save/<índice>/<perfil>/<título>` e
+/// o código-fonte está indisponível (repositório derrubado por DMCA), então a profundidade exata
+/// não pôde ser confirmada na fonte e cada fork é livre para acrescentar um nível. Fixar a
+/// posição com dois `*` seria uma aposta; casar por forma sobrevive à aposta errada.
+pub const PROFILE_SEGMENT: &str = "{profile}";
+
+/// Até onde descer procurando a pasta de perfil. Três níveis cobrem com folga o índice do espaço
+/// de save mais um nível extra de um fork; sem teto, isto varreria a NAND emulada inteira.
+const PROFILE_MAX_DEPTH: usize = 3;
+
+/// O nome é um identificador de perfil de usuário do Switch: 32 dígitos hexadecimais.
+fn is_profile_id(name: &str) -> bool {
+    name.len() == 32 && name.chars().all(|c| c.is_ascii_hexdigit())
+}
+
+/// O que fazer quando [`PROFILE_SEGMENT`] não encontra pasta de perfil nenhuma.
+///
+/// A escolha é deliberadamente **assimétrica**, e é a regra da casa aplicada aos dois sentidos:
+/// no backup, copiar demais é seguro, então vale varrer o que houver acima do perfil; na
+/// restauração, escrever no lugar errado não é seguro, então sem perfil identificado ela recusa.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ProfileFallback {
+    /// Sem perfil, usa a pasta onde o perfil seria procurado. Para varrer.
+    Container,
+    /// Sem perfil, não devolve nada. Para escrever.
+    None,
+}
+
 /// Expande o subdir de uma área nas pastas concretas desta máquina.
 ///
-/// Sem `*`, é uma pasta só. Com `*`, é uma por diretório daquele nível, e pode ser nenhuma: o
-/// usuário que nunca criou um perfil no emulador não tem essa pasta.
+/// Sem curinga, é uma pasta só. Com `*`, é uma por diretório daquele nível. Com
+/// [`PROFILE_SEGMENT`], é uma por pasta de perfil encontrada por forma abaixo daqui. Nos dois
+/// casos pode ser nenhuma: o usuário que nunca criou um perfil no emulador não tem essa pasta.
 pub fn resolve_area_dirs(data_root: &StrictPath, subdir: &str) -> Vec<StrictPath> {
+    resolve_area_dirs_with(data_root, subdir, ProfileFallback::None)
+}
+
+pub fn resolve_area_dirs_with(data_root: &StrictPath, subdir: &str, fallback: ProfileFallback) -> Vec<StrictPath> {
     let mut current = vec![data_root.clone()];
 
     for segment in subdir.split('/').filter(|x| !x.is_empty()) {
         let mut next = vec![];
 
         for path in current {
-            if segment != "*" {
-                next.push(path.joined(segment));
-                continue;
+            match segment {
+                "*" => next.extend(child_dirs(&path)),
+                PROFILE_SEGMENT => {
+                    let before = next.len();
+                    collect_profile_dirs(&path, PROFILE_MAX_DEPTH, &mut next);
+                    if next.len() == before && fallback == ProfileFallback::Container {
+                        next.push(path);
+                    }
+                }
+                _ => next.push(path.joined(segment)),
             }
-
-            let Ok(entries) = path.read_dir() else { continue };
-            let mut children: Vec<StrictPath> = entries
-                .flatten()
-                .filter(|entry| entry.file_type().is_ok_and(|kind| kind.is_dir()))
-                .map(|entry| StrictPath::from(entry.path()))
-                .collect();
-            // Determinismo: a ordem de listagem do sistema de arquivos não é garantida.
-            children.sort_by_key(|child| child.render());
-            next.extend(children);
         }
 
+        // Determinismo: a ordem de listagem do sistema de arquivos não é garantida.
+        next.sort_by_key(|path| path.render());
         current = next;
     }
 
     current.retain(|path| path.is_dir());
     current
+}
+
+fn child_dirs(path: &StrictPath) -> Vec<StrictPath> {
+    let Ok(entries) = path.read_dir() else { return vec![] };
+    entries
+        .flatten()
+        .filter(|entry| entry.file_type().is_ok_and(|kind| kind.is_dir()))
+        .map(|entry| StrictPath::from(entry.path()))
+        .collect()
+}
+
+/// Junta as pastas de perfil abaixo de `path`, sem passar de `depth` níveis.
+///
+/// Uma pasta de perfil encerra a descida: o que está dentro dela é save de jogo, e continuar
+/// desceria pela árvore de saves toda.
+fn collect_profile_dirs(path: &StrictPath, depth: usize, found: &mut Vec<StrictPath>) {
+    if depth == 0 {
+        return;
+    }
+
+    for child in child_dirs(path) {
+        if child.leaf().is_some_and(|name| is_profile_id(&name)) {
+            found.push(child);
+        } else {
+            collect_profile_dirs(&child, depth - 1, found);
+        }
+    }
 }
 
 fn discover_in_area(app: App, spec: &AreaSpec, area_root: &StrictPath) -> Vec<DiscoveredSave> {
@@ -1451,9 +1515,49 @@ mod tests {
         for save in &found {
             assert_eq!(Area::Saves, save.area);
             assert_eq!(GameId::Media("0100000000010000".to_string()), save.game);
-            assert_eq!(install.root.joined("nand/user/save"), save.area_root);
+            // A âncora é a pasta do PERFIL, e não `nand/user/save`: é o perfil que muda de
+            // máquina para máquina, então é ele que a restauração precisa poder trocar.
+            assert!(save.area_root.equivalent(
+                &install
+                    .root
+                    .joined("nand/user/save/0000000000000000/ABCDEF0123456789ABCDEF0123456789")
+            ));
         }
         assert_eq!("Eden 0100000000010000", found[0].game.game_key(App::Eden));
+    }
+
+    /// Sem pasta de perfil, o backup ainda varre: perder save por causa de um caminho que não
+    /// bate com o esperado é pior do que copiar demais. A restauração é que recusa, e isso está
+    /// travado em [`crate::scan::semantic`].
+    #[test]
+    fn backs_up_a_switch_save_even_when_there_is_no_profile_folder() {
+        let install = eden_install().file("nand/user/save/0000000000000000/0100000000010000/a.dat", b"save");
+
+        let found = discover_saves(App::Eden, &install.root);
+
+        assert_eq!(1, found.len());
+        assert_eq!(GameId::Media("0100000000010000".to_string()), found[0].game);
+        assert_eq!(install.root.joined("nand/user/save"), found[0].area_root);
+    }
+
+    /// O perfil é achado pela FORMA (32 hexadecimais), em qualquer profundidade, e não pela
+    /// posição. O código do yuzu está indisponível, então fixar a posição seria uma aposta, e um
+    /// fork é livre para acrescentar um nível.
+    #[test]
+    fn finds_the_profile_folder_at_any_depth() {
+        let install = eden_install().file(
+            "nand/user/save/0000000000000000/extra/ABCDEF0123456789ABCDEF0123456789/0100000000010000/a.dat",
+            b"save",
+        );
+
+        let found = discover_saves(App::Eden, &install.root);
+
+        assert_eq!(1, found.len());
+        assert!(found[0].area_root.equivalent(
+            &install
+                .root
+                .joined("nand/user/save/0000000000000000/extra/ABCDEF0123456789ABCDEF0123456789")
+        ));
     }
 
     /// A pasta do jogo é casada por FORMA, então um nível a mais ou a menos no caminho (perfil de

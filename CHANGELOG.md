@@ -3,6 +3,16 @@
 SaveVault is a fork of [Ludusavi](https://github.com/mtkennerly/ludusavi) by Michael Kennerly.
 Everything under "Inherited from Ludusavi" is the upstream history, with its own version numbers.
 
+## SaveVault (não publicado)
+
+* Fixed:
+  * **Restoring a Switch save now finds your profile on this machine.** Eden gives each user
+    profile an id of its own, and that id is different on every machine. Until now the save went
+    back into the profile folder of the machine it came from: it looked right on disk, and the
+    game could not see it. SaveVault now puts the save in the profile this machine actually uses.
+    If there is more than one profile here, or none yet, it stops and tells you what to do instead
+    of guessing.
+
 ## SaveVault v0.4.0 (2026-08-03)
 
 * Added:

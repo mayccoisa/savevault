@@ -66,6 +66,12 @@ fn unresolved_message(reason: semantic::Unresolved) -> String {
             "{app} has more than one user profile on this system, so it is not clear which one \
              this save belongs to. Open {app}, keep only the profile you use, and restore again."
         ),
+        // The emulator IS here; saying it was not found would send the user to add a root that is
+        // already added. What is missing is the profile, and only the emulator can create it.
+        semantic::Unresolved::ProfileMissing(_) => format!(
+            "{app} is installed here, but it has no user profile yet, and the save belongs inside \
+             one. Open {app}, create or log in to your user profile, and restore again."
+        ),
     }
 }
 
