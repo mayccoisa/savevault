@@ -141,6 +141,35 @@ Provado com `scripts/dev/make-fake-pcsx2.ps1` nos três casos obrigatórios: pas
 movida (reancorou os 5 arquivos sem redirect) e emulador ausente (recusou, saída 1, nenhuma pasta
 fantasma). Suíte em **270 verdes**.
 
+### 5.1b Eden (Switch) — FEITO em 2026-08-03
+
+Pedido do Maycon para vir logo depois do PS2. É o primeiro emulador em que **a pasta identifica o
+jogo**, e não o arquivo, então foi ele que estendeu o motor de verdade.
+
+O que entrou: `Identity::TitleIdFolder`, com descida recursiva sob a área. A pasta do título é
+procurada **por forma** (16 dígitos hexadecimais) e em **qualquer profundidade**, nunca por posição
+fixa. Isso foi decisão forçada pela evidência: o código do yuzu, de onde o Eden deriva, está
+indisponível (repositório derrubado por DMCA), então a profundidade exata do caminho não pôde ser
+confirmada na fonte. Casar por forma faz o perfil continuar valendo se um fork acrescentar um nível.
+
+**O achado da fatia, que o teste pegou e a leitura de código não pegaria:** o primeiro nível abaixo
+de `nand/user/save` é o índice do espaço de save, `0000000000000000`, que tem a **mesma forma** do
+Title ID. Casar o mais raso jogava os saves de todos os jogos num "jogo" só. A regra é: **o
+casamento mais profundo vence**, travada por teste.
+
+Provado com `scripts/dev/make-fake-eden.ps1` nos três casos, com dois jogos e subpasta dentro do
+save. Suíte em **276 verdes**.
+
+**Limitação conhecida, e ela é séria:** o caminho do save tem um nível de **perfil de usuário**
+(32 hexadecimais) que é gerado pelo emulador e **muda de máquina para máquina**. A restauração
+reancora a pasta de dados corretamente, mas preserva o id de perfil do backup, então numa máquina
+nova o save cai numa pasta de perfil que o Eden dessa máquina não usa, e o jogo não enxerga o
+progresso. Isto é exatamente o problema que o produto promete resolver, um nível abaixo do que a
+V1 resolve hoje: não basta reancorar a pasta de dados, é preciso reancorar o **perfil** também.
+É o mesmo problema que o RPCS3 vai trazer (`home/<perfil>`), e a solução deve servir aos dois.
+Não foi inventada uma agora de propósito: exige decidir o que fazer quando a máquina de destino
+tem zero perfis, um perfil, ou vários, e isso é decisão de produto.
+
 ### 5.2 shadPS4 (PS4) — prova a variante portátil
 
 - Fato já pesquisado: `user/savedata/<perfil>/<CUSA>/<pasta do jogo>`, e a escolha entre AppData e
@@ -209,6 +238,19 @@ Do **PCSX2**, tirado do código-fonte do emulador e ainda não confirmado contra
    lacuna conhecida do perfil, e resolver exige área com descida recursiva.
 8. Se o `.ps2` de cartão tem alguma âncora estável de serial legível sem montar o sistema de
    arquivos do PS2. Se tiver, a identidade deixa de ser opaca no caso padrão.
+
+Do **Eden**, com a agravante de que o código-fonte da linhagem está indisponível:
+
+9. A profundidade exata de `nand/user/save/<índice>/<perfil>/<title id>`. Mitigado pelo desenho: a
+   pasta do título é casada por forma, em qualquer profundidade.
+10. Se o Eden aceita a pasta `user` ao lado do executável como instalação portátil, como a
+    linhagem do yuzu aceita. O rastreador do projeto sugere que a pasta de dados é sempre
+    `%APPDATA%\eden`, então o perfil **não** promete portátil.
+11. A assinatura é `nand/` mais `config/`, que o **Sudachi** também terá, por ser fork da mesma
+    linhagem. Quando ele entrar, os dois vão casar com a mesma pasta e `App::detect` vai devolver
+    `None`. A distinção terá que vir do **nome da própria pasta de dados** (`eden` × `sudachi`),
+    que hoje não é um marcador possível: `Marker` só olha para dentro. É o caso previsto na
+    seção 5.3.
 
 **O Maycon vai testar no outro PC dele**, que tem DuckStation real. O caminho é:
 

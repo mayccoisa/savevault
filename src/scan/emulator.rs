@@ -31,6 +31,7 @@ pub mod psx_card;
 pub enum App {
     DuckStation,
     Pcsx2,
+    Eden,
 }
 
 /// Uma área declarada de dado de usuário dentro da pasta de dados do emulador.
@@ -57,6 +58,9 @@ pub enum Area {
     Memcards,
     /// Estados salvos, que são grandes e atados à build do emulador.
     Savestates,
+    /// Save do jogo, quando o emulador não separa cartão de estado. É o caso do Switch, onde o
+    /// save é uma pasta por título dentro da NAND emulada.
+    Saves,
 }
 
 /// Um lugar padrão onde procurar a pasta de dados.
@@ -131,6 +135,14 @@ pub enum Identity {
     PsxCard,
     /// Do código de mídia presente no nome do arquivo.
     FilenameMediaCode,
+    /// Do nome de uma **pasta** que é o Title ID do console (16 dígitos hexadecimais), com todos
+    /// os arquivos abaixo dela pertencendo àquele jogo.
+    ///
+    /// A pasta é procurada por **forma**, em qualquer profundidade abaixo da área, e não por
+    /// posição fixa. É de propósito: no Switch o caminho tem um nível de perfil de usuário no
+    /// meio, cujo identificador muda de máquina para máquina, e cada fork do emulador é livre
+    /// para acrescentar um nível. Casar por forma sobrevive aos dois.
+    TitleIdFolder,
 }
 
 /// Uma área da pasta de dados.
@@ -139,7 +151,8 @@ pub struct AreaSpec {
     pub area: Area,
     /// Subpasta relativa à pasta de dados.
     pub subdir: &'static str,
-    /// Extensões dos arquivos que interessam, sem o ponto.
+    /// Extensões dos arquivos que interessam, sem o ponto. Vazio significa "qualquer arquivo",
+    /// que é o caso quando é a pasta que identifica o jogo e o conteúdo dela é opaco.
     pub extensions: &'static [&'static str],
     pub identity: Identity,
 }
@@ -230,13 +243,51 @@ const PCSX2: Profile = Profile {
     ],
 };
 
+/// O Eden é um fork da linhagem do yuzu, e herda dela a pasta de dados.
+///
+/// Fatos usados aqui:
+///
+/// - Pasta de dados no Windows: `%APPDATA%\eden`, ou seja, o `Roaming`. Confirmado no rastreador
+///   do próprio projeto (`eden-emulator/Issue-Reports` nº 252, que pede justamente poder mudar
+///   isso: "the emulator data is always stored in %appdata%\eden on windows").
+/// - Dentro dela, a NAND emulada em `nand/`, e o save do usuário sob `nand/user/save/`, agrupado
+///   numa pasta por **Title ID** (16 dígitos hexadecimais), depois de um nível de perfil de
+///   usuário cujo identificador muda de máquina para máquina.
+///
+/// Por isso a identidade é [`Identity::TitleIdFolder`], que procura a pasta do jogo **por forma
+/// e em qualquer profundidade**. O código do emulador está indisponível (o repositório do yuzu
+/// foi derrubado por DMCA), então a profundidade exata é o que **não** está confirmado contra
+/// instalação real: ver a pendência do Eden no HANDOFF.md. Casar por forma é o que faz o perfil
+/// continuar valendo se a profundidade for outra.
+const EDEN: Profile = Profile {
+    name: "Eden",
+    data_roots: &[Anchor::Common(CommonPath::Data, "eden")],
+    // A linhagem do yuzu aceita uma PASTA `user` ao lado do executável, e não um arquivo
+    // marcador. Como isso não está confirmado para o Eden, aqui não se promete portátil: o
+    // usuário aponta a pasta como raiz e a assinatura decide.
+    portable_markers: &[],
+    signature: Signature {
+        all_of: &[Marker::Dir("nand"), Marker::Dir("config")],
+        any_of: &[],
+        none_of: &[],
+    },
+    areas: &[AreaSpec {
+        area: Area::Saves,
+        subdir: "nand/user/save",
+        // O conteúdo do save do Switch é opaco e sem extensão fixa: quem identifica é a pasta.
+        extensions: &[],
+        identity: Identity::TitleIdFolder,
+    }],
+};
+
 impl App {
-    pub const ALL: &'static [Self] = &[Self::DuckStation, Self::Pcsx2];
+    pub const ALL: &'static [Self] = &[Self::DuckStation, Self::Pcsx2, Self::Eden];
 
     pub fn profile(&self) -> &'static Profile {
         match self {
             Self::DuckStation => &DUCKSTATION,
             Self::Pcsx2 => &PCSX2,
+            Self::Eden => &EDEN,
         }
     }
 
@@ -331,6 +382,11 @@ pub fn discover_saves(app: App, data_root: &StrictPath) -> Vec<DiscoveredSave> {
             continue;
         }
 
+        if let Identity::TitleIdFolder = spec.identity {
+            found.extend(discover_in_game_folders(app, spec, &area_root, &area_root, None));
+            continue;
+        }
+
         let Ok(entries) = area_root.read_dir() else {
             continue;
         };
@@ -353,10 +409,86 @@ pub fn discover_saves(app: App, data_root: &StrictPath) -> Vec<DiscoveredSave> {
 }
 
 fn has_extension(file: &StrictPath, extensions: &[&str]) -> bool {
+    // Lista vazia significa "qualquer arquivo": é o caso da área em que quem identifica o jogo é
+    // a pasta, e o conteúdo dela é opaco.
+    if extensions.is_empty() {
+        return true;
+    }
+
     let rendered = file.render().to_lowercase();
     extensions
         .iter()
         .any(|extension| rendered.ends_with(&format!(".{}", extension.to_lowercase())))
+}
+
+/// Um Title ID do Switch: 16 dígitos hexadecimais.
+///
+/// Casado por forma, e não por posição, para o perfil não depender da profundidade exata do
+/// caminho, que varia com o perfil de usuário e entre forks do emulador.
+fn title_id_in(name: &str) -> Option<String> {
+    (name.len() == 16 && name.chars().all(|c| c.is_ascii_hexdigit())).then(|| name.to_ascii_uppercase())
+}
+
+/// Desce a área procurando a pasta que identifica o jogo.
+///
+/// `game` carrega o jogo já reconhecido acima na árvore: uma vez dentro da pasta do título, tudo
+/// abaixo é daquele jogo, em qualquer profundidade, porque o formato interno do save é do console
+/// e não cabe a este programa interpretar.
+fn discover_in_game_folders(
+    app: App,
+    spec: &AreaSpec,
+    area_root: &StrictPath,
+    current: &StrictPath,
+    game: Option<&GameId>,
+) -> Vec<DiscoveredSave> {
+    let mut found = vec![];
+
+    let Ok(entries) = current.read_dir() else {
+        return found;
+    };
+
+    let mut children: Vec<(bool, String, StrictPath)> = entries
+        .flatten()
+        .filter_map(|entry| {
+            let kind = entry.file_type().ok()?;
+            let name = entry.file_name().to_string_lossy().to_string();
+            Some((kind.is_dir(), name, StrictPath::from(entry.path())))
+        })
+        .collect();
+    // Determinismo: a ordem de listagem do sistema de arquivos não é garantida.
+    children.sort_by(|a, b| a.2.render().cmp(&b.2.render()));
+
+    for (is_dir, name, path) in children {
+        if is_dir {
+            // O casamento MAIS PROFUNDO vence. Não é detalhe: no Switch o primeiro nível abaixo
+            // da área é o índice do espaço de save, que também tem 16 hexadecimais
+            // (`0000000000000000`) e portanto também casa a forma. Sem esta regra, todo jogo do
+            // usuário seria atribuído a um "jogo" só, o índice. Foi assim que o teste pegou.
+            let deeper = title_id_in(&name)
+                .map(GameId::Media)
+                .or_else(|| game.cloned());
+            found.extend(discover_in_game_folders(app, spec, area_root, &path, deeper.as_ref()));
+            continue;
+        }
+
+        if !has_extension(&path, spec.extensions) {
+            continue;
+        }
+
+        // Arquivo fora de qualquer pasta de título não some: ele pode ser progresso, e sumir em
+        // silêncio é pior que um nome feio.
+        let game = game.cloned().unwrap_or_else(|| GameId::Unidentified(file_stem(&path)));
+        found.push(DiscoveredSave {
+            app,
+            area: spec.area,
+            area_root: area_root.clone(),
+            game,
+            title: None,
+            file: path,
+        });
+    }
+
+    found
 }
 
 /// Atribui um arquivo a um ou mais jogos, conforme a regra de identidade da área.
@@ -403,6 +535,9 @@ fn attribute(app: App, spec: &AreaSpec, area_root: &StrictPath, file: &StrictPat
                 }
             }
         }
+        // Tratada antes de chegar aqui, em `discover_saves`, porque a unidade não é o arquivo:
+        // é a pasta, e ela precisa de descida recursiva.
+        Identity::TitleIdFolder => vec![],
         Identity::FilenameMediaCode => {
             let stem = file_stem(file);
             let game = match psx_card::media_code_in(&stem) {
@@ -964,6 +1099,104 @@ mod tests {
 
         assert_eq!(1, found.len());
         assert_eq!(GameId::Media("SLUS-20062".to_string()), found[0].game);
+    }
+
+    /// Uma pasta de dados de Eden, com o save do Switch na profundidade documentada:
+    /// `nand/user/save/<índice>/<perfil de usuário>/<title id>`.
+    fn eden_install() -> FakeInstall {
+        FakeInstall::new().dir("nand").dir("config")
+    }
+
+    #[test]
+    fn recognizes_an_eden_data_root() {
+        let install = eden_install();
+        assert!(App::Eden.matches_data_root(&install.root));
+        assert_eq!(Some(App::Eden), App::detect(&install.root));
+    }
+
+    #[test]
+    fn discovers_a_switch_save_by_the_title_id_folder() {
+        let install = eden_install()
+            .file(
+                "nand/user/save/0000000000000000/ABCDEF0123456789ABCDEF0123456789/0100000000010000/progress.dat",
+                b"save",
+            )
+            .file(
+                "nand/user/save/0000000000000000/ABCDEF0123456789ABCDEF0123456789/0100000000010000/meta/header.bin",
+                b"save",
+            );
+
+        let found = discover_saves(App::Eden, &install.root);
+
+        assert_eq!(2, found.len());
+        for save in &found {
+            assert_eq!(Area::Saves, save.area);
+            assert_eq!(GameId::Media("0100000000010000".to_string()), save.game);
+            assert_eq!(install.root.joined("nand/user/save"), save.area_root);
+        }
+        assert_eq!("Eden 0100000000010000", found[0].game.game_key(App::Eden));
+    }
+
+    /// A pasta do jogo é casada por FORMA, então um nível a mais ou a menos no caminho (perfil de
+    /// usuário, índice de espaço de save, ou o que um fork resolva acrescentar) não quebra o
+    /// perfil. É o que substitui a profundidade fixa, que não pôde ser confirmada no código.
+    #[test]
+    fn finds_the_title_id_folder_at_any_depth() {
+        let shallow = eden_install().file("nand/user/save/0100000000010000/progress.dat", b"save");
+        let deep = eden_install().file(
+            "nand/user/save/0000000000000000/perfil/mais/um/nivel/0100000000010000/progress.dat",
+            b"save",
+        );
+
+        for install in [shallow, deep] {
+            let found = discover_saves(App::Eden, &install.root);
+            assert_eq!(1, found.len());
+            assert_eq!(GameId::Media("0100000000010000".to_string()), found[0].game);
+        }
+    }
+
+    /// Uma pasta cujo nome não é Title ID não vira jogo, mas o arquivo dentro dela também não
+    /// desaparece: ele pode ser progresso.
+    #[test]
+    fn a_switch_file_outside_a_title_folder_is_kept_as_unidentified() {
+        let install = eden_install().file("nand/user/save/avulso.bin", b"save");
+
+        let found = discover_saves(App::Eden, &install.root);
+
+        assert_eq!(1, found.len());
+        assert_eq!(GameId::Unidentified("avulso".to_string()), found[0].game);
+    }
+
+    /// O índice do espaço de save (`0000000000000000`) tem a mesma forma do Title ID, e vem
+    /// ANTES dele no caminho. Se o casamento mais raso vencesse, os saves de todos os jogos
+    /// cairiam num "jogo" só.
+    #[test]
+    fn the_save_space_index_does_not_steal_the_identity_of_the_game() {
+        let install = eden_install()
+            .file(
+                "nand/user/save/0000000000000000/ABCDEF0123456789ABCDEF0123456789/0100000000010000/a.dat",
+                b"save",
+            )
+            .file(
+                "nand/user/save/0000000000000000/ABCDEF0123456789ABCDEF0123456789/0100000000020000/b.dat",
+                b"save",
+            );
+
+        let found = discover_saves(App::Eden, &install.root);
+
+        assert_eq!(2, found.len());
+        assert_eq!(GameId::Media("0100000000010000".to_string()), found[0].game);
+        assert_eq!(GameId::Media("0100000000020000".to_string()), found[1].game);
+    }
+
+    /// Dezesseis hexadecimais é a forma; qualquer outra coisa não é Title ID.
+    #[test]
+    fn only_sixteen_hex_digits_count_as_a_title_id() {
+        assert_eq!(Some("0100000000010000".to_string()), title_id_in("0100000000010000"));
+        assert_eq!(Some("ABCDEF0123456789".to_string()), title_id_in("abcdef0123456789"));
+        assert_eq!(None, title_id_in("010000000001000"));
+        assert_eq!(None, title_id_in("01000000000100000"));
+        assert_eq!(None, title_id_in("0100000000g10000"));
     }
 
     #[test]
