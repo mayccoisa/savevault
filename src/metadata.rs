@@ -7,7 +7,9 @@ pub struct Release {
 }
 
 impl Release {
-    const URL: &'static str = "https://api.github.com/repos/mtkennerly/ludusavi/releases/latest";
+    /// SaveVault's own releases, not the upstream project's. Pointing this at Ludusavi would make
+    /// the app report an update whose version numbers belong to a different release line.
+    const URL: &'static str = "https://api.github.com/repos/mayccoisa/savevault/releases/latest";
 
     pub async fn fetch(security: Security) -> Result<Self, crate::prelude::AnyError> {
         #[derive(Debug, Clone, PartialEq, Eq, serde::Deserialize)]

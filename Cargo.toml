@@ -1,10 +1,13 @@
 [package]
+# The crate and binary keep the upstream name for now: renaming them would move the config and
+# backup folders that users already have, which is a migration, not a rename.
 name = "ludusavi"
-version = "0.31.0"
-authors = ["mtkennerly <mtkennerly@gmail.com>"]
+# SaveVault's own release line. Built on Ludusavi v0.31.0, see CHANGELOG.md.
+version = "0.1.0"
+authors = ["mtkennerly <mtkennerly@gmail.com>", "Maycon Rocha"]
 edition = "2024"
-description = "Game save backup tool"
-repository = "https://github.com/mtkennerly/ludusavi"
+description = "Backup and smart restoration of game saves, for PC games and emulators"
+repository = "https://github.com/mayccoisa/savevault"
 readme = "README.md"
 license = "MIT"
 

@@ -1,3 +1,43 @@
+# SaveVault
+
+SaveVault is a fork of [Ludusavi](https://github.com/mtkennerly/ludusavi) by Michael Kennerly.
+Everything under "Inherited from Ludusavi" is the upstream history, with its own version numbers.
+
+## SaveVault v0.1.0 (2026-08-03)
+
+First slice: DuckStation (PS1), end to end. Built on Ludusavi v0.31.0.
+
+* Added:
+  * **Emulators are now a kind of root.** Point SaveVault at an emulator's data folder and its
+    saves are backed up like any other game. The folder is recognised by its own structure, so an
+    installed copy and a portable one both work. DuckStation only, for now.
+  * **Restoring works out where each save belongs.** A backup records which emulator folder and
+    which area (memory cards, save states) a file came from, so restoring re-anchors it onto
+    wherever the emulator lives on the machine being restored to. Moving the emulator, switching
+    to a portable copy, or reinstalling Windows no longer needs a hand-written redirect. A
+    redirect you configured yourself still takes precedence.
+  * **Games show their real name.** The title is read out of the memory card itself, which is
+    where the PlayStation stored it, so a game appears as `CASTLEVANIA SOTN` rather than
+    `SLUS-00067`. No external database and no internet needed, each game inside a shared memory
+    card is named separately, and the title travels into the backup, so a restore lists games by
+    name even on a machine where the emulator is not installed yet.
+  * **A game is identified by what is inside the save, not by the file name.** A memory card named
+    after the game's title instead of its serial is still identified correctly.
+  * **An undo point is taken before a restore overwrites anything.** It goes under `pre-restore/`
+    in the game's backup folder, and if it cannot be taken, the restore does not start. The two
+    most recent are kept.
+  * **A save whose destination cannot be worked out is not written.** If the emulator is missing
+    from this machine, or two installs make the destination ambiguous, the file is reported along
+    with what to do about it, instead of being written to the absolute path of the machine that
+    made the backup, which would look like success while the emulator reads nothing.
+  * **New `emulators` command.** Prints every candidate data folder, whether it was recognised,
+    which one will be used, and the games found with their serial and title. Use it to see what
+    SaveVault detects before trusting a backup or a restore.
+  * Emulator data folders are detected automatically and offered as roots, the same way game
+    stores already are.
+
+## Inherited from Ludusavi
+
 ## Unreleased
 
 * Added:
