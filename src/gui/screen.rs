@@ -238,6 +238,114 @@ impl Restore {
     }
 }
 
+/// A tela dos emuladores.
+///
+/// Guarda o diagnóstico em vez de recalculá-lo no `view`, porque ele lista pastas em disco.
+#[derive(Default)]
+pub struct Emulators {
+    pub diagnosis: Option<crate::scan::emulator::Diagnosis>,
+}
+
+impl Emulators {
+    pub fn refresh(&mut self, config: &Config) {
+        self.diagnosis = Some(crate::scan::emulator::diagnose(&config.roots));
+    }
+
+    pub fn view<'a>(
+        &'a self,
+        config: &'a Config,
+        histories: &'a TextHistories,
+        modifiers: &keyboard::Modifiers,
+    ) -> Element<'a> {
+        use crate::scan::emulator::App;
+
+        let mut content = Column::new()
+            .spacing(15)
+            .padding([0, 20])
+            .push(
+                Row::new()
+                    .spacing(20)
+                    .align_y(Alignment::Center)
+                    .push(text(TRANSLATOR.emulators_explanation()).width(Length::Fill))
+                    .push(button::refresh_emulators()),
+            );
+
+        for app in App::ALL {
+            let diagnosis = self
+                .diagnosis
+                .as_ref()
+                .and_then(|d| d.emulators.iter().find(|x| x.name == app.name()));
+
+            // O texto vem daqui, e não do `problem` do motor, porque aquele é mensagem de
+            // diagnóstico de linha de comando, escrita em inglês. Na interface o usuário lê no
+            // idioma dele.
+            let status = match diagnosis {
+                Some(found) => match &found.data_root {
+                    Some(root) => text(TRANSLATOR.emulator_using_folder(root, found.games.len())),
+                    None => {
+                        let matching = found.candidates.iter().filter(|x| x.matches_signature).count();
+                        if matching > 1 {
+                            text(TRANSLATOR.emulator_ambiguous(app.name(), matching))
+                        } else {
+                            text(TRANSLATOR.emulator_not_found(app.name()))
+                        }
+                    }
+                },
+                None => text(TRANSLATOR.emulator_not_checked_yet()),
+            };
+
+            // As raízes deste emulador especificamente. É isto que faz "todas as configurações
+            // ficarem dentro do emulador": o usuário não escolhe loja num menu solto.
+            let mut block = Column::new()
+                .spacing(10)
+                .padding(10)
+                .push(
+                    Row::new()
+                        .spacing(15)
+                        .align_y(Alignment::Center)
+                        .push(text(app.name()).size(20)),
+                )
+                .push(status);
+
+            for (index, _) in config.roots.iter().enumerate().filter(|(_, root)| {
+                matches!(root, crate::resource::config::Root::Emulator(emulator) if emulator.app == Some(*app))
+            }) {
+                block = block.push(
+                    Row::new()
+                        .spacing(20)
+                        .align_y(Alignment::Center)
+                        .push(histories.input(UndoSubject::RootPath(index)))
+                        .push(button::choose_folder(BrowseSubject::Root(index), modifiers))
+                        .push(button::remove(
+                            Message::config(crate::resource::config::Event::Root),
+                            index,
+                        )),
+                );
+            }
+
+            block = block.push(button::add_emulator_root(*app));
+
+            content = content.push(Container::new(block).class(style::Container::GameListEntry));
+        }
+
+        for planned in App::PLANNED {
+            content = content.push(
+                Container::new(
+                    Row::new()
+                        .spacing(15)
+                        .padding(10)
+                        .align_y(Alignment::Center)
+                        .push(text(*planned).size(20))
+                        .push(Badge::new(&TRANSLATOR.emulator_coming_soon()).view()),
+                )
+                .class(style::Container::GameListEntry),
+            );
+        }
+
+        template(Column::new().push(ScrollSubject::Emulators.into_widget(content)))
+    }
+}
+
 #[derive(Default)]
 pub struct CustomGames {
     pub filter: CustomGamesFilter,

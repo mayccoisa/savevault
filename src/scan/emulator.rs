@@ -295,6 +295,13 @@ impl App {
         self.profile().name
     }
 
+    /// Os emuladores que estão no escopo do produto mas ainda não têm perfil.
+    ///
+    /// Existe para a tela poder mostrá-los como "em breve" em vez de fingir que o escopo é só o
+    /// que já foi feito. É dado honesto: o usuário vê o que ainda não vai funcionar, e não
+    /// descobre isso apontando a pasta e não acontecendo nada.
+    pub const PLANNED: &'static [&'static str] = &["PPSSPP", "RPCS3", "shadPS4", "Sudachi", "Xenia"];
+
     /// Esta pasta é a pasta de dados deste emulador?
     pub fn matches_data_root(&self, data_root: &StrictPath) -> bool {
         self.profile().signature.matches(data_root)

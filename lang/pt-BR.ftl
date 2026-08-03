@@ -259,3 +259,17 @@ new-version-available = Uma atualização do aplicativo está disponível: { $ve
 custom-game-will-override = Esse jogo personalizado substitui uma entrada de manifesto
 custom-game-will-extend = Este jogo personalizado estende uma entrada de manifesto
 operation-will-only-include-listed-games = Isso processará apenas os jogos que estão listados no momento
+
+button-nav-emulators = EMULADORES
+button-add-emulator-folder = Adicionar pasta
+button-check-for-update = Verificar atualizacao
+emulators-explanation = Aponte a pasta de dados de cada emulador. O backup e a restauracao saem dali, mesmo que a pasta mude de lugar.
+emulator-coming-soon = Em breve
+emulator-not-checked-yet = Ainda nao verificado.
+emulator-not-found = { $name } nao foi encontrado neste computador.
+emulator-using-folder = Usando { $path } ({ $games } arquivo(s) de save).
+updating-app = Baixando a atualizacao...
+app-is-up-to-date = Voce ja esta na versao mais recente.
+app-updated = Atualizado para a versao { $version }. Feche e abra o programa de novo para usar.
+app-update-failed = A atualizacao nao deu certo: { $message }
+emulator-ambiguous = Foram encontradas { $folders } pastas de dados do { $name }, entao o destino fica indefinido. Mantenha so a que voce quer.

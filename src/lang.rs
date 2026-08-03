@@ -721,8 +721,72 @@ impl Translator {
         title_case(&self.nav_custom_games_button())
     }
 
+    pub fn nav_emulators_button(&self) -> String {
+        translate("button-nav-emulators")
+    }
+
     pub fn nav_other_button(&self) -> String {
         translate("button-nav-other")
+    }
+
+    pub fn add_emulator_folder_button(&self) -> String {
+        translate("button-add-emulator-folder")
+    }
+
+    pub fn emulators_explanation(&self) -> String {
+        translate("emulators-explanation")
+    }
+
+    pub fn emulator_coming_soon(&self) -> String {
+        translate("emulator-coming-soon")
+    }
+
+    pub fn emulator_not_checked_yet(&self) -> String {
+        translate("emulator-not-checked-yet")
+    }
+
+    pub fn emulator_not_found(&self, name: &str) -> String {
+        let mut args = FluentArgs::new();
+        args.set("name", name);
+        translate_args("emulator-not-found", &args)
+    }
+
+    pub fn emulator_ambiguous(&self, name: &str, folders: usize) -> String {
+        let mut args = FluentArgs::new();
+        args.set("name", name);
+        args.set("folders", folders.to_string());
+        translate_args("emulator-ambiguous", &args)
+    }
+
+    pub fn emulator_using_folder(&self, path: &str, games: usize) -> String {
+        let mut args = FluentArgs::new();
+        args.set("path", path);
+        args.set("games", games.to_string());
+        translate_args("emulator-using-folder", &args)
+    }
+
+    pub fn check_for_update_button(&self) -> String {
+        translate("button-check-for-update")
+    }
+
+    pub fn updating_app(&self) -> String {
+        translate("updating-app")
+    }
+
+    pub fn app_is_up_to_date(&self) -> String {
+        translate("app-is-up-to-date")
+    }
+
+    pub fn app_updated(&self, version: &str) -> String {
+        let mut args = FluentArgs::new();
+        args.set("version", version);
+        translate_args("app-updated", &args)
+    }
+
+    pub fn app_update_failed(&self, message: &str) -> String {
+        let mut args = FluentArgs::new();
+        args.set("message", message);
+        translate_args("app-update-failed", &args)
     }
 
     pub fn customize_button(&self) -> String {

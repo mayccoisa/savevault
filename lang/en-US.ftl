@@ -297,3 +297,17 @@ custom-game-will-override = This custom game overrides a manifest entry
 custom-game-will-extend = This custom game extends a manifest entry
 
 operation-will-only-include-listed-games = This will only process the games that are currently listed
+
+button-nav-emulators = EMULATORS
+button-add-emulator-folder = Add folder
+button-check-for-update = Check for update
+emulators-explanation = Point at each emulator's data folder. Saves are backed up and restored from there, even if the folder moves.
+emulator-coming-soon = Coming soon
+emulator-not-checked-yet = Not checked yet.
+emulator-not-found = { $name } was not found on this system.
+emulator-using-folder = Using { $path } ({ $games } save file(s)).
+updating-app = Downloading the update...
+app-is-up-to-date = You already have the latest version.
+app-updated = Updated to version { $version }. Close and reopen the program to use it.
+app-update-failed = The update did not work: { $message }
+emulator-ambiguous = { $folders } data folders were found for { $name }, so the destination is ambiguous. Keep only the one you want.

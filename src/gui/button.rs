@@ -311,6 +311,30 @@ pub fn add_game<'a>() -> Element<'a> {
     )
 }
 
+pub fn add_emulator_root<'a>(app: crate::scan::emulator::App) -> Element<'a> {
+    template(
+        text(TRANSLATOR.add_emulator_folder_button()).width(WIDTH),
+        Some(config::Event::AddEmulatorRoot(app).into()),
+        None,
+    )
+}
+
+/// Verifica e instala a atualização num clique.
+///
+/// Fica desabilitado enquanto a atualização corre, para o usuário não disparar dois downloads
+/// que iriam mexer no mesmo arquivo ao mesmo tempo.
+pub fn check_for_update<'a>(updating: &bool) -> Element<'a> {
+    template(
+        text(TRANSLATOR.check_for_update_button()).size(14),
+        (!*updating).then_some(Message::UpdateApp),
+        None,
+    )
+}
+
+pub fn refresh_emulators<'a>() -> Element<'a> {
+    template(Icon::Refresh.text(), Some(Message::RefreshEmulators), None)
+}
+
 pub fn open_url<'a>(label: String, url: String) -> Element<'a> {
     template(text(label).width(WIDTH), Some(Message::OpenUrl(url)), None)
 }
@@ -324,6 +348,7 @@ pub fn nav<'a>(screen: Screen, current_screen: Screen) -> Button<'a> {
         Screen::Backup => TRANSLATOR.nav_backup_button(),
         Screen::Restore => TRANSLATOR.nav_restore_button(),
         Screen::CustomGames => TRANSLATOR.nav_custom_games_button(),
+        Screen::Emulators => TRANSLATOR.nav_emulators_button(),
         Screen::Other => TRANSLATOR.nav_other_button(),
     };
 

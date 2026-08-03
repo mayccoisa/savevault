@@ -33,6 +33,12 @@ pub enum Event {
     BackupTarget(String),
     RestoreSource(String),
     Root(EditAction),
+    /// Acrescenta uma raiz já sabendo de qual emulador ela é.
+    ///
+    /// Existe para a tela de emuladores não depender de o usuário escolher a loja num menu: ali
+    /// o emulador é o contexto. Deixar `app` em branco faria a pasta ser reconhecida só pela
+    /// assinatura, que é justamente o que não funciona quando a pasta ainda está vazia.
+    AddEmulatorRoot(crate::scan::emulator::App),
     RootLutrisDatabase(usize, String),
     SecondaryManifest(EditAction),
     RootStore(usize, Store),

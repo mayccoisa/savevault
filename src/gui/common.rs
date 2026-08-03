@@ -126,7 +126,16 @@ pub enum Message {
     Restore(RestorePhase),
     ValidateBackups(ValidatePhase),
     CancelOperation,
+    /// Verifica se há versão nova e, havendo, baixa e instala.
+    UpdateApp,
+    /// O resultado da atualização: a versão instalada, ou `None` quando já estava atualizado.
+    AppUpdated(Result<Option<String>, String>),
     FindRoots,
+    /// Relê o estado dos emuladores desta máquina.
+    ///
+    /// É explícito, e não recalculado a cada quadro, porque o diagnóstico lista pastas em disco:
+    /// fazer isso no laço de desenho travaria a interface.
+    RefreshEmulators,
     ConfirmAddMissingRoots(Vec<Root>),
     SwitchScreen(Screen),
     ToggleGameListEntryExpanded {
@@ -671,6 +680,7 @@ pub enum Screen {
     Backup,
     Restore,
     CustomGames,
+    Emulators,
     Other,
 }
 
@@ -761,6 +771,7 @@ pub enum ScrollSubject {
     Backup,
     Restore,
     CustomGames,
+    Emulators,
     Other,
     Modal,
 }
@@ -778,6 +789,7 @@ impl ScrollSubject {
             Self::Backup => crate::gui::widget::id::backup_scroll(),
             Self::Restore => crate::gui::widget::id::restore_scroll(),
             Self::CustomGames => crate::gui::widget::id::custom_games_scroll(),
+            Self::Emulators => crate::gui::widget::id::emulators_scroll(),
             Self::Other => crate::gui::widget::id::other_scroll(),
             Self::Modal => crate::gui::widget::id::modal_scroll(),
         }
@@ -804,6 +816,7 @@ impl From<Screen> for ScrollSubject {
             Screen::Backup => Self::Backup,
             Screen::Restore => Self::Restore,
             Screen::CustomGames => Self::CustomGames,
+            Screen::Emulators => Self::Emulators,
             Screen::Other => Self::Other,
         }
     }

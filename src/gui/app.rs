@@ -99,12 +99,16 @@ pub struct App {
     backup_screen: screen::Backup,
     restore_screen: screen::Restore,
     custom_games_screen: screen::CustomGames,
+    emulators_screen: screen::Emulators,
     operation_should_cancel: std::sync::Arc<std::sync::atomic::AtomicBool>,
     operation_steps: Vec<OperationStep>,
     operation_steps_active: usize,
     progress: Progress,
     backups_to_restore: HashMap<String, BackupId>,
     updating_manifest: bool,
+    /// Trava o botão de atualizar enquanto o download corre, para dois cliques não mexerem no
+    /// mesmo arquivo ao mesmo tempo.
+    updating_app: bool,
     notify_on_single_game_scanned: Option<(String, Screen)>,
     manifest_notification: Option<Notification>,
     timed_notification: Option<Notification>,
@@ -1309,6 +1313,13 @@ impl App {
 
     fn switch_screen(&mut self, screen: Screen) -> Task<Message> {
         self.screen = screen;
+
+        // Relido ao entrar, e não a cada quadro: o diagnóstico lista pastas em disco. Sem isto a
+        // tela abriria dizendo "ainda não verificado", que é informação inútil.
+        if screen == Screen::Emulators {
+            self.emulators_screen.refresh(&self.config);
+        }
+
         self.refresh_scroll_position()
     }
 
@@ -1490,6 +1501,10 @@ impl App {
     pub fn update(&mut self, message: Message) -> Task<Message> {
         match message {
             Message::Ignore => Task::none(),
+            Message::RefreshEmulators => {
+                self.emulators_screen.refresh(&self.config);
+                Task::none()
+            }
             Message::CloseModal => self.close_modal(),
             Message::Exit { user } => {
                 if self.operation.idle() || (user && self.exiting) {
@@ -1537,6 +1552,15 @@ impl App {
                     config::Event::RestoreSource(text) => {
                         self.text_histories.restore_source.push(&text);
                         self.config.restore.path.reset(text);
+                    }
+                    config::Event::AddEmulatorRoot(app) => {
+                        self.text_histories.roots.push(Default::default());
+                        self.config
+                            .roots
+                            .push(Root::Emulator(crate::resource::config::root::Emulator {
+                                path: Default::default(),
+                                app: Some(app),
+                            }));
                     }
                     config::Event::Root(action) => match action {
                         EditAction::Add => {
@@ -2033,6 +2057,56 @@ impl App {
 
                 Task::none()
             }
+            Message::UpdateApp => {
+                if self.updating_app {
+                    return Task::none();
+                }
+
+                self.updating_app = true;
+                self.manifest_notification = Some(Notification::new(TRANSLATOR.updating_app()));
+                let security = self.config.runtime.network_security;
+
+                Task::future(async move {
+                    // O erro vira texto aqui, e não lá embaixo: o erro do fetch é um `Box<dyn
+                    // Error>`, que não é `Send`, e mantê-lo vivo atravessando o `await` do
+                    // download faria a tarefa inteira não caber no executor da interface.
+                    let fetched = crate::metadata::Release::fetch(security)
+                        .await
+                        .map_err(|e| e.to_string());
+
+                    let outcome = match fetched {
+                        Ok(release) => {
+                            if release.is_update() {
+                                let version = release.version.to_string();
+                                release.install(security).await.map(|_| Some(version))
+                            } else {
+                                // Já está na versão mais nova: dizer isso é resposta, não erro.
+                                Ok(None)
+                            }
+                        }
+                        Err(e) => Err(e),
+                    };
+
+                    Message::AppUpdated(outcome)
+                })
+            }
+            Message::AppUpdated(outcome) => {
+                self.updating_app = false;
+                self.manifest_notification = None;
+
+                self.timed_notification = Some(match outcome {
+                    // Sem prazo para sumir de propósito: é uma instrução, não um aviso de
+                    // passagem. O programa novo só entra em uso no próximo início.
+                    Ok(Some(version)) => Notification::new(TRANSLATOR.app_updated(&version)),
+                    Ok(None) => Notification::new(TRANSLATOR.app_is_up_to_date()).expires(5),
+                    Err(e) => {
+                        log::warn!("App update failed: {e:?}");
+                        Notification::new(TRANSLATOR.app_update_failed(&e)).expires(15)
+                    }
+                });
+
+                Task::none()
+            }
             Message::UpdateManifest { force } => {
                 if self.updating_manifest {
                     return Task::none();
@@ -2190,7 +2264,8 @@ impl App {
                             self.custom_games_screen.filter.enabled = !self.custom_games_screen.filter.enabled;
                             task = Some(iced::widget::operation::focus(id::custom_games_search()));
                         }
-                        Screen::Other => {}
+                        // A tela de emuladores não tem lista de jogos filtrável.
+                        Screen::Emulators | Screen::Other => {}
                     },
                     game_filter::Event::ToggledFilter { filter, enabled } => match self.screen {
                         Screen::Backup => {
@@ -2200,7 +2275,8 @@ impl App {
                             self.restore_screen.log.search.toggle_filter(filter, enabled);
                         }
                         Screen::CustomGames => {}
-                        Screen::Other => {}
+                        // A tela de emuladores não tem lista de jogos filtrável.
+                        Screen::Emulators | Screen::Other => {}
                     },
                     game_filter::Event::EditedGameName(value) => match self.screen {
                         Screen::Backup => {
@@ -2215,7 +2291,8 @@ impl App {
                             self.text_histories.custom_games_search_game_name.push(&value);
                             self.custom_games_screen.filter.name = value;
                         }
-                        Screen::Other => {}
+                        // A tela de emuladores não tem lista de jogos filtrável.
+                        Screen::Emulators | Screen::Other => {}
                     },
                     game_filter::Event::Reset => match self.screen {
                         Screen::Backup => {
@@ -2230,7 +2307,8 @@ impl App {
                             self.custom_games_screen.filter.reset();
                             self.text_histories.custom_games_search_game_name.push("");
                         }
-                        Screen::Other => {}
+                        // A tela de emuladores não tem lista de jogos filtrável.
+                        Screen::Emulators | Screen::Other => {}
                     },
                     game_filter::Event::EditedFilterUniqueness(value) => match self.screen {
                         Screen::Backup => {
@@ -2240,7 +2318,8 @@ impl App {
                             self.restore_screen.log.search.uniqueness.choice = value;
                         }
                         Screen::CustomGames => {}
-                        Screen::Other => {}
+                        // A tela de emuladores não tem lista de jogos filtrável.
+                        Screen::Emulators | Screen::Other => {}
                     },
                     game_filter::Event::EditedFilterCompleteness(value) => match self.screen {
                         Screen::Backup => {
@@ -2250,7 +2329,8 @@ impl App {
                             self.restore_screen.log.search.completeness.choice = value;
                         }
                         Screen::CustomGames => {}
-                        Screen::Other => {}
+                        // A tela de emuladores não tem lista de jogos filtrável.
+                        Screen::Emulators | Screen::Other => {}
                     },
                     game_filter::Event::EditedFilterEnablement(value) => match self.screen {
                         Screen::Backup => {
@@ -2260,7 +2340,8 @@ impl App {
                             self.restore_screen.log.search.enablement.choice = value;
                         }
                         Screen::CustomGames => {}
-                        Screen::Other => {}
+                        // A tela de emuladores não tem lista de jogos filtrável.
+                        Screen::Emulators | Screen::Other => {}
                     },
                     game_filter::Event::EditedFilterChange(value) => match self.screen {
                         Screen::Backup => {
@@ -2270,7 +2351,8 @@ impl App {
                             self.restore_screen.log.search.change.choice = value;
                         }
                         Screen::CustomGames => {}
-                        Screen::Other => {}
+                        // A tela de emuladores não tem lista de jogos filtrável.
+                        Screen::Emulators | Screen::Other => {}
                     },
                     game_filter::Event::EditedFilterManifest(value) => match self.screen {
                         Screen::Backup => {
@@ -2280,7 +2362,8 @@ impl App {
                             self.restore_screen.log.search.manifest.choice = value;
                         }
                         Screen::CustomGames => {}
-                        Screen::Other => {}
+                        // A tela de emuladores não tem lista de jogos filtrável.
+                        Screen::Emulators | Screen::Other => {}
                     },
                 }
 
@@ -2995,7 +3078,9 @@ impl App {
                     .push(button::nav(Screen::Backup, self.screen))
                     .push(button::nav(Screen::Restore, self.screen))
                     .push(button::nav(Screen::CustomGames, self.screen))
-                    .push(button::nav(Screen::Other, self.screen)),
+                    .push(button::nav(Screen::Emulators, self.screen))
+                    .push(button::nav(Screen::Other, self.screen))
+                    .push(button::check_for_update(&self.updating_app)),
             )
             .push(match self.screen {
                 Screen::Backup => self.backup_screen.view(
@@ -3019,6 +3104,10 @@ impl App {
                     &self.text_histories,
                     &self.modifiers,
                 ),
+                Screen::Emulators => {
+                    self.emulators_screen
+                        .view(&self.config, &self.text_histories, &self.modifiers)
+                }
                 Screen::Other => screen::other(
                     self.updating_manifest,
                     &self.config,

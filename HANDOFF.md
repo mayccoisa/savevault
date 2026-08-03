@@ -194,14 +194,44 @@ tem zero perfis, um perfil, ou vários, e isso é decisão de produto.
   perfil muda de máquina para máquina. É exatamente por isso que `Area` existe e que o `tail`
   gravado é relativo à área. Se o RPCS3 exigir redesenho, o desenho estava errado.
 
-### 5.5 Interface gráfica do fluxo novo
+### 5.5 Interface gráfica do fluxo novo — FEITA em 2026-08-03
 
-O motor está pronto; a tela de restauração é a herdada, uma lista de jogos com caixa de seleção.
-O fluxo "aponte a pasta do emulador" é outro fluxo, e a decisão pendente é se vira aba nova ou se
-reformula a tela existente. **Isso é trabalho de design, não de implementação:** vale desenhar antes
-de codar, e passar pelo Maycon.
+A decisão pendente era "aba nova ou reformular a tela existente". **O Maycon decidiu: aba nova**,
+ao lado de Jogos personalizados, com **todas as configurações de cada emulador dentro do bloco do
+próprio emulador**, e os emuladores ainda não implementados listados com o rótulo **Em breve**.
 
-Junto disso: o ponto de desfazer existe em disco (`pre-restore/`) mas não tem botão.
+O que isso resolve, e não é cosmético: a raiz de emulador deixou de ser "mais uma linha na lista de
+raízes, com a loja escolhida num menu". Na aba, o emulador é o contexto, então a raiz nasce já com
+o `app` preenchido (`config::Event::AddEmulatorRoot`). Isso importa porque a detecção por assinatura
+não funciona quando a pasta ainda está vazia, que é justamente o caso de quem acabou de instalar.
+
+Listar o que **não** existe ainda é decisão de honestidade: sem isso, o usuário de PPSSPP aponta a
+pasta, não acontece nada, e ele conclui que o programa não funciona.
+
+O diagnóstico é lido ao entrar na aba e pelo botão de recarregar, nunca no laço de desenho: ele
+lista pastas em disco.
+
+Ainda pendente daqui: o ponto de desfazer existe em disco (`pre-restore/`) mas não tem botão.
+
+### 5.5b Atualização em um clique — FEITA em 2026-08-03
+
+Botão **Verificar atualização** na mesma linha das abas: verifica, baixa o `.zip` da release,
+troca o executável e pede para reabrir. O programa em uso não pode ser sobrescrito, mas **pode ser
+renomeado**, então a build velha vira `.old` e a nova assume o nome. A build velha é deixada no
+disco de propósito: apagar o binário que está executando é o passo que poderia deixar o usuário
+sem programa nenhum.
+
+**Um defeito herdado foi corrigido no caminho:** `Release::fetch` fazia
+`tag_name.trim_start_matches('v')`, o que deixa `savevault-v0.2.0`, que não é versão semântica.
+Ou seja, a verificação de atualização **falhava em silêncio para toda release real do SaveVault**.
+Travado por teste em `src/metadata.rs`.
+
+**Pendência que depende de decisão do Maycon:** o repositório `mayccoisa/savevault` é **privado**,
+e a API pública do GitHub responde **404** para release de repositório privado. Verificado: com
+credencial a release `savevault-v0.1.0` aparece; sem credencial, 404. Então o botão funciona, mas
+sempre vai dizer que a atualização não deu certo enquanto o repositório for privado. As saídas são
+tornar o repositório público ou hospedar o arquivo de versão em outro lugar. Embutir credencial no
+programa **não** é saída: o token iria junto com o binário para a máquina de qualquer usuário.
 
 ### 5.6 Externalizar o perfil para `emulators.yaml`
 
