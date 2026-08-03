@@ -11,6 +11,7 @@
 
 use crate::{path::CommonPath, prelude::StrictPath, resource::config::Root};
 
+pub mod param_sfo;
 pub mod psx_card;
 
 /// Um emulador conhecido.
@@ -32,6 +33,7 @@ pub enum App {
     DuckStation,
     Pcsx2,
     Eden,
+    Ppsspp,
 }
 
 /// Uma área declarada de dado de usuário dentro da pasta de dados do emulador.
@@ -143,6 +145,29 @@ pub enum Identity {
     /// meio, cujo identificador muda de máquina para máquina, e cada fork do emulador é livre
     /// para acrescentar um nível. Casar por forma sobrevive aos dois.
     TitleIdFolder,
+    /// Do nome de uma **pasta** que começa com um identificador da PlayStation (quatro letras e
+    /// cinco dígitos), com o nome do jogo lido do `PARAM.SFO` que mora dentro dela.
+    ///
+    /// Serve ao PSP e ao PS3, que usam a mesma forma de identificador e o mesmo arquivo de
+    /// metadado. O nome da pasta traz sufixos que variam (`ULUS1234501`, `BLES00932-AUTO`), então
+    /// o que identifica é o começo.
+    PlaystationFolder,
+    /// Do identificador da PlayStation no começo do nome do arquivo, sem hífen
+    /// (`ULUS12345_1.00_1.ppst`).
+    FilenamePlaystationId,
+}
+
+impl Identity {
+    /// Quando a unidade é a pasta, e não o arquivo, esta é a regra que reconhece a pasta do jogo.
+    ///
+    /// `None` significa que a área é varrida arquivo a arquivo, sem descida recursiva.
+    fn folder_matcher(&self) -> Option<fn(&str) -> Option<String>> {
+        match self {
+            Self::TitleIdFolder => Some(title_id_in),
+            Self::PlaystationFolder => Some(param_sfo::title_id_prefix),
+            Self::PsxCard | Self::FilenameMediaCode | Self::FilenamePlaystationId => None,
+        }
+    }
 }
 
 /// Uma área da pasta de dados.
@@ -280,14 +305,54 @@ const EDEN: Profile = Profile {
     }],
 };
 
+/// Fonte: código do próprio PPSSPP, que é aberto.
+///
+/// - A pasta apontada é o **memory stick**, e não a pasta do programa. Em
+///   `Windows/main.cpp`, `InitMemstickDirectory`: sem `installed.txt`, o memory stick é a subpasta
+///   `memstick` ao lado do executável; quando esse lugar não é gravável (o caso de instalar em
+///   Program Files), cai para `Documentos\PPSSPP`.
+/// - Em `Core/Util/PathUtil.cpp`, `GetSysDirectory`: `PSP/SAVEDATA` guarda os saves de verdade,
+///   `PSP/PPSSPP_STATE` os estados salvos, e `PSP/SYSTEM` a configuração.
+/// - Cada save é uma **pasta** cujo nome começa com o identificador do jogo (`ULUS1234501` é o
+///   save "01" de `ULUS12345`), com um `PARAM.SFO` dentro declarando o nome do jogo.
+const PPSSPP: Profile = Profile {
+    name: "PPSSPP",
+    data_roots: &[Anchor::Common(CommonPath::Document, "PPSSPP")],
+    // O `memstick` do modo portátil é uma PASTA ao lado do executável, e não um arquivo marcador,
+    // então não cabe aqui: o usuário aponta essa pasta como raiz e a assinatura decide.
+    portable_markers: &[],
+    signature: Signature {
+        all_of: &[Marker::Dir("PSP")],
+        any_of: &[Marker::Dir("PSP/SAVEDATA"), Marker::Dir("PSP/SYSTEM")],
+        none_of: &[],
+    },
+    areas: &[
+        AreaSpec {
+            area: Area::Saves,
+            subdir: "PSP/SAVEDATA",
+            extensions: &[],
+            identity: Identity::PlaystationFolder,
+        },
+        AreaSpec {
+            area: Area::Savestates,
+            subdir: "PSP/PPSSPP_STATE",
+            // O `.jpg` ao lado do estado é a miniatura que o próprio emulador mostra na lista;
+            // sem ela o usuário restaura e não reconhece o que é cada estado.
+            extensions: &["ppst", "jpg"],
+            identity: Identity::FilenamePlaystationId,
+        },
+    ],
+};
+
 impl App {
-    pub const ALL: &'static [Self] = &[Self::DuckStation, Self::Pcsx2, Self::Eden];
+    pub const ALL: &'static [Self] = &[Self::DuckStation, Self::Pcsx2, Self::Eden, Self::Ppsspp];
 
     pub fn profile(&self) -> &'static Profile {
         match self {
             Self::DuckStation => &DUCKSTATION,
             Self::Pcsx2 => &PCSX2,
             Self::Eden => &EDEN,
+            Self::Ppsspp => &PPSSPP,
         }
     }
 
@@ -300,7 +365,7 @@ impl App {
     /// Existe para a tela poder mostrá-los como "em breve" em vez de fingir que o escopo é só o
     /// que já foi feito. É dado honesto: o usuário vê o que ainda não vai funcionar, e não
     /// descobre isso apontando a pasta e não acontecendo nada.
-    pub const PLANNED: &'static [&'static str] = &["PPSSPP", "RPCS3", "shadPS4", "Sudachi", "Xenia"];
+    pub const PLANNED: &'static [&'static str] = &["RPCS3", "shadPS4", "Sudachi", "Xenia"];
 
     /// Esta pasta é a pasta de dados deste emulador?
     pub fn matches_data_root(&self, data_root: &StrictPath) -> bool {
@@ -389,8 +454,10 @@ pub fn discover_saves(app: App, data_root: &StrictPath) -> Vec<DiscoveredSave> {
             continue;
         }
 
-        if let Identity::TitleIdFolder = spec.identity {
-            found.extend(discover_in_game_folders(app, spec, &area_root, &area_root, None));
+        if let Some(matcher) = spec.identity.folder_matcher() {
+            found.extend(discover_in_game_folders(
+                app, spec, matcher, &area_root, &area_root, None, None,
+            ));
             continue;
         }
 
@@ -441,12 +508,15 @@ fn title_id_in(name: &str) -> Option<String> {
 /// `game` carrega o jogo já reconhecido acima na árvore: uma vez dentro da pasta do título, tudo
 /// abaixo é daquele jogo, em qualquer profundidade, porque o formato interno do save é do console
 /// e não cabe a este programa interpretar.
+#[allow(clippy::too_many_arguments)]
 fn discover_in_game_folders(
     app: App,
     spec: &AreaSpec,
+    matcher: fn(&str) -> Option<String>,
     area_root: &StrictPath,
     current: &StrictPath,
     game: Option<&GameId>,
+    title: Option<&str>,
 ) -> Vec<DiscoveredSave> {
     let mut found = vec![];
 
@@ -471,10 +541,22 @@ fn discover_in_game_folders(
             // da área é o índice do espaço de save, que também tem 16 hexadecimais
             // (`0000000000000000`) e portanto também casa a forma. Sem esta regra, todo jogo do
             // usuário seria atribuído a um "jogo" só, o índice. Foi assim que o teste pegou.
-            let deeper = title_id_in(&name)
-                .map(GameId::Media)
-                .or_else(|| game.cloned());
-            found.extend(discover_in_game_folders(app, spec, area_root, &path, deeper.as_ref()));
+            let matched = matcher(&name).map(GameId::Media);
+            // O nome do jogo é declarado num arquivo dentro da pasta do jogo, quando o formato
+            // tem um. Lido uma vez por pasta de jogo, e não por arquivo.
+            let declared = matched.is_some().then(|| read_declared_title(&path)).flatten();
+            let deeper = matched.or_else(|| game.cloned());
+            let title = declared.as_deref().or(title);
+
+            found.extend(discover_in_game_folders(
+                app,
+                spec,
+                matcher,
+                area_root,
+                &path,
+                deeper.as_ref(),
+                title,
+            ));
             continue;
         }
 
@@ -490,12 +572,19 @@ fn discover_in_game_folders(
             area: spec.area,
             area_root: area_root.clone(),
             game,
-            title: None,
+            title: title.map(|x| x.to_string()),
             file: path,
         });
     }
 
     found
+}
+
+/// O nome do jogo que a própria pasta de save declara, quando há um `PARAM.SFO` ali.
+fn read_declared_title(folder: &StrictPath) -> Option<String> {
+    let file = folder.joined("PARAM.SFO");
+    let bytes = std::fs::read(file.as_std_path_buf().ok()?).ok()?;
+    param_sfo::title(&bytes)
 }
 
 /// Atribui um arquivo a um ou mais jogos, conforme a regra de identidade da área.
@@ -542,9 +631,17 @@ fn attribute(app: App, spec: &AreaSpec, area_root: &StrictPath, file: &StrictPat
                 }
             }
         }
-        // Tratada antes de chegar aqui, em `discover_saves`, porque a unidade não é o arquivo:
+        // Tratadas antes de chegar aqui, em `discover_saves`, porque a unidade não é o arquivo:
         // é a pasta, e ela precisa de descida recursiva.
-        Identity::TitleIdFolder => vec![],
+        Identity::TitleIdFolder | Identity::PlaystationFolder => vec![],
+        Identity::FilenamePlaystationId => {
+            let stem = file_stem(file);
+            let game = match param_sfo::title_id_prefix(&stem) {
+                Some(code) => GameId::Media(code),
+                None => GameId::Unidentified(stem),
+            };
+            vec![make(game, None)]
+        }
         Identity::FilenameMediaCode => {
             let stem = file_stem(file);
             let game = match psx_card::media_code_in(&stem) {
@@ -1204,6 +1301,105 @@ mod tests {
         assert_eq!(None, title_id_in("010000000001000"));
         assert_eq!(None, title_id_in("01000000000100000"));
         assert_eq!(None, title_id_in("0100000000g10000"));
+    }
+
+    /// Um `PARAM.SFO` válido segundo o formato, para os testes de PSP e PS3.
+    fn param_sfo_with_title(title: &str) -> Vec<u8> {
+        let key = b"TITLE\0";
+        let mut value = title.as_bytes().to_vec();
+        value.push(0);
+
+        let mut out = vec![];
+        out.extend_from_slice(&0x4653_5000u32.to_le_bytes());
+        out.extend_from_slice(&0x0000_0101u32.to_le_bytes());
+        out.extend_from_slice(&36u32.to_le_bytes()); // tabela de chaves
+        out.extend_from_slice(&(36 + key.len() as u32).to_le_bytes()); // tabela de dados
+        out.extend_from_slice(&1u32.to_le_bytes());
+        out.extend_from_slice(&0u16.to_le_bytes()); // chave em 0
+        out.extend_from_slice(&0x0204u16.to_le_bytes()); // texto UTF-8
+        out.extend_from_slice(&(value.len() as u32).to_le_bytes());
+        out.extend_from_slice(&(value.len() as u32).to_le_bytes());
+        out.extend_from_slice(&0u32.to_le_bytes()); // dado em 0
+        out.extend_from_slice(key);
+        out.extend_from_slice(&value);
+        out
+    }
+
+    /// Um memory stick de PPSSPP.
+    fn ppsspp_install() -> FakeInstall {
+        FakeInstall::new().dir("PSP").dir("PSP/SAVEDATA").dir("PSP/SYSTEM")
+    }
+
+    #[test]
+    fn recognizes_a_ppsspp_memory_stick() {
+        let install = ppsspp_install();
+        assert!(App::Ppsspp.matches_data_root(&install.root));
+        assert_eq!(Some(App::Ppsspp), App::detect(&install.root));
+    }
+
+    /// O nome do jogo sai do `PARAM.SFO` que mora dentro da pasta do save, que é o análogo, para
+    /// a PlayStation portátil, do título escrito dentro do memory card do PS1.
+    #[test]
+    fn discovers_a_psp_save_and_reads_its_title() {
+        let install = ppsspp_install()
+            .file(
+                "PSP/SAVEDATA/ULUS1234501/PARAM.SFO",
+                &param_sfo_with_title("MONSTER HUNTER FREEDOM UNITE"),
+            )
+            .file("PSP/SAVEDATA/ULUS1234501/DATA.BIN", b"save");
+
+        let found = discover_saves(App::Ppsspp, &install.root);
+
+        assert_eq!(2, found.len());
+        for save in &found {
+            assert_eq!(Area::Saves, save.area);
+            assert_eq!(GameId::Media("ULUS12345".to_string()), save.game);
+            assert_eq!(Some("MONSTER HUNTER FREEDOM UNITE".to_string()), save.title);
+        }
+        assert_eq!("PPSSPP ULUS12345", found[0].game.game_key(App::Ppsspp));
+    }
+
+    /// Os saves "01" e "02" do mesmo jogo são pastas diferentes, e têm que virar o MESMO jogo:
+    /// senão o usuário acha que tem dois jogos e restaura só metade do progresso.
+    #[test]
+    fn two_save_slots_of_the_same_psp_game_are_one_game() {
+        let install = ppsspp_install()
+            .file("PSP/SAVEDATA/ULUS1234501/DATA.BIN", b"save")
+            .file("PSP/SAVEDATA/ULUS1234502/DATA.BIN", b"save");
+
+        let found = discover_saves(App::Ppsspp, &install.root);
+
+        assert_eq!(2, found.len());
+        assert_eq!(GameId::Media("ULUS12345".to_string()), found[0].game);
+        assert_eq!(GameId::Media("ULUS12345".to_string()), found[1].game);
+    }
+
+    /// Save sem `PARAM.SFO` não some nem fica sem identidade: perde só o nome bonito.
+    #[test]
+    fn a_psp_save_without_metadata_still_has_its_id() {
+        let install = ppsspp_install().file("PSP/SAVEDATA/ULUS1234501/DATA.BIN", b"save");
+
+        let found = discover_saves(App::Ppsspp, &install.root);
+
+        assert_eq!(1, found.len());
+        assert_eq!(GameId::Media("ULUS12345".to_string()), found[0].game);
+        assert_eq!(None, found[0].title);
+    }
+
+    #[test]
+    fn discovers_a_ppsspp_savestate_and_its_thumbnail() {
+        let install = ppsspp_install()
+            .dir("PSP/PPSSPP_STATE")
+            .file("PSP/PPSSPP_STATE/ULUS12345_1.00_1.ppst", b"estado")
+            .file("PSP/PPSSPP_STATE/ULUS12345_1.00_1.jpg", b"miniatura");
+
+        let found = discover_saves(App::Ppsspp, &install.root);
+
+        assert_eq!(2, found.len());
+        for save in &found {
+            assert_eq!(Area::Savestates, save.area);
+            assert_eq!(GameId::Media("ULUS12345".to_string()), save.game);
+        }
     }
 
     #[test]
