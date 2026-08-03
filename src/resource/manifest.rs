@@ -104,6 +104,9 @@ impl From<&str> for Os {
 #[serde(rename_all = "camelCase")]
 pub enum Store {
     Ea,
+    /// Not a store, but an emulator's data folder. Which emulator it is gets recorded on the
+    /// root itself, so that supporting another emulator does not need another variant here.
+    Emulator,
     Epic,
     Gog,
     GogGalaxy,
@@ -128,6 +131,7 @@ pub enum Store {
 impl Store {
     pub const ALL: &'static [Self] = &[
         Store::Ea,
+        Store::Emulator,
         Store::Epic,
         Store::Gog,
         Store::GogGalaxy,

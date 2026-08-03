@@ -70,6 +70,10 @@ impl Launchers {
                 Root::Heroic(root) => heroic::scan(root, title_finder, legendary.as_ref()),
                 Root::Legendary(root) => legendary::scan(root, title_finder),
                 Root::Lutris(root) => lutris::scan(root, title_finder),
+                // An emulator's data folder has no games to discover by folder name. Letting the
+                // generic scanner loose in there would fuzzy-match `bios`, `covers` and `cache`
+                // against real game titles and invent games that do not exist.
+                Root::Emulator(_) => Default::default(),
                 _ => generic::scan(root, manifest, subjects),
             };
             found.retain(|_k, v| {

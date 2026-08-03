@@ -1,6 +1,7 @@
 pub mod backup;
 pub mod change;
 pub mod duplicate;
+pub mod emulator;
 pub mod game_filter;
 pub mod launchers;
 pub mod layout;
@@ -417,6 +418,7 @@ pub fn parse_paths(
             );
         }
         Store::Ea
+        | Store::Emulator
         | Store::Epic
         | Store::GogGalaxy
         | Store::Legendary

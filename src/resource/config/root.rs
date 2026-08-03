@@ -33,6 +33,29 @@ pub struct Ea {
     schemars::JsonSchema,
 )]
 #[serde(default, rename_all = "camelCase")]
+pub struct Emulator {
+    /// Where the root is located on your system.
+    /// This is the emulator's data folder, which for a portable install is the same folder as
+    /// the executable.
+    pub path: StrictPath,
+    /// Which emulator this is. When absent, it is detected from the folder's signature.
+    pub app: Option<crate::scan::emulator::App>,
+}
+
+#[derive(
+    Clone,
+    Debug,
+    Default,
+    Eq,
+    PartialEq,
+    Ord,
+    PartialOrd,
+    Hash,
+    serde::Serialize,
+    serde::Deserialize,
+    schemars::JsonSchema,
+)]
+#[serde(default, rename_all = "camelCase")]
 pub struct Epic {
     /// Where the root is located on your system.
     pub path: StrictPath,

@@ -167,6 +167,7 @@ label-integration = Integration
 label-installed-name = Installed name
 
 store-ea = EA
+store-emulator = Emulator
 store-epic = Epic
 store-gog = GOG
 store-gog-galaxy = GOG Galaxy

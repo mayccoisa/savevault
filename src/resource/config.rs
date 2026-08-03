@@ -348,6 +348,7 @@ impl ToString for Theme {
 #[serde(tag = "store", rename_all = "camelCase")]
 pub enum Root {
     Ea(root::Ea),
+    Emulator(root::Emulator),
     Epic(root::Epic),
     Gog(root::Gog),
     GogGalaxy(root::GogGalaxy),
@@ -377,6 +378,10 @@ impl Root {
     pub fn new(path: impl Into<StrictPath>, store: Store) -> Self {
         match store {
             Store::Ea => Self::Ea(root::Ea { path: path.into() }),
+            Store::Emulator => Self::Emulator(root::Emulator {
+                path: path.into(),
+                app: None,
+            }),
             Store::Epic => Self::Epic(root::Epic { path: path.into() }),
             Store::Gog => Self::Gog(root::Gog { path: path.into() }),
             Store::GogGalaxy => Self::GogGalaxy(root::GogGalaxy { path: path.into() }),
@@ -403,6 +408,7 @@ impl Root {
     pub fn store(&self) -> Store {
         match self {
             Self::Ea(_) => Store::Ea,
+            Self::Emulator(_) => Store::Emulator,
             Self::Epic(_) => Store::Epic,
             Self::Gog(_) => Store::Gog,
             Self::GogGalaxy(_) => Store::GogGalaxy,
@@ -426,6 +432,7 @@ impl Root {
     pub fn path(&self) -> &StrictPath {
         match self {
             Self::Ea(root::Ea { path }) => path,
+            Self::Emulator(root::Emulator { path, .. }) => path,
             Self::Epic(root::Epic { path }) => path,
             Self::Gog(root::Gog { path }) => path,
             Self::GogGalaxy(root::GogGalaxy { path }) => path,
@@ -449,6 +456,7 @@ impl Root {
     pub fn path_mut(&mut self) -> &mut StrictPath {
         match self {
             Self::Ea(root::Ea { path }) => path,
+            Self::Emulator(root::Emulator { path, .. }) => path,
             Self::Epic(root::Epic { path }) => path,
             Self::Gog(root::Gog { path }) => path,
             Self::GogGalaxy(root::GogGalaxy { path }) => path,
@@ -475,6 +483,7 @@ impl Root {
                 path,
                 database: database.clone(),
             }),
+            Self::Emulator(root::Emulator { app, .. }) => Self::Emulator(root::Emulator { path, app: *app }),
             _ => Self::new(path, self.store()),
         }
     }
