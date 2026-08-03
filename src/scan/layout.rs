@@ -62,6 +62,10 @@ fn unresolved_message(reason: semantic::Unresolved) -> String {
             "More than one {app} data folder was found, so the destination is ambiguous. \
              Keep only the one you want as a root and restore again."
         ),
+        semantic::Unresolved::AreaAmbiguous(_) => format!(
+            "{app} has more than one user profile on this system, so it is not clear which one \
+             this save belongs to. Open {app}, keep only the profile you use, and restore again."
+        ),
     }
 }
 

@@ -71,9 +71,18 @@ obrigatórias, não dá para desligar por feature. Precisa do **VS Build Tools c
 (já instalado na máquina do Maycon). A toolchain GNU do rustup **não** basta: ela traz linker, mas
 não compilador C.
 
-`target/` passa de 6 GB e o perfil de release usa `lto = "thin"`, então a linkagem é lenta. O disco
-do Maycon já chegou a zero byte no meio de uma compilação. Antes de um build de release, checar
-espaço; o cache do npm (`%LOCALAPPDATA%\npm-cache`) é o alvo grande e regenerável.
+`target/` passa de 6 GB e o perfil de release usa `lto = "thin"`, então a linkagem é lenta.
+
+> **Isto acontece de verdade, e o sintoma engana.** Numa sessão de várias fatias seguidas,
+> `target/debug` chegou a **19 GB** e o disco a **zero byte**. O erro que aparece **não** fala em
+> disco cheio: é
+> `LINK : fatal error LNK1318: Erro PDB inesperado; LIMIT (12)`, apontando para o `.pdb`, o que
+> parece defeito de ferramenta. Antes de investigar o linker, rodar
+> `Get-PSDrive C`.
+>
+> Ordem de limpeza, do mais gordo ao menos: `target/debug` (regenerável, ~19 GB, e recompilar
+> custa uns 10 minutos), `target/release`, o cache do npm (`%LOCALAPPDATA%\npm-cache`), e as
+> pastas sintéticas de teste no temporário. Nunca apagar nada fora de `target/` e do temporário.
 
 ### 5. Antes de começar qualquer coisa, mesclar o upstream
 
@@ -165,6 +174,22 @@ então a profundidade exata não é verificável, e cada fork pode acrescentar u
 > todos os jogos num "jogo" só. A regra que vale é **o casamento mais profundo vence**, e ela está
 > travada por teste. Quem for portar Xenia ou Sudachi vai encontrar o mesmo tipo de coisa: quando a
 > identidade é um número de tamanho fixo, procure quem mais no caminho tem aquele tamanho.
+
+## Quando o caminho tem um pedaço que muda de máquina, use segmento variável
+
+`AreaSpec.subdir` aceita `*` num segmento, e o RPCS3 declara `dev_hdd0/home/*/savedata`.
+
+O `*` ali é o **id do perfil**, gerado pelo emulador, diferente em cada máquina. A regra que faz
+isso valer a pena está em `emulator_restore_target`: o `*` é resolvido **na máquina de destino, na
+hora de restaurar**, e nunca reaplicado do backup. Reaplicar o id gravado recriaria a pasta de
+perfil da máquina de origem, que fica **correta no disco e invisível para o jogo** — o pior tipo de
+defeito deste produto, porque parece sucesso.
+
+Com dois perfis no destino, a restauração **recusa** (`Unresolved::AreaAmbiguous`). Vale aqui a
+mesma regra de sempre: ambiguidade não vira palpite.
+
+O Eden tem a mesma doença (`nand/user/save/<índice>/<perfil>/<title id>`) e **ainda não** tem a
+cura: aplicar exige distinguir o índice do perfil, que têm a mesma forma.
 
 ## Voltar de versão quebra a configuração
 

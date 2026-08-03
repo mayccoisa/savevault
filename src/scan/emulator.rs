@@ -34,6 +34,7 @@ pub enum App {
     Pcsx2,
     Eden,
     Ppsspp,
+    Rpcs3,
 }
 
 /// Uma área declarada de dado de usuário dentro da pasta de dados do emulador.
@@ -63,6 +64,9 @@ pub enum Area {
     /// Save do jogo, quando o emulador não separa cartão de estado. É o caso do Switch, onde o
     /// save é uma pasta por título dentro da NAND emulada.
     Saves,
+    /// Troféus. Área própria porque o usuário pode querer restaurar o progresso do jogo sem
+    /// mexer nos troféus, ou o contrário.
+    Trophies,
 }
 
 /// Um lugar padrão onde procurar a pasta de dados.
@@ -212,6 +216,12 @@ impl Identity {
 pub struct AreaSpec {
     pub area: Area,
     /// Subpasta relativa à pasta de dados.
+    ///
+    /// Um segmento igual a `*` casa **um** nível de diretório, qualquer que seja o nome. Existe
+    /// para o PS3: o caminho do save é `dev_hdd0/home/<perfil>/savedata`, e o identificador do
+    /// perfil é criado pelo emulador e **muda de máquina para máquina**. Sem isso, restaurar
+    /// noutra máquina poria o save numa pasta de perfil que o emulador de lá não usa, e o jogo
+    /// não enxergaria o progresso: o backup pareceria ter funcionado e não teria.
     pub subdir: &'static str,
     /// Extensões dos arquivos que interessam, sem o ponto. Vazio significa "qualquer arquivo",
     /// que é o caso quando é a pasta que identifica o jogo e o conteúdo dela é opaco.
@@ -381,8 +391,51 @@ const PPSSPP: Profile = Profile {
     ],
 };
 
+/// Fonte: código do próprio RPCS3, que é aberto, e a documentação do projeto.
+///
+/// - Não há caminho padrão a procurar: em `Utilities/File.cpp`, `fs::get_config_dir` devolve a
+///   pasta **do próprio executável** no Windows (ou a subpasta `portable/`, quando existe). Por
+///   isso `data_roots` está vazio: o usuário aponta a pasta, e a assinatura confere.
+/// - A máquina emulada mora em `dev_hdd0/`, e o save do usuário em
+///   `dev_hdd0/home/<perfil>/savedata/<TITLE ID + sufixo>/`, com um `PARAM.SFO` dentro.
+/// - Os troféus ficam em `dev_hdd0/home/<perfil>/trophy/`, e são **área separada** de propósito:
+///   é o que permite ao usuário restaurar save sem troféu, ou o contrário.
+///
+/// O `*` no meio do caminho é o identificador do perfil, que o emulador cria e que **muda de
+/// máquina para máquina**. Ele é resolvido na máquina de destino, no momento da restauração.
+const RPCS3: Profile = Profile {
+    name: "RPCS3",
+    data_roots: &[],
+    portable_markers: &[],
+    signature: Signature {
+        all_of: &[Marker::Dir("dev_hdd0")],
+        any_of: &[Marker::Dir("dev_flash"), Marker::Dir("dev_hdd1"), Marker::Dir("config")],
+        none_of: &[],
+    },
+    areas: &[
+        AreaSpec {
+            area: Area::Saves,
+            subdir: "dev_hdd0/home/*/savedata",
+            extensions: &[],
+            identity: Identity::PlaystationFolder,
+        },
+        AreaSpec {
+            area: Area::Trophies,
+            subdir: "dev_hdd0/home/*/trophy",
+            extensions: &[],
+            identity: Identity::PlaystationFolder,
+        },
+    ],
+};
+
 impl App {
-    pub const ALL: &'static [Self] = &[Self::DuckStation, Self::Pcsx2, Self::Eden, Self::Ppsspp];
+    pub const ALL: &'static [Self] = &[
+        Self::DuckStation,
+        Self::Pcsx2,
+        Self::Eden,
+        Self::Ppsspp,
+        Self::Rpcs3,
+    ];
 
     pub fn profile(&self) -> &'static Profile {
         match self {
@@ -390,6 +443,7 @@ impl App {
             Self::Pcsx2 => &PCSX2,
             Self::Eden => &EDEN,
             Self::Ppsspp => &PPSSPP,
+            Self::Rpcs3 => &RPCS3,
         }
     }
 
@@ -402,7 +456,7 @@ impl App {
     /// Existe para a tela poder mostrá-los como "em breve" em vez de fingir que o escopo é só o
     /// que já foi feito. É dado honesto: o usuário vê o que ainda não vai funcionar, e não
     /// descobre isso apontando a pasta e não acontecendo nada.
-    pub const PLANNED: &'static [&'static str] = &["RPCS3", "shadPS4", "Sudachi", "Xenia"];
+    pub const PLANNED: &'static [&'static str] = &["shadPS4", "Sudachi", "Xenia"];
 
     /// Esta pasta é a pasta de dados deste emulador?
     pub fn matches_data_root(&self, data_root: &StrictPath) -> bool {
@@ -538,34 +592,70 @@ pub fn discover_saves(app: App, data_root: &StrictPath) -> Vec<DiscoveredSave> {
     let mut found = vec![];
 
     for spec in app.profile().areas {
-        let area_root = data_root.joined(spec.subdir);
-        if !area_root.is_dir() {
-            continue;
+        for area_root in resolve_area_dirs(data_root, spec.subdir) {
+            found.extend(discover_in_area(app, spec, &area_root));
+        }
+    }
+
+    found
+}
+
+/// Expande o subdir de uma área nas pastas concretas desta máquina.
+///
+/// Sem `*`, é uma pasta só. Com `*`, é uma por diretório daquele nível, e pode ser nenhuma: o
+/// usuário que nunca criou um perfil no emulador não tem essa pasta.
+pub fn resolve_area_dirs(data_root: &StrictPath, subdir: &str) -> Vec<StrictPath> {
+    let mut current = vec![data_root.clone()];
+
+    for segment in subdir.split('/').filter(|x| !x.is_empty()) {
+        let mut next = vec![];
+
+        for path in current {
+            if segment != "*" {
+                next.push(path.joined(segment));
+                continue;
+            }
+
+            let Ok(entries) = path.read_dir() else { continue };
+            let mut children: Vec<StrictPath> = entries
+                .flatten()
+                .filter(|entry| entry.file_type().is_ok_and(|kind| kind.is_dir()))
+                .map(|entry| StrictPath::from(entry.path()))
+                .collect();
+            // Determinismo: a ordem de listagem do sistema de arquivos não é garantida.
+            children.sort_by_key(|child| child.render());
+            next.extend(children);
         }
 
-        if let Some(matcher) = spec.identity.folder_matcher() {
-            found.extend(discover_in_game_folders(
-                app, spec, matcher, &area_root, &area_root, None, None,
-            ));
-            continue;
-        }
+        current = next;
+    }
 
-        let Ok(entries) = area_root.read_dir() else {
-            continue;
-        };
+    current.retain(|path| path.is_dir());
+    current
+}
 
-        let mut files: Vec<StrictPath> = entries
-            .flatten()
-            .filter(|entry| entry.file_type().is_ok_and(|kind| kind.is_file()))
-            .map(|entry| StrictPath::from(entry.path()))
-            .filter(|file| has_extension(file, spec.extensions))
-            .collect();
-        // Determinismo: a ordem de listagem do sistema de arquivos não é garantida.
-        files.sort_by_key(|file| file.render());
+fn discover_in_area(app: App, spec: &AreaSpec, area_root: &StrictPath) -> Vec<DiscoveredSave> {
+    let mut found = vec![];
 
-        for file in files {
-            found.extend(attribute(app, spec, &area_root, &file));
-        }
+    if let Some(matcher) = spec.identity.folder_matcher() {
+        return discover_in_game_folders(app, spec, matcher, area_root, area_root, None, None);
+    }
+
+    let Ok(entries) = area_root.read_dir() else {
+        return found;
+    };
+
+    let mut files: Vec<StrictPath> = entries
+        .flatten()
+        .filter(|entry| entry.file_type().is_ok_and(|kind| kind.is_file()))
+        .map(|entry| StrictPath::from(entry.path()))
+        .filter(|file| has_extension(file, spec.extensions))
+        .collect();
+    // Determinismo: a ordem de listagem do sistema de arquivos não é garantida.
+    files.sort_by_key(|file| file.render());
+
+    for file in files {
+        found.extend(attribute(app, spec, area_root, &file));
     }
 
     found
@@ -1380,6 +1470,66 @@ mod tests {
         assert_eq!(2, found.len());
         assert_eq!(GameId::Media("0100000000010000".to_string()), found[0].game);
         assert_eq!(GameId::Media("0100000000020000".to_string()), found[1].game);
+    }
+
+    /// Uma pasta de RPCS3, com um perfil de usuário.
+    fn rpcs3_install(profile: &str) -> FakeInstall {
+        FakeInstall::new()
+            .dir("dev_hdd0")
+            .dir("dev_flash")
+            .dir(&format!("dev_hdd0/home/{profile}/savedata"))
+            .dir(&format!("dev_hdd0/home/{profile}/trophy"))
+    }
+
+    #[test]
+    fn recognizes_an_rpcs3_folder() {
+        let install = rpcs3_install("00000001");
+        assert!(App::Rpcs3.matches_data_root(&install.root));
+        assert_eq!(Some(App::Rpcs3), App::detect(&install.root));
+    }
+
+    /// O identificador do perfil está no meio do caminho e muda de máquina para máquina, então o
+    /// caminho da área é declarado com `*` e resolvido na hora.
+    #[test]
+    fn discovers_ps3_saves_under_any_profile_id() {
+        let install = rpcs3_install("00000042")
+            .file(
+                "dev_hdd0/home/00000042/savedata/BLES00932-AUTO/PARAM.SFO",
+                &param_sfo_with_title("DEMONS SOULS"),
+            )
+            .file("dev_hdd0/home/00000042/savedata/BLES00932-AUTO/SAVEDATA", b"save")
+            .file("dev_hdd0/home/00000042/trophy/BLES00932_00/TROPUSR.DAT", b"trofeu");
+
+        let found = discover_saves(App::Rpcs3, &install.root);
+
+        let saves: Vec<_> = found.iter().filter(|x| x.area == Area::Saves).collect();
+        assert_eq!(2, saves.len());
+        assert_eq!(GameId::Media("BLES00932".to_string()), saves[0].game);
+        assert_eq!(Some("DEMONS SOULS".to_string()), saves[0].title);
+        assert_eq!(
+            install.root.joined("dev_hdd0/home/00000042/savedata"),
+            saves[0].area_root
+        );
+
+        // O troféu é área própria: o usuário pode restaurar um sem o outro.
+        assert!(found.iter().any(|x| x.area == Area::Trophies));
+    }
+
+    #[test]
+    fn a_wildcard_segment_expands_to_every_profile() {
+        let install = rpcs3_install("00000001").dir("dev_hdd0/home/00000002/savedata");
+
+        let dirs = resolve_area_dirs(&install.root, "dev_hdd0/home/*/savedata");
+
+        assert_eq!(2, dirs.len());
+        assert_eq!(install.root.joined("dev_hdd0/home/00000001/savedata"), dirs[0]);
+        assert_eq!(install.root.joined("dev_hdd0/home/00000002/savedata"), dirs[1]);
+    }
+
+    #[test]
+    fn a_wildcard_segment_with_nothing_to_match_expands_to_nothing() {
+        let install = FakeInstall::new().dir("dev_hdd0/home");
+        assert!(resolve_area_dirs(&install.root, "dev_hdd0/home/*/savedata").is_empty());
     }
 
     /// Os cinco vereditos, que são o que o usuário lê ao lado da pasta que escolheu.

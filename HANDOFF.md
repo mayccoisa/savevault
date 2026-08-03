@@ -186,13 +186,35 @@ tem zero perfis, um perfil, ou vários, e isso é decisão de produto.
   `App::detect` hoje devolve `None` no empate, de propósito. Confirmar se é o comportamento certo
   aqui ou se o usuário precisa escolher.
 
-### 5.4 PPSSPP (PSP) e RPCS3 (PS3) — os que trazem código novo
+### 5.4 PPSSPP (PSP) e RPCS3 (PS3) — FEITOS em 2026-08-03
 
-- Ambos guardam o título em `PARAM.SFO`. Um leitor de SFO serve aos dois: vale escrever direito, num
-  módulo próprio ao lado de `psx_card.rs`, com testes sobre um SFO sintetizado a partir do formato.
-- **RPCS3 é o teste de fogo da abstração:** separa `savedata`, `trophy` e `home/<perfil>`, e o id de
-  perfil muda de máquina para máquina. É exatamente por isso que `Area` existe e que o `tail`
-  gravado é relativo à área. Se o RPCS3 exigir redesenho, o desenho estava errado.
+O leitor de `PARAM.SFO` (`src/scan/emulator/param_sfo.rs`) serve aos dois, com o formato tirado do
+código do PPSSPP, que é aberto, e 8 testes sobre um SFO sintetizado: arquivo truncado, cabeçalho que
+mente na contagem de entradas, valor que não é texto. Isto lê arquivo de disco de outra pessoa, e
+arquivo corrompido tem que virar "não sei", nunca uma queda.
+
+**PPSSPP.** A pasta apontada é o **memory stick**, não a pasta do programa. O detalhe que evita
+restaurar metade do progresso: os saves `01` e `02` do mesmo jogo são pastas diferentes
+(`ULUS1234501`, `ULUS1234502`) e têm que virar o **mesmo** jogo, porque o que identifica é o começo
+do nome.
+
+**RPCS3, o teste de fogo: o desenho aguentou, com uma extensão.** Ele não exigiu redesenho, mas
+exigiu que o caminho da área pudesse ter um **segmento variável**. `AreaSpec.subdir` agora aceita
+`*` num segmento, e o RPCS3 declara `dev_hdd0/home/*/savedata` e `dev_hdd0/home/*/trophy`.
+
+Por que isso importa mais do que parece: o `*` é o **id do perfil**, que o emulador gera e que
+difere de máquina para máquina. Ele é resolvido **na máquina de destino, na hora de restaurar**, e
+não reaplicado do backup. Sem isso, restaurar noutra máquina recriaria a pasta de perfil da máquina
+de origem: correta na aparência, no disco, e **invisível para o jogo**. Com mais de um perfil na
+máquina de destino, a restauração **recusa** (`Unresolved::AreaAmbiguous`) em vez de escolher.
+
+Isto é a mesma doença registrada como limitação do Eden, e agora existe a cura. **Aplicar ao Eden
+é o próximo passo natural** e ainda não foi feito: lá o caminho é
+`nand/user/save/<índice>/<perfil>/<title id>`, e o índice e o perfil precisam ser distinguidos antes
+de trocar o perfil por `*`.
+
+Troféu é `Area::Trophies`, separada de propósito: é o que permite restaurar save sem troféu, ou o
+contrário. Era exatamente para isto que `Area` existia.
 
 ### 5.5 Interface gráfica do fluxo novo — FEITA em 2026-08-03
 

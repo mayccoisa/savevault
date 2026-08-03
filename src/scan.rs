@@ -1024,17 +1024,22 @@ fn emulator_areas_with_included_files(
 
     for (app, data_root) in emulator::Roots::for_config(roots).iter() {
         for spec in app.profile().areas {
-            let area_root = data_root.joined(spec.subdir);
-            if valid
-                .iter()
-                .any(|(seen_app, seen_area, seen)| *seen_app == app && *seen_area == spec.area && seen == &area_root)
-            {
-                continue;
-            }
-            if found_files.iter().any(|(scan_key, file)| {
-                file_is_included_in_backup(file) && scan_key.case_insensitive_tail_for(&area_root).is_some()
-            }) {
-                valid.push((app, spec.area, area_root));
+            // The subdir can carry a variable segment (the PS3's user profile id), so it has to
+            // be expanded here as well. Joining it literally records an anchor that still
+            // contains `*`, which no file is ever under, so no anchor gets recorded at all: the
+            // backup silently loses the very thing that makes restoring re-anchor.
+            for area_root in emulator::resolve_area_dirs(data_root, spec.subdir) {
+                if valid
+                    .iter()
+                    .any(|(seen_app, seen_area, seen)| *seen_app == app && *seen_area == spec.area && seen == &area_root)
+                {
+                    continue;
+                }
+                if found_files.iter().any(|(scan_key, file)| {
+                    file_is_included_in_backup(file) && scan_key.case_insensitive_tail_for(&area_root).is_some()
+                }) {
+                    valid.push((app, spec.area, area_root));
+                }
             }
         }
     }
