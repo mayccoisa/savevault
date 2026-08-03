@@ -1,7 +1,7 @@
 ---
 name: desenvolvimento-savevault
 description: Regras de desenvolvimento do SaveVault (fork do Ludusavi em Rust, backup e restauração inteligente de saves de PC e de emuladores), destiladas de erros reais cometidos em produção — armadilhas do fork (gh resolve para o upstream, tags colidem), invariantes de segurança da restauração, como estender structs que os testes constroem por extenso, e como provar uma fatia ponta a ponta sem emulador instalado. Use SEMPRE que for mexer no SaveVault, principalmente ao acrescentar um emulador novo.
-version: 1.0.0
+version: 1.1.0
 ---
 
 # Desenvolvimento do SaveVault
@@ -139,6 +139,62 @@ emulador, e o emulador vive dentro da struct da raiz. Então:
    (`ScanInfo.title` e `IndividualMapping.title`).
 6. **Arquivo não identificado não desaparece.** Vira `GameId::Unidentified(nome)`. Ele contém
    progresso; sumir em silêncio é pior que um nome feio.
+
+## Assinatura de pasta: marca positiva não basta, às vezes precisa de marca NEGATIVA
+
+Marcador de portátil é convenção compartilhada. `portable.txt` marca instalação portátil no
+DuckStation **e** no PCSX2, e os dois têm `memcards/`. Resultado: uma pasta portátil de PCSX2
+casava com os dois perfis, `App::detect` devolvia `None` no empate, e o emulador ficava
+**invisível** para o usuário.
+
+`Signature` tem `none_of` por isso. Ao acrescentar um emulador, a pergunta não é só "o que esta
+pasta tem?", é **"o que ela tem que o outro não tem, e o que ela não pode ter"**.
+
+O empate ainda vai voltar: Eden e Sudachi são forks da mesma linhagem e terão a mesma estrutura
+interna. Ali a distinção vai ter que vir do **nome da pasta de dados**, que hoje `Marker` não
+consegue olhar, porque só enxerga para dentro.
+
+## Casar por forma sobrevive ao layout, mas cuidado com o vizinho de mesma forma
+
+No Switch a identidade é o nome de uma **pasta**, o Title ID, 16 hexadecimais. Casar por forma, em
+qualquer profundidade, foi a decisão certa: o código da linhagem do yuzu está indisponível (DMCA),
+então a profundidade exata não é verificável, e cada fork pode acrescentar um nível.
+
+> **A armadilha:** o primeiro nível abaixo da área é o índice do espaço de save,
+> `0000000000000000`, que tem **exatamente a mesma forma**. Casar o mais raso jogava os saves de
+> todos os jogos num "jogo" só. A regra que vale é **o casamento mais profundo vence**, e ela está
+> travada por teste. Quem for portar Xenia ou Sudachi vai encontrar o mesmo tipo de coisa: quando a
+> identidade é um número de tamanho fixo, procure quem mais no caminho tem aquele tamanho.
+
+## Voltar de versão quebra a configuração
+
+A configuração gravada por uma versão nova **não abre** numa anterior:
+`roots: unknown variant 'eden', expected 'duckStation'`. É a mesma razão pela qual a config do
+SaveVault não abre no Ludusavi upstream: `Root` é `#[serde(tag = "store")]` sem degradação.
+
+Consequência prática ao testar: para rodar um binário antigo, use um `--config` limpo, nunca o
+diretório de configuração que a versão nova já tocou.
+
+## O executor da interface exige `Send`, e o erro da casa não é `Send`
+
+`crate::prelude::AnyError` é `Box<dyn Error>`, que **não** é `Send`. Se ele ficar vivo atravessando
+um `await` dentro de um `Task::future`, a compilação falha com "future cannot be sent between
+threads safely", e a mensagem aponta para o bloco inteiro, não para a linha culpada.
+
+A regra: **converta o erro para `String` na primeira oportunidade**, antes do próximo `await`. Foi o
+que resolveu tanto no `Release::install` (que expõe `Result<(), String>` e guarda o erro boxado numa
+função interna) quanto no `Task::future` que o chama.
+
+## A checagem de atualização precisa da API pública, e repositório privado responde 404
+
+A API do GitHub responde **404**, e não 403, para release de repositório privado sem credencial.
+Então "não achou atualização" e "não tenho permissão" chegam como a mesma coisa. O repositório é
+público desde 2026-08-03 justamente por isso.
+
+E a tag: `Release::parse_tag` aceita **`savevault-vX.Y.Z`** e as tags herdadas `vX.Y.Z`. O código
+do upstream fazia só `trim_start_matches('v')`, o que deixa `savevault-v0.2.0`, que não é versão
+semântica, e **toda** checagem falhava em silêncio. Se mexer no formato da tag, mexa nesse parse e
+no teste que o trava.
 
 ## Estender uma struct que os testes constroem por extenso
 
