@@ -456,7 +456,7 @@ fn discover_in_game_folders(
         })
         .collect();
     // Determinismo: a ordem de listagem do sistema de arquivos não é garantida.
-    children.sort_by(|a, b| a.2.render().cmp(&b.2.render()));
+    children.sort_by_key(|child| child.2.render());
 
     for (is_dir, name, path) in children {
         if is_dir {
