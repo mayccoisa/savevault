@@ -3,7 +3,7 @@
 # backup folders that users already have, which is a migration, not a rename.
 name = "ludusavi"
 # SaveVault's own release line. Built on Ludusavi v0.31.0, see CHANGELOG.md.
-version = "0.2.0"
+version = "0.2.1"
 authors = ["mtkennerly <mtkennerly@gmail.com>", "Maycon Rocha"]
 edition = "2024"
 description = "Backup and smart restoration of game saves, for PC games and emulators"

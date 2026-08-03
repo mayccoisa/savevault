@@ -3,6 +3,22 @@
 SaveVault is a fork of [Ludusavi](https://github.com/mtkennerly/ludusavi) by Michael Kennerly.
 Everything under "Inherited from Ludusavi" is the upstream history, with its own version numbers.
 
+## SaveVault v0.2.1 (2026-08-03)
+
+* Added:
+  * **PPSSPP (PSP).** Saves and save states are backed up and restored, and each game shows its
+    real name, read from the metadata the PSP itself stores next to the save. The "01" and "02"
+    slots of a game are treated as one game, so restoring brings back all of it.
+  * **Each folder now tells you whether it is the right one.** Under every folder you choose,
+    SaveVault says either how many saves it found, or what is wrong: the folder does not exist,
+    it is not that emulator's folder (and which files are missing), or it is the right kind of
+    folder but has no saves in it.
+* Fixed:
+  * A folder that was recognised but empty was reported as if everything was fine, and then the
+    backup came out empty with no explanation. This happens when the emulator's default folder
+    exists on the system drive while the real installation lives somewhere else. It now says so,
+    and tells you to point at the other installation.
+
 ## SaveVault v0.2.0 (2026-08-03)
 
 Two more emulators, and a place in the program that is actually about emulators.
