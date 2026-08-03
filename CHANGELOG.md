@@ -3,6 +3,29 @@
 SaveVault is a fork of [Ludusavi](https://github.com/mtkennerly/ludusavi) by Michael Kennerly.
 Everything under "Inherited from Ludusavi" is the upstream history, with its own version numbers.
 
+## SaveVault v0.2.0 (2026-08-03)
+
+Two more emulators, and a place in the program that is actually about emulators.
+
+* Added:
+  * **An Emulators tab.** Every emulator SaveVault knows about is listed there, each with its own
+    folder settings inside its own block, so there is one place to answer "is my emulator set up?".
+    Emulators that are not supported yet are listed as well, marked *coming soon*, so you can see
+    what is missing instead of pointing at a folder and wondering why nothing happens.
+  * **PCSX2 (PlayStation 2).** Memory cards and save states are backed up and restored, and a save
+    state is matched to its game by the serial in its name. A memory card with the default name
+    (`Mcd001.ps2`) is kept under that name, because the PS2 card does not carry the game's serial
+    anywhere it can be read.
+  * **Eden (Nintendo Switch).** Saves are found under the emulated system storage and grouped by
+    game, at whatever depth they sit, so a change to the emulator's folder layout does not break
+    it.
+  * **A "Check for update" button**, next to the tabs. It fetches the new version, replaces the
+    program and asks you to reopen it, instead of sending you to a browser to download a file by
+    hand. The previous copy is kept beside the new one.
+* Fixed:
+  * The update check never worked: it could not read SaveVault's own version tags, so the program
+    stayed quiet even when a new release existed.
+
 ## SaveVault v0.1.0 (2026-08-03)
 
 First slice: DuckStation (PS1), end to end. Built on Ludusavi v0.31.0.
