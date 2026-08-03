@@ -30,6 +30,7 @@ pub mod psx_card;
 #[serde(rename_all = "camelCase")]
 pub enum App {
     DuckStation,
+    Pcsx2,
 }
 
 /// Uma área declarada de dado de usuário dentro da pasta de dados do emulador.
@@ -99,6 +100,13 @@ pub struct Signature {
     pub all_of: &'static [Marker],
     /// Ao menos uma destas precisa estar presente. Vazio significa "nada a exigir".
     pub any_of: &'static [Marker],
+    /// Nenhuma destas pode estar presente.
+    ///
+    /// Existe porque marcador de portátil é convenção compartilhada: `portable.txt` marca
+    /// instalação portátil no DuckStation **e** no PCSX2, e os dois têm `memcards/`. Sem uma
+    /// marca negativa, uma pasta portátil de PCSX2 casaria com os dois perfis, e
+    /// [`App::detect`] devolveria `None` no empate: o emulador ficaria invisível para o usuário.
+    pub none_of: &'static [Marker],
 }
 
 impl Signature {
@@ -108,6 +116,7 @@ impl Signature {
         }
         self.all_of.iter().all(|m| m.present_in(data_root))
             && (self.any_of.is_empty() || self.any_of.iter().any(|m| m.present_in(data_root)))
+            && !self.none_of.iter().any(|m| m.present_in(data_root))
     }
 }
 
@@ -142,9 +151,9 @@ pub struct Profile {
     pub name: &'static str,
     /// Lugares padrão da pasta de dados, em ordem de prioridade.
     pub data_roots: &'static [Anchor],
-    /// Arquivo que, ao lado do executável, marca instalação portátil. Nesse caso a pasta de
-    /// dados é a própria pasta do executável.
-    pub portable_marker: Option<&'static str>,
+    /// Arquivos que, ao lado do executável, marcam instalação portátil. Nesse caso a pasta de
+    /// dados é a própria pasta do executável. Mais de um porque o PCSX2 aceita dois nomes.
+    pub portable_markers: &'static [&'static str],
     pub signature: Signature,
     pub areas: &'static [AreaSpec],
 }
@@ -156,11 +165,14 @@ const DUCKSTATION: Profile = Profile {
         Anchor::Common(CommonPath::DataLocal, "DuckStation"),
         Anchor::Common(CommonPath::Document, "DuckStation"),
     ],
-    portable_marker: Some("portable.txt"),
+    portable_markers: &["portable.txt"],
     // `memcards` sozinho não distingue do PCSX2, daí a segunda marca.
     signature: Signature {
         all_of: &[Marker::Dir("memcards")],
         any_of: &[Marker::File("settings.ini"), Marker::File("portable.txt")],
+        // O PCSX2 também tem `memcards/` e também usa `portable.txt`. O que ele tem e o
+        // DuckStation não é a pasta `inis/`, onde mora o `PCSX2.ini`.
+        none_of: &[Marker::Dir("inis")],
     },
     areas: &[
         AreaSpec {
@@ -178,12 +190,53 @@ const DUCKSTATION: Profile = Profile {
     ],
 };
 
+/// Fonte: código do próprio PCSX2, `EmuFolders` em `pcsx2/Pcsx2Config.cpp`.
+///
+/// - Pasta de dados no Windows: `Documents\PCSX2` (`SHGetKnownFolderPath(FOLDERID_Documents)`
+///   combinado com o literal `"PCSX2"`).
+/// - Portátil: `portable.ini` **ou** `portable.txt` ao lado do executável.
+/// - Subpastas padrão em `EmuFolders::SetDefaults`: `bios`, `memcards`, `sstates`, `cache`,
+///   `covers`; a de configuração é `inis`, onde fica o `PCSX2.ini`.
+/// - Nome do estado salvo, em `VMManager::GetSaveStateFileName`:
+///   `{serial} ({crc:08X}).{slot:02}.p2s`, por exemplo `SLUS-20062 (7ACF7E77).00.p2s`. O sufixo
+///   `.backup` fica de fora por não terminar em `.p2s`, o que é o desejado: é cópia da anterior.
+const PCSX2: Profile = Profile {
+    name: "PCSX2",
+    data_roots: &[Anchor::Common(CommonPath::Document, "PCSX2")],
+    portable_markers: &["portable.ini", "portable.txt"],
+    // `memcards` sozinho não distingue do DuckStation; `inis` é a marca própria do PCSX2.
+    signature: Signature {
+        all_of: &[Marker::Dir("memcards"), Marker::Dir("inis")],
+        any_of: &[],
+        none_of: &[],
+    },
+    areas: &[
+        AreaSpec {
+            area: Area::Memcards,
+            subdir: "memcards",
+            // O cartão do PS2 é `.ps2`; `.mcd` aparece em cartão importado de outra ferramenta.
+            extensions: &["ps2", "mcd"],
+            // O cartão do PS2 não é o do PS1: é um sistema de arquivos interno, e o padrão
+            // `Mcd001.ps2` não carrega serial nenhum. Identidade opaca é melhor que palpite;
+            // ver a pendência do PCSX2 no HANDOFF.md.
+            identity: Identity::FilenameMediaCode,
+        },
+        AreaSpec {
+            area: Area::Savestates,
+            subdir: "sstates",
+            extensions: &["p2s"],
+            identity: Identity::FilenameMediaCode,
+        },
+    ],
+};
+
 impl App {
-    pub const ALL: &'static [Self] = &[Self::DuckStation];
+    pub const ALL: &'static [Self] = &[Self::DuckStation, Self::Pcsx2];
 
     pub fn profile(&self) -> &'static Profile {
         match self {
             Self::DuckStation => &DUCKSTATION,
+            Self::Pcsx2 => &PCSX2,
         }
     }
 
@@ -667,6 +720,16 @@ mod tests {
         fn portable() -> Self {
             Self::new().dir("memcards").file("portable.txt", b"")
         }
+
+        /// Uma instalação de PCSX2: `memcards` e a pasta de configuração `inis`.
+        fn pcsx2() -> Self {
+            Self::new().dir("memcards").dir("inis").file("inis/PCSX2.ini", b"[UI]\n")
+        }
+
+        /// Uma instalação portátil de PCSX2, que compartilha o `portable.txt` com o DuckStation.
+        fn pcsx2_portable() -> Self {
+            Self::pcsx2().file("portable.txt", b"")
+        }
     }
 
     /// Um memory card válido com um jogo dentro, para os testes de descoberta.
@@ -825,6 +888,82 @@ mod tests {
 
         assert_eq!(1, found.len());
         assert_eq!(GameId::Unidentified("resume".to_string()), found[0].game);
+    }
+
+    #[test]
+    fn recognizes_a_pcsx2_data_root() {
+        let install = FakeInstall::pcsx2();
+        assert!(App::Pcsx2.matches_data_root(&install.root));
+        assert_eq!(Some(App::Pcsx2), App::detect(&install.root));
+    }
+
+    /// O caso que obrigou a marca negativa: `memcards` e `portable.txt` existem nos dois
+    /// emuladores, então sem ela a pasta casaria com ambos e `detect` devolveria `None`,
+    /// deixando o emulador invisível.
+    #[test]
+    fn a_portable_pcsx2_folder_is_not_confused_with_duckstation() {
+        let install = FakeInstall::pcsx2_portable();
+        assert!(App::Pcsx2.matches_data_root(&install.root));
+        assert!(!App::DuckStation.matches_data_root(&install.root));
+        assert_eq!(Some(App::Pcsx2), App::detect(&install.root));
+    }
+
+    #[test]
+    fn a_duckstation_folder_is_not_confused_with_pcsx2() {
+        let install = FakeInstall::installed();
+        assert!(!App::Pcsx2.matches_data_root(&install.root));
+        assert_eq!(Some(App::DuckStation), App::detect(&install.root));
+    }
+
+    /// O nome do estado salvo do PCSX2 traz o serial antes do CRC entre parênteses.
+    #[test]
+    fn discovers_a_pcsx2_savestate_by_its_serial() {
+        let install = FakeInstall::pcsx2()
+            .dir("sstates")
+            .file("sstates/SLUS-20062 (7ACF7E77).00.p2s", b"estado");
+
+        let found = discover_saves(App::Pcsx2, &install.root);
+
+        assert_eq!(1, found.len());
+        assert_eq!(Area::Savestates, found[0].area);
+        assert_eq!(GameId::Media("SLUS-20062".to_string()), found[0].game);
+        assert_eq!("PCSX2 SLUS-20062", found[0].game.game_key(App::Pcsx2));
+    }
+
+    /// A cópia de segurança do estado é do emulador, não do usuário: não vira jogo.
+    #[test]
+    fn ignores_the_pcsx2_savestate_backup() {
+        let install = FakeInstall::pcsx2()
+            .dir("sstates")
+            .file("sstates/SLUS-20062 (7ACF7E77).00.p2s.backup", b"estado");
+
+        assert_eq!(Vec::<DiscoveredSave>::new(), discover_saves(App::Pcsx2, &install.root));
+    }
+
+    /// O cartão do PS2 é um sistema de arquivos interno, e o nome padrão não carrega serial.
+    /// Ele não some: vira identidade opaca, preservando o progresso que está dentro dele.
+    #[test]
+    fn a_default_pcsx2_memory_card_is_kept_as_unidentified() {
+        let install = FakeInstall::pcsx2().file("memcards/Mcd001.ps2", b"cartao");
+
+        let found = discover_saves(App::Pcsx2, &install.root);
+
+        assert_eq!(1, found.len());
+        assert_eq!(Area::Memcards, found[0].area);
+        assert_eq!(GameId::Unidentified("Mcd001".to_string()), found[0].game);
+        assert_eq!("PCSX2 Mcd001", found[0].game.game_key(App::Pcsx2));
+    }
+
+    /// Quem nomeia o cartão por jogo ganha a identificação de graça, pela mesma regra do
+    /// estado salvo.
+    #[test]
+    fn a_pcsx2_memory_card_named_after_the_serial_is_identified() {
+        let install = FakeInstall::pcsx2().file("memcards/SLUS-20062.ps2", b"cartao");
+
+        let found = discover_saves(App::Pcsx2, &install.root);
+
+        assert_eq!(1, found.len());
+        assert_eq!(GameId::Media("SLUS-20062".to_string()), found[0].game);
     }
 
     #[test]

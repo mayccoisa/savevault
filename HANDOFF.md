@@ -116,16 +116,30 @@ desta base foi encontrado rodando o passo 6, não lendo código.
 Cada item fecha sozinho: compila, tem teste, e pode ser commitado isolado. **Um emulador por
 commit.**
 
-### 5.1 PCSX2 (PS2) — o mais barato, começar por aqui
+### 5.1 PCSX2 (PS2) — FEITO em 2026-08-03
 
-Reusa quase tudo, inclusive o decodificador Shift-JIS que já entrou como dependência.
+O perfil está em `src/scan/emulator.rs`, com os fatos de layout tirados do código do próprio PCSX2
+(`EmuFolders` em `pcsx2/Pcsx2Config.cpp` e `VMManager::GetSaveStateFileName`), citados no comentário
+do perfil: pasta de dados `Documents\PCSX2`, portátil por `portable.ini` **ou** `portable.txt`,
+`memcards/` com `.ps2`, `sstates/` com `.p2s`, configuração em `inis/PCSX2.ini`.
 
-- Pesquisar na documentação oficial: pasta de dados no Windows, marcador de portátil, nome do
-  arquivo de configuração, subpasta de memory cards, extensão do cartão.
-- Assinatura precisa de **dois** marcadores: `memcards/` sozinho não distingue do DuckStation.
-- Identidade: serial `SLUS`/`SCES`, e o `psx_card::media_code_in` já existe e serve.
-- O formato do memory card do PS2 **não é** o do PS1. Se a leitura de título exigir muito, aceitar
-  `GameId::Unidentified` e registrar como pendência: é melhor que um palpite.
+Três coisas que a fatia ensinou, e que valem para os próximos:
+
+- **A assinatura precisou de marca negativa, não só de uma segunda marca positiva.** `portable.txt`
+  é convenção compartilhada: uma pasta portátil de PCSX2 tem `memcards/` e `portable.txt`, e casava
+  com o perfil do DuckStation também. Empate faz `App::detect` devolver `None`, ou seja, o emulador
+  ficaria **invisível**. `Signature` ganhou `none_of`, e o DuckStation agora recusa pasta com
+  `inis/`. Isto chegou bem antes do previsto (esperava-se no par Sudachi/Eden).
+- **Identidade do PS2 é opaca de propósito.** O cartão do PS2 é um sistema de arquivos interno, e o
+  nome padrão (`Mcd001.ps2`) não carrega serial. Vira `GameId::Unidentified`, que preserva o
+  progresso, em vez de palpite. Quem nomeia o cartão pelo serial ganha identificação de graça, pela
+  mesma regra do estado salvo.
+- **A cópia de segurança do estado (`.p2s.backup`) fica de fora sozinha**, porque a extensão é
+  casada por sufixo. É o comportamento desejado: é cópia feita pelo emulador, não progresso novo.
+
+Provado com `scripts/dev/make-fake-pcsx2.ps1` nos três casos obrigatórios: pasta no lugar, pasta
+movida (reancorou os 5 arquivos sem redirect) e emulador ausente (recusou, saída 1, nenhuma pasta
+fantasma). Suíte em **270 verdes**.
 
 ### 5.2 shadPS4 (PS4) — prova a variante portátil
 
@@ -184,6 +198,17 @@ máquina:
 4. Extensão e nomenclatura do savestate. A área casa por glob e identifica por serial quando o nome
    permite, caindo em identidade opaca quando não.
 5. Se `portable.txt` vazio basta na build atual.
+
+Do **PCSX2**, tirado do código-fonte do emulador e ainda não confirmado contra instalação real:
+
+6. Se `memcards/` e `inis/` existem antes do primeiro jogo rodar. `inis/` é a marca que distingue do
+   DuckStation; se ela nascer só depois do primeiro fechamento do emulador, uma instalação nova e
+   nunca aberta não é detectada.
+7. **Memory card em pasta** (a opção "folder memory card") é um **diretório**, não um arquivo, e a
+   varredura só olha arquivos. Hoje esse usuário fica sem backup do cartão, em silêncio. É a maior
+   lacuna conhecida do perfil, e resolver exige área com descida recursiva.
+8. Se o `.ps2` de cartão tem alguma âncora estável de serial legível sem montar o sistema de
+   arquivos do PS2. Se tiver, a identidade deixa de ser opaca no caso padrão.
 
 **O Maycon vai testar no outro PC dele**, que tem DuckStation real. O caminho é:
 
