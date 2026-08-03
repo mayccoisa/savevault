@@ -1,0 +1,241 @@
+---
+name: desenvolvimento-savevault
+description: Regras de desenvolvimento do SaveVault (fork do Ludusavi em Rust, backup e restauração inteligente de saves de PC e de emuladores), destiladas de erros reais cometidos em produção — armadilhas do fork (gh resolve para o upstream, tags colidem), invariantes de segurança da restauração, como estender structs que os testes constroem por extenso, e como provar uma fatia ponta a ponta sem emulador instalado. Use SEMPRE que for mexer no SaveVault, principalmente ao acrescentar um emulador novo.
+version: 1.0.0
+---
+
+# Desenvolvimento do SaveVault
+
+## O que é o produto, em uma frase
+
+Backup e **restauração inteligente** de saves de jogos, de PC e de emuladores. Backup de save já
+existe em várias ferramentas. O que não existia é **restauração que descobre o destino sozinha**:
+todas as alternativas presumem que o caminho de destino é igual ao de origem, ou pedem que o
+usuário mapeie o caminho novo na mão.
+
+Toda decisão técnica se subordina a isso. Se uma mudança facilita o backup e piora a resolução do
+destino, ela está errada.
+
+## Onde as coisas vivem
+
+| Coisa | Lugar |
+|---|---|
+| Repositório | `C:\proj\savevault`, remoto `mayccoisa/savevault` (privado), `upstream` = `mtkennerly/ludusavi` |
+| PRD | Produto **SaveVault** no hub, `kwA6qMaEK6YU4d88IdZy`, doc `zyOp7TCOp8y2rh67IIV0`; cópia local em `docs/prd.md` |
+| Handoff e próximos passos | `HANDOFF.md` na raiz do repositório |
+| Motor de emuladores | `src/scan/emulator.rs` (perfil como dado) e `src/scan/emulator/psx_card.rs` |
+| Resolução do destino | `src/scan/semantic.rs`, função `emulator_restore_target` |
+| Metadado no backup | `src/scan/layout.rs`, `SemanticDirKind::Emulator { app, area }` |
+
+## As cinco armadilhas do fork
+
+Estas custaram tempo de verdade. Nenhuma é hipotética.
+
+### 1. O `gh` resolve para o repositório do upstream
+
+Existe o remote `upstream` apontando para `mtkennerly/ludusavi`, então **qualquer** `gh release`,
+`gh pr` ou `gh issue` sem alvo explícito tenta agir no repositório de outra pessoa.
+
+**Sempre** passar `--repo mayccoisa/savevault`.
+
+### 2. As tags `v0.1.0` a `v0.31.0` são do Ludusavi
+
+São 55 tags herdadas. A linha de release do SaveVault usa o prefixo **`savevault-vX.Y.Z`**. Sem o
+prefixo, a tag colide, e vai colidir nas próximas ~30 versões.
+
+A versão no `Cargo.toml` é a do SaveVault (linha própria, começou em `0.1.0`), e a checagem de
+atualização em `src/metadata.rs` aponta para `mayccoisa/savevault`. Se voltar a apontar para o
+upstream, o app avisa de uma "atualização" que é de outro projeto.
+
+### 3. Os testes de registro do Windows falham até rodar a preparação
+
+24 testes falham com `Unable to open subkey: NotFound` porque falta o passo único do
+`CONTRIBUTING.md`:
+
+```
+reg import tests/ludusavi.reg
+```
+
+**Não é regressão.** Enquanto esse passo não for dado, rodar a suíte assim:
+
+```bash
+cd C:\proj\savevault; cargo test --lib -- --skip scan::registry --skip _with_registry --skip _registry_
+```
+
+Baseline conhecido: **263 passam, 0 falham**, 24 filtrados.
+
+### 4. Compilar exige MSVC e espaço em disco
+
+`rusqlite` vem com SQLite embutido e `reqwest` usa `ring`: as duas compilam C e as duas são
+obrigatórias, não dá para desligar por feature. Precisa do **VS Build Tools com a carga de C++**
+(já instalado na máquina do Maycon). A toolchain GNU do rustup **não** basta: ela traz linker, mas
+não compilador C.
+
+`target/` passa de 6 GB e o perfil de release usa `lto = "thin"`, então a linkagem é lenta. O disco
+do Maycon já chegou a zero byte no meio de uma compilação. Antes de um build de release, checar
+espaço; o cache do npm (`%LOCALAPPDATA%\npm-cache`) é o alvo grande e regenerável.
+
+### 5. Antes de começar qualquer coisa, mesclar o upstream
+
+```bash
+cd C:\proj\savevault; git fetch upstream; git merge upstream/master
+```
+
+O `src/scan/semantic.rs` é código **ativo** do upstream, e é a base do motor. Construir sobre uma
+base velha gera conflito depois.
+
+## Invariantes de segurança que não se negociam
+
+O produto promete proteger progresso de jogo. Uma restauração errada destrói exatamente o que ele
+promete proteger. Estas três regras existem por isso.
+
+### Destino não resolvido NUNCA cai no caminho absoluto do backup
+
+Se um arquivo tem semântica de emulador e o destino não pôde ser determinado (emulador ausente, ou
+duas instalações ambíguas), ele **não é escrito**. Entra em `failed_files` com mensagem acionável.
+
+O motivo é concreto: numa máquina diferente, o caminho gravado é a pasta de usuário de outra
+pessoa. A escrita **teria sucesso**, criaria a árvore de pastas inteira, e o usuário acreditaria que
+restaurou enquanto o emulador não lê nada.
+
+> **O erro que eu cometi aqui:** a checagem dependia de existir contexto de restauração
+> (`Option<&semantic::Wine>`). Mas o caso perigoso é exatamente quando **não** existe contexto, ou
+> seja, quando nenhum emulador foi encontrado. Contexto ausente significa conjunto vazio de pastas
+> de emulador, e é assim que deve ser tratado, nunca como permissão para escrever.
+
+### Ponto de desfazer ANTES da primeira escrita, e aborta se falhar
+
+`GameLayout::snapshot_before_restore` copia todo arquivo vivo que vai ser sobrescrito para
+`pre-restore/<timestamp>/`, e é chamado **antes** do laço de escrita. Se falhar, a restauração não
+começa. Inverter essa ordem é o que transforma defeito em save perdido.
+
+### Redirect manual do usuário tem precedência
+
+`game_file_target` já dá retorno antecipado quando um redirect configurado pelo usuário mudou o
+caminho. Isso é contrato com o usuário. Todo teste de resolução nova precisa de um caso que trave
+essa precedência.
+
+## Como acrescentar um emulador
+
+A abstração foi desenhada para isso custar pouco. `Store::Emulator` é **uma** variante, não uma por
+emulador, e o emulador vive dentro da struct da raiz. Então:
+
+1. **Acrescentar a variante em `emulator::App`** e um `const` de `Profile` em `src/scan/emulator.rs`.
+   O perfil é **dado**: locais padrão, marcador de portátil, assinatura de pasta, e as áreas.
+2. **Assinatura de pasta com dois marcadores no mínimo.** Um só não distingue: `memcards/` existe no
+   DuckStation **e** no PCSX2. O DuckStation usa `memcards/` mais (`settings.ini` ou
+   `portable.txt`).
+3. **Identidade do jogo vem do conteúdo, não do nome do arquivo.** Foi essa decisão que fez o modo
+   "um cartão por título do jogo" funcionar sem código extra: um cartão chamado
+   `Final Fantasy VII_1.mcd` é identificado como `SLUS-00594` porque o serial está **dentro** do
+   arquivo. Ao portar um emulador novo, procurar primeiro onde o formato guarda a identidade
+   (`PARAM.SFO` no PSP e no PS3, nome da pasta `CUSA` no PS4, Title ID no Switch e no 360).
+4. **`Area` para cada tipo de arquivo com pasta própria.** O `tail` gravado é relativo à **área**,
+   não à pasta de dados. É isso que vai deixar o RPCS3 separar `savedata` de `trophy` sem
+   redesenho, e o usuário relocar só uma área na configuração do emulador.
+5. **Chave do jogo é a identidade, nunca o título.** A chave é o nome da pasta de backup. Se ela
+   dependesse de o título ter sido lido com sucesso, uma falha de leitura criaria uma segunda pasta
+   para o mesmo jogo e orfanaria a primeira. Título é camada de exibição
+   (`ScanInfo.title` e `IndividualMapping.title`).
+6. **Arquivo não identificado não desaparece.** Vira `GameId::Unidentified(nome)`. Ele contém
+   progresso; sumir em silêncio é pior que um nome feio.
+
+## Estender uma struct que os testes constroem por extenso
+
+Este é o custo escondido de tocar o código herdado, e ele varia MUITO:
+
+| Struct | Custo de um campo novo |
+|---|---|
+| `ScanInfo` | ~2 edições. Os 79 literais quase todos usam `..Default::default()` |
+| `ScannedFile` | ~33 edições. Os literais são exaustivos |
+| `IndividualMapping` | ~37 edições. Idem |
+| `semantic::Wine` | ~13 edições nos testes |
+
+Antes de escolher onde um campo mora, medir isso. Um campo em `ScanInfo` é quase grátis; o mesmo
+campo em `ScannedFile` custa 33 edições no código de outra pessoa, que é superfície de conflito em
+todo merge do upstream.
+
+> **O erro que eu cometi aqui:** usei uma expressão regular para inserir o campo depois de cada
+> `ScannedFile {` ou `Self {`. O padrão também casou `-> Self {` em assinaturas de função e
+> `impl ScannedFile {`, e inseriu **47 linhas inválidas** em 6 arquivos. Custou uma rodada inteira
+> de conserto.
+>
+> **Regra:** inserção automática de campo em literal exige âncora que só case literal
+> (`^\s*<Nome> \{$`, nunca `Self \{`), e **conferir com `git diff` antes de compilar**. Quando
+> forem menos de 10, editar à mão sai mais barato que consertar o estrago.
+
+## Não deixe proteção que não pode disparar
+
+Escrevi uma cerca de contenção contra `..` no caminho gravado. Ela **nunca dispara**, porque
+`StrictPath::case_insensitive_tail_for` normaliza `..` antes de comparar, então um caminho com
+travessia simplesmente não é reconhecido como estando dentro da área e não devolve cauda nenhuma.
+
+Removi a cerca e travei a **propriedade** com um teste
+(`refuses_to_re_anchor_a_path_that_escapes_its_area`), com um comentário dizendo de onde a garantia
+vem. Proteção morta com mensagem de usuário morta é pior que nenhuma: dá falsa confiança e o
+próximo leitor acredita nela.
+
+## Detalhes de API do Ludusavi que já morderam
+
+- **Chave de arquivo no manifesto usa `StrictPath::globbable()`, nunca `render()`.** O caminho é
+  reinterpretado como glob, então um `[` numa pasta como `D:/Emus [novo]/DuckStation` faria a
+  entrada casar com nada, em silêncio.
+- **`parse_paths` descarta qualquer caminho que ainda contenha `<`.** Placeholder não expandido
+  significa save desaparecido sem aviso.
+- **`when: [{store: X}]` do manifesto é praticamente ignorado pelo scanner.** A única leitura é um
+  caso especial de Uplay. Não dá para filtrar entrada de manifesto por loja sem escrever código.
+- **`Root::Emulator` precisa de arm explícito em `src/scan/launchers.rs`.** Sem ele o dispatch cai
+  em `generic::scan`, que faz casamento aproximado de nome de pasta e transforma `bios/`, `covers/`
+  e `cache/` em jogos que não existem.
+- **`Store` tem `#[serde(other)]` em `Other`.** Uma loja desconhecida na configuração degrada em
+  silêncio para `Other`, sem erro.
+- **A config do SaveVault não abre no Ludusavi upstream.** `Root` é `#[serde(tag = "store")]` sem
+  fallback, então `store: emulator` faz o upstream falhar ao ler a config inteira. Porta de mão
+  única, aceitável num fork.
+
+## Provar a fatia, sem emulador instalado
+
+Teste de unidade não pega erro de integração. O defeito de segurança mais grave desta base foi
+encontrado **rodando**, não lendo.
+
+O caminho é montar uma pasta de dados falsa com arquivos de save **válidos segundo a especificação
+do formato**, sintetizados em código (nunca copiados de save real de alguém). O roteiro em
+`scripts/` do handoff monta isso para o DuckStation; replicar por emulador novo.
+
+Sequência obrigatória antes de dizer que uma fatia está pronta:
+
+```bash
+cd C:\proj\savevault; cargo run -- emulators
+cd C:\proj\savevault; cargo run -- backup --force
+cd C:\proj\savevault; cargo run -- restore --preview --force
+```
+
+E os três casos que precisam ser exercitados de verdade:
+
+1. **Pasta no mesmo lugar:** restaura, sem redirect.
+2. **Pasta MOVIDA para outro caminho:** todos os arquivos reancorados sozinhos, zero configuração.
+3. **Emulador ausente:** recusa com mensagem, código de saída 1, e **nenhuma pasta fantasma criada**.
+
+O caso 3 é o que pegou o defeito. Nunca pule.
+
+Rodar em modo portátil (`ludusavi.portable` ao lado do executável) para não tocar na configuração
+real da máquina.
+
+## Antes de publicar release
+
+1. `cargo test --lib` com os `--skip` de registro: 263 verdes.
+2. `cargo clippy --all-targets`: exit 0. Dois avisos são herdados (`src/scan.rs:2239` e
+   `examples/api.rs:6`) e não são para consertar.
+3. Entrada no `CHANGELOG.md`, na seção do SaveVault no topo, escrita **para quem usa** e não para
+   quem commitou.
+4. Tag `savevault-vX.Y.Z` e `gh release create ... --repo mayccoisa/savevault`.
+5. Anexar o `.zip` do binário de release, para o usuário não precisar de Rust.
+
+## Nunca invente
+
+Vale a regra da casa, e aqui ela tem forma concreta: **layout de pasta de emulador é fato
+verificável, não palpite.** Todo perfil deve citar a fonte (documentação oficial do emulador) e o
+que não foi confirmado contra instalação real fica registrado como pendência no `HANDOFF.md`, não
+escondido no código como se fosse certeza.
+
+Quando o app não reconhece uma pasta com confiança, ele **pergunta ou recusa**, nunca adivinha.
