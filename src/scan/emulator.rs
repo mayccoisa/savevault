@@ -115,7 +115,44 @@ pub struct Signature {
     pub none_of: &'static [Marker],
 }
 
+impl Marker {
+    /// Nome legível da marca, para poder dizer ao usuário **o que** falta na pasta que ele
+    /// escolheu, em vez de só dizer que está errada.
+    fn label(&self) -> String {
+        match self {
+            Self::Dir(name) => format!("{name}/"),
+            Self::File(name) => name.to_string(),
+        }
+    }
+}
+
 impl Signature {
+    /// O que falta nesta pasta para ela ser a pasta de dados deste emulador.
+    ///
+    /// Vazio significa que não falta nada. Existe porque "essa pasta está errada" sem dizer o que
+    /// se esperava encontrar deixa o usuário adivinhando, e adivinhar pasta de save é justamente
+    /// o que este programa promete acabar.
+    fn missing_in(&self, data_root: &StrictPath) -> Vec<String> {
+        let mut missing: Vec<String> = self
+            .all_of
+            .iter()
+            .filter(|marker| !marker.present_in(data_root))
+            .map(|marker| marker.label())
+            .collect();
+
+        if !self.any_of.is_empty() && !self.any_of.iter().any(|marker| marker.present_in(data_root)) {
+            missing.push(
+                self.any_of
+                    .iter()
+                    .map(|marker| marker.label())
+                    .collect::<Vec<_>>()
+                    .join(" ou "),
+            );
+        }
+
+        missing
+    }
+
     fn matches(&self, data_root: &StrictPath) -> bool {
         if !data_root.is_dir() {
             return false;
@@ -398,6 +435,58 @@ impl App {
             .filter_map(|anchor| anchor.resolve())
             .filter(|candidate| self.matches_data_root(candidate))
             .collect()
+    }
+}
+
+/// O que o programa tem a dizer sobre **uma** pasta que o usuário escolheu.
+///
+/// Existe porque o status por emulador não bastava: quando as pastas padrão do sistema existem
+/// mas estão vazias, e a instalação de verdade está noutro disco, o programa dizia "usando
+/// C:/.../DuckStation (0 arquivos de save)" e o backup vinha vazio. O usuário não tinha como
+/// saber se errou a pasta ou se o programa estava quebrado.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum FolderVerdict {
+    /// Ainda não foi escolhida uma pasta.
+    Empty,
+    /// A pasta escolhida não existe.
+    Missing,
+    /// A pasta existe, mas não é a pasta de dados deste emulador. Lista o que faltou.
+    NotThisEmulator { missing: Vec<String> },
+    /// É a pasta certa, mas não há save nenhum nela. Lista onde se procurou.
+    NoSaves { areas: Vec<String> },
+    /// É a pasta certa e tem saves.
+    Ready { saves: usize },
+}
+
+impl App {
+    /// Examina uma pasta escolhida pelo usuário e diz, em um veredito, o que há de errado com
+    /// ela, ou quantos saves ela tem.
+    ///
+    /// Devolve **fato**, não texto de interface: quem traduz é a camada de apresentação.
+    pub fn inspect_folder(&self, path: &StrictPath) -> FolderVerdict {
+        if path.raw().trim().is_empty() {
+            return FolderVerdict::Empty;
+        }
+
+        let path = path.interpreted().unwrap_or_else(|_| path.clone());
+
+        if !path.is_dir() {
+            return FolderVerdict::Missing;
+        }
+
+        let missing = self.profile().signature.missing_in(&path);
+        if !missing.is_empty() || !self.matches_data_root(&path) {
+            return FolderVerdict::NotThisEmulator { missing };
+        }
+
+        let saves = discover_saves(*self, &path).len();
+        if saves == 0 {
+            return FolderVerdict::NoSaves {
+                areas: self.profile().areas.iter().map(|a| a.subdir.to_string()).collect(),
+            };
+        }
+
+        FolderVerdict::Ready { saves }
     }
 }
 
@@ -1291,6 +1380,61 @@ mod tests {
         assert_eq!(2, found.len());
         assert_eq!(GameId::Media("0100000000010000".to_string()), found[0].game);
         assert_eq!(GameId::Media("0100000000020000".to_string()), found[1].game);
+    }
+
+    /// Os cinco vereditos, que são o que o usuário lê ao lado da pasta que escolheu.
+    ///
+    /// O caso que motivou tudo isto é o quarto: as pastas padrão do sistema **existem** e casam a
+    /// assinatura, mas estão vazias, porque a instalação de verdade está noutro disco. Sem esta
+    /// distinção o programa dizia "usando <pasta>" e o backup vinha vazio, sem explicação.
+    #[test]
+    fn tells_the_user_what_is_wrong_with_the_folder_they_chose() {
+        assert_eq!(
+            FolderVerdict::Empty,
+            App::DuckStation.inspect_folder(&StrictPath::new("".to_string()))
+        );
+        assert_eq!(
+            FolderVerdict::Missing,
+            App::DuckStation.inspect_folder(&StrictPath::new("Z:/nao/existe".to_string()))
+        );
+
+        let wrong = FakeInstall::new().dir("bios");
+        assert_eq!(
+            FolderVerdict::NotThisEmulator {
+                missing: vec!["memcards/".to_string(), "settings.ini ou portable.txt".to_string()],
+            },
+            App::DuckStation.inspect_folder(&wrong.root)
+        );
+
+        let empty = FakeInstall::installed();
+        assert_eq!(
+            FolderVerdict::NoSaves {
+                areas: vec!["memcards".to_string(), "savestates".to_string()],
+            },
+            App::DuckStation.inspect_folder(&empty.root)
+        );
+
+        let with_saves = FakeInstall::installed().file(
+            "memcards/SLUS-00067_1.mcd",
+            &card_with(&[("BASLUS-00067SOTN", "CASTLEVANIA SOTN")]),
+        );
+        assert_eq!(
+            FolderVerdict::Ready { saves: 1 },
+            App::DuckStation.inspect_folder(&with_saves.root)
+        );
+    }
+
+    /// Apontar a pasta de um emulador para o perfil de outro tem que dizer o que faltou, e não
+    /// só que está errada.
+    #[test]
+    fn the_verdict_names_what_the_folder_is_missing() {
+        let pcsx2 = FakeInstall::pcsx2();
+
+        let FolderVerdict::NotThisEmulator { missing } = App::DuckStation.inspect_folder(&pcsx2.root) else {
+            panic!("a pasta do PCSX2 não é a do DuckStation");
+        };
+
+        assert!(missing.iter().any(|x| x.contains("settings.ini")));
     }
 
     /// Dezesseis hexadecimais é a forma; qualquer outra coisa não é Title ID.

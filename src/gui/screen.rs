@@ -251,6 +251,33 @@ impl Emulators {
         self.diagnosis = Some(crate::scan::emulator::diagnose(&config.roots));
     }
 
+    /// Traduz o veredito do motor sobre uma pasta. O motor devolve fato; o texto é daqui.
+    fn verdict_for<'a>(&self, app: crate::scan::emulator::App, path: &crate::prelude::StrictPath) -> Element<'a> {
+        use crate::scan::emulator::FolderVerdict;
+
+        let (label, ok) = match app.inspect_folder(path) {
+            FolderVerdict::Empty => (TRANSLATOR.emulator_folder_empty(), false),
+            FolderVerdict::Missing => (TRANSLATOR.emulator_folder_missing(), false),
+            FolderVerdict::NotThisEmulator { missing } => (
+                TRANSLATOR.emulator_folder_wrong(app.name(), &missing.join(", ")),
+                false,
+            ),
+            FolderVerdict::NoSaves { areas } => {
+                (TRANSLATOR.emulator_folder_without_saves(&areas.join(", ")), false)
+            }
+            FolderVerdict::Ready { saves } => (TRANSLATOR.emulator_folder_ready(saves), true),
+        };
+
+        Container::new(text(label).size(14))
+            .padding([0, 5])
+            .class(if ok {
+                style::Container::Notification
+            } else {
+                style::Container::Badge
+            })
+            .into()
+    }
+
     pub fn view<'a>(
         &'a self,
         config: &'a Config,
@@ -281,6 +308,11 @@ impl Emulators {
             // idioma dele.
             let status = match diagnosis {
                 Some(found) => match &found.data_root {
+                    // "Usando <pasta> (0 arquivos de save)" é a frase que enganou na prática: ela
+                    // soa como sucesso. Pasta encontrada e vazia é caso próprio, com instrução.
+                    Some(root) if found.games.is_empty() => {
+                        text(TRANSLATOR.emulator_using_folder_without_saves(root))
+                    }
                     Some(root) => text(TRANSLATOR.emulator_using_folder(root, found.games.len())),
                     None => {
                         let matching = found.candidates.iter().filter(|x| x.matches_signature).count();
@@ -307,20 +339,26 @@ impl Emulators {
                 )
                 .push(status);
 
-            for (index, _) in config.roots.iter().enumerate().filter(|(_, root)| {
+            for (index, root) in config.roots.iter().enumerate().filter(|(_, root)| {
                 matches!(root, crate::resource::config::Root::Emulator(emulator) if emulator.app == Some(*app))
             }) {
-                block = block.push(
-                    Row::new()
-                        .spacing(20)
-                        .align_y(Alignment::Center)
-                        .push(histories.input(UndoSubject::RootPath(index)))
-                        .push(button::choose_folder(BrowseSubject::Root(index), modifiers))
-                        .push(button::remove(
-                            Message::config(crate::resource::config::Event::Root),
-                            index,
-                        )),
-                );
+                block = block
+                    .push(
+                        Row::new()
+                            .spacing(20)
+                            .align_y(Alignment::Center)
+                            .push(histories.input(UndoSubject::RootPath(index)))
+                            .push(button::choose_folder(BrowseSubject::Root(index), modifiers))
+                            .push(button::remove(
+                                Message::config(crate::resource::config::Event::Root),
+                                index,
+                            )),
+                    )
+                    // O veredito da pasta que o usuário escolheu, e não só o status do emulador.
+                    // Sem isto, uma pasta reconhecida porém vazia (a pasta padrão do sistema,
+                    // enquanto a instalação de verdade está noutro disco) parecia estar certa, e
+                    // o backup vinha vazio sem explicação.
+                    .push(self.verdict_for(*app, root.path()));
             }
 
             block = block.push(button::add_emulator_root(*app));

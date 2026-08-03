@@ -751,6 +751,39 @@ impl Translator {
         translate_args("emulator-not-found", &args)
     }
 
+    pub fn emulator_using_folder_without_saves(&self, path: &str) -> String {
+        let mut args = FluentArgs::new();
+        args.set("path", path);
+        translate_args("emulator-using-folder-without-saves", &args)
+    }
+
+    pub fn emulator_folder_empty(&self) -> String {
+        translate("emulator-folder-empty")
+    }
+
+    pub fn emulator_folder_missing(&self) -> String {
+        translate("emulator-folder-missing")
+    }
+
+    pub fn emulator_folder_wrong(&self, name: &str, missing: &str) -> String {
+        let mut args = FluentArgs::new();
+        args.set("name", name);
+        args.set("missing", missing);
+        translate_args("emulator-folder-wrong", &args)
+    }
+
+    pub fn emulator_folder_without_saves(&self, areas: &str) -> String {
+        let mut args = FluentArgs::new();
+        args.set("areas", areas);
+        translate_args("emulator-folder-without-saves", &args)
+    }
+
+    pub fn emulator_folder_ready(&self, saves: usize) -> String {
+        let mut args = FluentArgs::new();
+        args.set("saves", saves.to_string());
+        translate_args("emulator-folder-ready", &args)
+    }
+
     pub fn emulator_ambiguous(&self, name: &str, folders: usize) -> String {
         let mut args = FluentArgs::new();
         args.set("name", name);
