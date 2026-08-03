@@ -104,6 +104,14 @@ impl Marker {
 ///
 /// Emuladores compartilham nome de subpasta (`memcards` existe no DuckStation e no PCSX2), então
 /// uma marca só não basta para não confundir um com o outro.
+///
+/// > **A marca tem que ser a instalação, nunca o dado do usuário.** Exigir a pasta de saves
+/// > parece razoável e está errado: a hora em que o usuário mais precisa restaurar é exatamente
+/// > a hora em que essa pasta sumiu. Com `memcards/` na assinatura, apagar essa pasta fazia o
+/// > emulador deixar de ser reconhecido, e a restauração recusava com "emulador não encontrado" —
+/// > justamente no cenário que o produto existe para resolver. Encontrado rodando, não lendo.
+/// > Por isso as assinaturas apontam para arquivo de configuração e pastas de sistema do
+/// > emulador, que continuam lá quando o save some.
 #[derive(Clone, Copy, Debug)]
 pub struct Signature {
     /// Todas estas precisam estar presentes.
@@ -251,12 +259,13 @@ const DUCKSTATION: Profile = Profile {
         Anchor::Common(CommonPath::Document, "DuckStation"),
     ],
     portable_markers: &["portable.txt"],
-    // `memcards` sozinho não distingue do PCSX2, daí a segunda marca.
+    // A marca é a CONFIGURAÇÃO, não a pasta de saves. Ver a nota em `Signature`: exigir
+    // `memcards/` faria o emulador desaparecer justamente na máquina onde o save se perdeu.
     signature: Signature {
-        all_of: &[Marker::Dir("memcards")],
+        all_of: &[],
         any_of: &[Marker::File("settings.ini"), Marker::File("portable.txt")],
-        // O PCSX2 também tem `memcards/` e também usa `portable.txt`. O que ele tem e o
-        // DuckStation não é a pasta `inis/`, onde mora o `PCSX2.ini`.
+        // O PCSX2 também usa `portable.txt`. O que ele tem e o DuckStation não é a pasta
+        // `inis/`, onde mora o `PCSX2.ini`.
         none_of: &[Marker::Dir("inis")],
     },
     areas: &[
@@ -289,9 +298,10 @@ const PCSX2: Profile = Profile {
     name: "PCSX2",
     data_roots: &[Anchor::Common(CommonPath::Document, "PCSX2")],
     portable_markers: &["portable.ini", "portable.txt"],
-    // `memcards` sozinho não distingue do DuckStation; `inis` é a marca própria do PCSX2.
+    // `inis/` é a pasta de configuração, e é a marca própria do PCSX2. `memcards/` não entra:
+    // é dado do usuário, e pode ter sumido justamente quando ele vai restaurar.
     signature: Signature {
-        all_of: &[Marker::Dir("memcards"), Marker::Dir("inis")],
+        all_of: &[Marker::Dir("inis")],
         any_of: &[],
         none_of: &[],
     },
@@ -368,9 +378,11 @@ const PPSSPP: Profile = Profile {
     // O `memstick` do modo portátil é uma PASTA ao lado do executável, e não um arquivo marcador,
     // então não cabe aqui: o usuário aponta essa pasta como raiz e a assinatura decide.
     portable_markers: &[],
+    // `PSP/SYSTEM` é a configuração; `PSP/SAVEDATA` é o dado, e serve só como alternativa para
+    // quem ainda não abriu o emulador nesta máquina.
     signature: Signature {
         all_of: &[Marker::Dir("PSP")],
-        any_of: &[Marker::Dir("PSP/SAVEDATA"), Marker::Dir("PSP/SYSTEM")],
+        any_of: &[Marker::Dir("PSP/SYSTEM"), Marker::Dir("PSP/SAVEDATA")],
         none_of: &[],
     },
     areas: &[
@@ -1209,10 +1221,18 @@ mod tests {
         assert_eq!(None, App::detect(&install.root));
     }
 
+    /// Sem a pasta de saves, a instalação continua sendo reconhecida.
+    ///
+    /// Este teste já afirmou o contrário, e o contrário estava errado: a hora em que o usuário
+    /// mais precisa restaurar é exatamente a hora em que a pasta de saves não existe mais. Com
+    /// ela na assinatura, a restauração recusava dizendo que o emulador não foi encontrado.
     #[test]
-    fn rejects_a_folder_without_memcards() {
+    fn recognizes_an_install_whose_saves_are_gone() {
         let install = FakeInstall::new().file("settings.ini", b"[Main]\n");
-        assert!(!App::DuckStation.matches_data_root(&install.root));
+        assert!(App::DuckStation.matches_data_root(&install.root));
+
+        let pcsx2 = FakeInstall::new().dir("inis").file("inis/PCSX2.ini", b"[UI]\n");
+        assert!(App::Pcsx2.matches_data_root(&pcsx2.root));
     }
 
     #[test]
@@ -1567,7 +1587,7 @@ mod tests {
         let wrong = FakeInstall::new().dir("bios");
         assert_eq!(
             FolderVerdict::NotThisEmulator {
-                missing: vec!["memcards/".to_string(), "settings.ini ou portable.txt".to_string()],
+                missing: vec!["settings.ini ou portable.txt".to_string()],
             },
             App::DuckStation.inspect_folder(&wrong.root)
         );

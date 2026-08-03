@@ -1709,7 +1709,7 @@ impl GameLayout {
         }
 
         let name = leaf.strip_prefix(&format!("{} ", app.name())).unwrap_or(&leaf).to_string();
-        let wanted = parent.joined(app.name()).joined(&escape_folder_name(&name));
+        let wanted = parent.joined(app.name()).joined(escape_folder_name(&name));
 
         if wanted.exists() {
             log::warn!("[{}] not regrouping: {wanted:?} already exists", scan.game_name);
