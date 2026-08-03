@@ -226,12 +226,29 @@ sem programa nenhum.
 Ou seja, a verificação de atualização **falhava em silêncio para toda release real do SaveVault**.
 Travado por teste em `src/metadata.rs`.
 
-**Pendência que depende de decisão do Maycon:** o repositório `mayccoisa/savevault` é **privado**,
-e a API pública do GitHub responde **404** para release de repositório privado. Verificado: com
-credencial a release `savevault-v0.1.0` aparece; sem credencial, 404. Então o botão funciona, mas
-sempre vai dizer que a atualização não deu certo enquanto o repositório for privado. As saídas são
-tornar o repositório público ou hospedar o arquivo de versão em outro lugar. Embutir credencial no
-programa **não** é saída: o token iria junto com o binário para a máquina de qualquer usuário.
+O repositório era privado, e a API pública do GitHub responde **404** para release de repositório
+privado, então o botão nunca acharia nada. **O Maycon decidiu tornar o repositório público**, e
+está feito: a API anônima já devolve `savevault-v0.2.0` e o `.zip` anexado. Embutir credencial no
+programa nunca foi opção: o token iria junto com o binário para a máquina de qualquer usuário.
+
+O que está provado, e o que não está:
+
+- **Provado:** a release é lida sem credencial, a tag é parseada e comparada. Rodando
+  `ludusavi api` com `checkAppUpdate` na v0.2.0, a resposta é `update: null`, ou seja, leu e
+  concluiu que já está atualizado.
+- **Provado que o defeito era real:** o binário da v0.1.0, com o código antigo, responde
+  `unexpected character 's' while parsing major version number` ao ler a tag `savevault-v0.2.0`.
+  Ou seja, quem está na v0.1.0 **não** se atualiza pelo botão, e precisa baixar a v0.2.0 à mão uma
+  vez. Daí em diante o botão funciona.
+- **Não exercitado ponta a ponta:** o caminho "existe versão nova → baixa → troca o executável",
+  porque não há release mais nova que a atual para baixar. A próxima release é o teste natural
+  disso, e é a primeira coisa a conferir quando ela sair.
+
+**Descoberto no caminho, e vale registrar:** a configuração gravada pela v0.2.0 **não abre** numa
+versão anterior (`roots: unknown variant 'eden', expected 'duckStation'`). Voltar de versão é porta
+de mão única, pela mesma razão que a configuração do SaveVault não abre no Ludusavi upstream:
+`Root` é `#[serde(tag = "store")]` sem degradação. Aceitável, mas não é surpresa que o usuário deva
+descobrir sozinho.
 
 ### 5.6 Externalizar o perfil para `emulators.yaml`
 
