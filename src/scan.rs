@@ -3,6 +3,7 @@ pub mod change;
 pub mod duplicate;
 pub mod emulator;
 pub mod game_filter;
+pub mod game_group;
 pub mod launchers;
 pub mod layout;
 pub mod preview;

@@ -1326,11 +1326,80 @@ pub fn run(sub: Subcommand, no_manifest_update: bool, try_manifest_update: bool)
                 print!("{}", report.render());
             }
         }
+        Subcommand::Sources { api } => {
+            let report = sources_report(&config, &mut cache)?;
+            if api {
+                println!("{}", serde_json::to_string_pretty(&report).unwrap());
+            } else {
+                print!("{}", report.render());
+            }
+        }
         Subcommand::Gui { .. } => {
             unreachable!("`gui` command must be handled in main");
         }
     }
     if failed { Err(Error::SomeEntriesFailed) } else { Ok(()) }
+}
+
+/// De onde vem cada jogo que a tela de backup mostraria.
+///
+/// Existe para **medir** a atribuição de origem antes de ela ser usada para agrupar qualquer
+/// coisa na tela. A loja é descoberta por nome de pasta de instalação, então um "Other" grande
+/// aqui significa que agrupar ainda não vale a pena, e é melhor descobrir isso com um comando do
+/// que com a tela pronta.
+///
+/// Faz a mesma varredura de um `backup --preview`, e não uma lista do manifesto: o denominador
+/// tem que ser os jogos que o usuário realmente vê.
+fn sources_report(config: &Config, cache: &mut Cache) -> Result<crate::scan::game_group::SourcesReport, Error> {
+    use crate::scan::game_group::{GameFacts, GameGroup};
+
+    // Baixa o manifesto se precisar, como o backup faz: medir com manifesto vazio devolveria
+    // "zero jogos" e pareceria um defeito da atribuição.
+    let manifest = load_manifest(config, cache, false, false)?;
+    let roots = config.expanded_roots();
+    let layout = BackupLayout::new(config.backup.path.clone());
+    let title_finder = TitleFinder::new(config, &manifest, layout.restorable_game_set());
+
+    let games: Vec<_> = manifest.primary_titles().into_iter().collect();
+    let launchers = Launchers::scan(&roots, &manifest, &games, &title_finder, None);
+    let origins = launchers.all_game_stores();
+    let steam_shortcuts = SteamShortcuts::scan(&title_finder);
+
+    let bar = scan_progress_bar(games.len() as u64);
+    let mut found: Vec<(String, GameGroup)> = games
+        .par_iter()
+        .progress_with(bar)
+        .filter_map(|name| {
+            let game = &manifest.0[name];
+
+            let scan = scan_game_for_backup(
+                game,
+                name,
+                &roots,
+                &app_dir(),
+                &launchers,
+                &config.backup.filter,
+                None,
+                &config.backup.toggled_paths,
+                &config.backup.toggled_registry,
+                None,
+                &config.redirects,
+                config.restore.reverse_redirects,
+                &steam_shortcuts,
+                config.backup.only_constructive,
+            );
+            if !scan.found_anything() {
+                return None;
+            }
+
+            let group = GameGroup::classify(GameFacts::of(name, game, scan.semantics.emulator()), &origins);
+            Some((name.clone(), group))
+        })
+        .collect();
+
+    found.sort_by(|(a_name, a_group), (b_name, b_group)| a_group.cmp(b_group).then(a_name.cmp(b_name)));
+
+    Ok(crate::scan::game_group::SourcesReport::new(found))
 }
 
 fn configure_cloud(config: &mut Config, remote: Remote) -> Result<(), Error> {

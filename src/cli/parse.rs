@@ -438,6 +438,16 @@ pub enum Subcommand {
         #[clap(long)]
         api: bool,
     },
+    /// Report where each game comes from: an emulator, a store, or nowhere we could tell.
+    ///
+    /// This exists to measure how well a game can be attributed to its source, before that
+    /// attribution is used to group anything on screen. Stores are discovered by matching install
+    /// folder names, so a large "Other" here means the grouping would not be worth building yet.
+    Sources {
+        /// Print information to stdout in machine-readable JSON.
+        #[clap(long)]
+        api: bool,
+    },
     /// Cloud sync.
     Cloud {
         #[clap(subcommand)]
@@ -585,6 +595,7 @@ impl Subcommand {
             Self::Manifest { .. } => false,
             Self::Config { .. } => false,
             Self::Emulators { .. } => false,
+            Self::Sources { .. } => false,
             Self::Cloud { sub } => sub.force(),
             Self::Wrap { force, .. } => *force,
             Self::Api { .. } => false,
@@ -603,6 +614,7 @@ impl Subcommand {
             Self::Manifest { .. } => false,
             Self::Config { .. } => false,
             Self::Emulators { .. } => false,
+            Self::Sources { .. } => false,
             Self::Cloud { sub } => sub.gui(),
             Self::Wrap { gui, .. } => *gui,
             Self::Api { .. } => false,

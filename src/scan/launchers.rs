@@ -3,13 +3,13 @@ pub mod heroic;
 mod legendary;
 mod lutris;
 
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeSet, HashMap, HashSet};
 
 use crate::{
     prelude::StrictPath,
     resource::{
         config::Root,
-        manifest::{Manifest, Os},
+        manifest::{Manifest, Os, Store},
     },
     scan::TitleFinder,
 };
@@ -48,6 +48,29 @@ impl Launchers {
             .and_then(|root| root.get(game))
             .unwrap_or(&self.empty)
             .iter()
+    }
+
+    /// Quais lojas instalaram cada jogo, na visão dos launchers.
+    ///
+    /// Este mapa é **a única resposta que existe** para "de que loja é este jogo": o scan sabe
+    /// qual raiz gerou cada arquivo enquanto roda, e descarta isso no fim. Aqui ele é derivado uma
+    /// vez por varredura, em vez de uma consulta por jogo.
+    ///
+    /// > **A cobertura não é total, e isso é do desenho do Ludusavi, não deste método.** Para as
+    /// > lojas sem metadado próprio, a instalação é descoberta por **nome de pasta**, com
+    /// > casamento aproximado contra o manifesto (ver `launchers::generic`). Jogo achado por
+    /// > registro, por prefixo do Wine ou por caminho fora de qualquer raiz não aparece aqui, e
+    /// > quem consome precisa tratar a ausência como "não sei", nunca como "é local".
+    pub fn all_game_stores(&self) -> HashMap<String, BTreeSet<Store>> {
+        let mut stores: HashMap<String, BTreeSet<Store>> = HashMap::new();
+
+        for (root, games) in &self.games {
+            for game in games.keys() {
+                stores.entry(game.clone()).or_default().insert(root.store());
+            }
+        }
+
+        stores
     }
 
     pub fn scan(

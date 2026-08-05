@@ -3,6 +3,13 @@
 SaveVault is a fork of [Ludusavi](https://github.com/mtkennerly/ludusavi) by Michael Kennerly.
 Everything under "Inherited from Ludusavi" is the upstream history, with its own version numbers.
 
+## SaveVault (não publicado)
+
+* Added:
+  * A `sources` command, for checking where SaveVault thinks each of your games comes from. It is
+    a diagnostic: it exists to prove the app can tell a Steam game from an Epic one before that is
+    used to group the game list on screen.
+
 ## SaveVault v0.5.0 (2026-08-03)
 
 * Added:
