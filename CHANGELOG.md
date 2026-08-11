@@ -6,6 +6,30 @@ Everything under "Inherited from Ludusavi" is the upstream history, with its own
 ## SaveVault (não publicado)
 
 * Added:
+  * Emulator games find their name in more places, so fewer backup folders are just a code:
+    * DuckStation save states carry the game's name in their header, and it is now read.
+      If you only ever use save states and never a memory card, your games had no name at all
+      before this.
+    * PlayStation 2 memory cards are no longer opaque. SaveVault now reads the card's file system,
+      so it knows which games are on the card and what they are called, even when the card has the
+      default name `Mcd001.ps2`. A card holding several games is still backed up as one unit,
+      because the file cannot be split.
+    * Still missing: a PCSX2 game that only has save states shows just its code. The save state
+      format does not record the name anywhere.
+  * The backup list groups emulator games under a heading per emulator, which you can collapse.
+    Emulators come first, because the PC list is the long one.
+  * A button on the backup screen hides games that were scanned and did not change, and unchanged
+    games now get their own badge. Before, "scanned, nothing to do" and "not scanned yet" looked
+    exactly the same.
+
+* Changed:
+  * An emulator game's backup folder is now named after the game, with its code in parentheses:
+    `Yu-Gi-Oh! GX Tag Force (ULUS10136)` instead of `ULUS10136`. Browsing the backup folder is how
+    you check that everything you wanted was saved, and nobody memorises serials.
+    Existing backups are renamed on their next backup, and stay restorable.
+    Saves that carry no title of their own, such as a PS2 memory card, keep showing just the code.
+
+* Added:
   * A `sources` command, for checking where SaveVault thinks each of your games comes from. It is
     a diagnostic: it exists to prove the app can tell a Steam game from an Epic one before that is
     used to group the game list on screen.

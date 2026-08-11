@@ -136,7 +136,12 @@ emulador, e o emulador vive dentro da struct da raiz. Então:
    quando o usuário vai restaurar), e uma marca só não distingue emuladores que compartilham
    convenção (`portable.txt` é do DuckStation **e** do PCSX2). Na prática: configuração e pastas
    de sistema em `all_of`/`any_of`, e o que o vizinho tem e este não tem em `none_of`.
-3. **Identidade do jogo vem do conteúdo, não do nome do arquivo.** Foi essa decisão que fez o modo
+3. **Identidade e título vêm do conteúdo, não do nome do arquivo.** Antes de aceitar que um
+   formato "não tem" o nome do jogo, abra um arquivo de verdade e olhe. O estado salvo do
+   DuckStation carrega título e serial no cabeçalho em claro, e o cartão do PS2, que estava
+   documentado aqui como opaco, tem o serial no nome da pasta de save e o nome no `icon.sys`
+   dela. Os dois foram achados **olhando o arquivo real do usuário**, depois confirmados na fonte.
+   O nome do arquivo continua valendo como **último** recurso, quando o conteúdo não disse nada. Foi essa decisão que fez o modo
    "um cartão por título do jogo" funcionar sem código extra: um cartão chamado
    `Final Fantasy VII_1.mcd` é identificado como `SLUS-00594` porque o serial está **dentro** do
    arquivo. Ao portar um emulador novo, procurar primeiro onde o formato guarda a identidade
@@ -144,10 +149,15 @@ emulador, e o emulador vive dentro da struct da raiz. Então:
 4. **`Area` para cada tipo de arquivo com pasta própria.** O `tail` gravado é relativo à **área**,
    não à pasta de dados. É isso que vai deixar o RPCS3 separar `savedata` de `trophy` sem
    redesenho, e o usuário relocar só uma área na configuração do emulador.
-5. **Chave do jogo é a identidade, nunca o título.** A chave é o nome da pasta de backup. Se ela
-   dependesse de o título ter sido lido com sucesso, uma falha de leitura criaria uma segunda pasta
-   para o mesmo jogo e orfanaria a primeira. Título é camada de exibição
-   (`ScanInfo.title` e `IndividualMapping.title`).
+5. **Chave do jogo é a identidade, nunca o título.** Se a chave dependesse de o título ter sido
+   lido com sucesso, uma falha de leitura criaria um segundo jogo e orfanaria o primeiro. Título é
+   camada de exibição (`ScanInfo.title` e `IndividualMapping.title`).
+   A **pasta** de backup, essa sim, se chama `<Título> (<identidade>)`
+   (`layout::emulator_folder_name`), porque ninguém memoriza `SLUS-00774` e conferir o backup é
+   olhar a lista de pastas. Isso é seguro **porque** a pasta não é a chave: o backup é encontrado
+   pelo nome dentro do `mapping.yaml`, então um título lido numa rodada e perdido na seguinte
+   apenas renomeia a pasta. Corolário travado por teste: **nunca derive a identidade do nome da
+   pasta** — o nome já tem título dentro, e relê-lo aninha o título a cada backup.
 6. **Arquivo não identificado não desaparece.** Vira `GameId::Unidentified(nome)`. Ele contém
    progresso; sumir em silêncio é pior que um nome feio.
 

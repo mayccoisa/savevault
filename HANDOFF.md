@@ -130,7 +130,10 @@ Três coisas que a fatia ensinou, e que valem para os próximos:
   com o perfil do DuckStation também. Empate faz `App::detect` devolver `None`, ou seja, o emulador
   ficaria **invisível**. `Signature` ganhou `none_of`, e o DuckStation agora recusa pasta com
   `inis/`. Isto chegou bem antes do previsto (esperava-se no par Sudachi/Eden).
-- **Identidade do PS2 é opaca de propósito.** O cartão do PS2 é um sistema de arquivos interno, e o
+- **Identidade do PS2 era opaca** — revisto em 2026-08-10, ver 5.10; o sistema de arquivos do
+  cartão passou a ser lido. O que segue é o raciocínio original, que continua valendo como regra:
+  na dúvida, preservar em vez de chutar.
+  O cartão do PS2 é um sistema de arquivos interno, e o
   nome padrão (`Mcd001.ps2`) não carrega serial. Vira `GameId::Unidentified`, que preserva o
   progresso, em vez de palpite. Quem nomeia o cartão pelo serial ganha identificação de graça, pela
   mesma regra do estado salvo.
@@ -339,6 +342,82 @@ Duas garantias que não devem ser "simplificadas":
 
 A migração dos backups antigos acontece no próximo backup daquele jogo.
 
+### 5.7b A pasta do jogo leva o nome do jogo — FEITO em 2026-08-08
+
+Pedido do Maycon, olhando o backup real: `SLUS-00774` não diz se ele fez backup do que queria.
+Agora a pasta é `<Título> (<identidade>)`, por `layout::emulator_folder_name`.
+
+Isto **não** reabre a decisão de que a chave é o serial: a chave continua sendo o serial, e a pasta
+é rótulo. É exatamente a segunda garantia do 5.7 que torna isso possível — o backup é encontrado
+pelo nome dentro do `mapping.yaml`, então um título lido numa rodada e perdido na seguinte só
+renomeia a pasta, e nunca cria uma segunda para o mesmo jogo.
+
+Duas coisas que precisaram de teste:
+
+- **A identidade vem da chave do jogo, nunca do nome da pasta.** A pasta já tem título dentro; relê-la
+  aninharia o título a cada backup (`Jogo (Jogo (SLUS-00067))`).
+- **Save sem título continua só com o código.** O cartão do PS2 é opaco de propósito. Inventar nome
+  seria palpite em cima de save dos outros.
+
+Provado com os saves reais desta máquina, em config e destino temporários:
+`Yu-Gi-Oh! GX Tag Force (ULUS10136)`, e a restauração encontrou os três jogos.
+
+### 5.8b Onde mais achar o nome do jogo — FEITO em 2026-08-10
+
+Rodando o 5.7b no backup real, poucos jogos ganharam nome. A medição mostrou por quê: o título só
+era lido do cartão do PS1 e do `PARAM.SFO`. **Estado salvo nunca tinha título**, e ele é o que a
+maioria dos jogos do Maycon usa.
+
+Duas fontes novas, as duas de dentro do próprio arquivo:
+
+- **Cabeçalho do estado salvo do DuckStation** (`duckstation_state.rs`). Fonte:
+  `save_state_version.h`, struct `SAVE_STATE_HEADER`. Magic `DUCC`, título em `char[128]` no
+  offset 8, serial em **`char[32]`** no 136 — e não 64, que era o palpite tirado do arquivo; ler
+  demais invadiria `media_path_length`. Um teste trava esse limite escrevendo lixo no byte 168.
+  O cabeçalho está sempre em claro, mesmo com o estado comprimido, então se lê **168 bytes** e não
+  os até 32 MB do arquivo (`read_prefix`).
+- **Sistema de arquivos do cartão de PS2** (`ps2_card.rs`), que fecha a pendência 8 da seção 6.
+
+Resultado nos saves reais: `X-Men - Mutant Academy (SLUS-00774)`, `Dino Crisis (SLUS-00922)`,
+`Gundam Battle Assault (SLUS-01226)`, `悪魔城ドラキュラＸ (SLPM-86023)`.
+
+### 5.10 O cartão do PS2 deixou de ser opaco — FEITO em 2026-08-10
+
+A decisão de 5.1 ("identidade do PS2 é opaca de propósito") estava certa **para o que se sabia
+então**: o nome `Mcd001.ps2` não carrega serial. O que mudou não foi a regra, foi o fato — o
+serial está dentro, no nome da pasta de save (`BASLUS-21004MAYC`), e o nome do jogo está no
+`icon.sys` daquela pasta.
+
+Fontes: `MemoryCardFolder.h` e `MemoryCardFile.cpp` do PCSX2, e a struct `mcIcon` do **ps2sdk**
+(esta última não é do PCSX2, porque o emulador nunca precisa do título — está registrado no
+comentário do módulo).
+
+O que custou pensar:
+
+- **Cluster lógico não é contíguo no arquivo.** Com ECC são dois pedaços de 512 separados por 16
+  bytes. Ler 1.024 seguidos daria dado deslocado **sem erro aparente**, que é o pior tipo.
+- **ECC se detecta pelo tamanho do arquivo**, que é o método do próprio PCSX2
+  (`GetMemoryCardFileTypeFromSize`), não heurística nossa. Um teste monta o mesmo cartão nas duas
+  formas e exige resultado idêntico.
+- **Pasta de save atravessa clusters não-contíguos**, então a leitura segue a FAT de verdade. Tem
+  teste com pasta espalhada e um cluster livre no meio, de propósito.
+- **A semântica é a mesma do PS1**, e agora é uma função só (`card_identity`): um jogo no cartão
+  vira `Media(serial)`, vários viram `SharedCard`. O arquivo continua **uma unidade de backup**.
+- **O nome do arquivo voltou a valer como último recurso.** Trocar a identidade quebrou um teste
+  que existia: cartão ilegível nomeado `SLUS-20062.ps2` perdia a identificação. O conteúdo manda,
+  mas quando ele não diz nada o nome ainda é evidência. Vale para PS1 e PS2.
+
+Provado no cartão real do Maycon: `Mcd001.ps2` virou
+`Def Jam FFNY MAYC, God Of War, Jackie Chan Adventures, NFSU (shared memory cards)`. Os outros dois
+cartões dele estão formatados e vazios, e seguem sem identificação — o que é a resposta certa.
+
+**Continua faltando, e é a maior lacuna:** jogo de PCSX2 que só tem estado salvo continua só com o
+código. O `.p2s` é um zip que não guarda o título. A saída conhecida é o banco oficial do próprio
+emulador (`GameIndex.yaml` do PCSX2, `gamedb.yaml` do DuckStation), que resolve o serial para nome
+de toda a biblioteca e já está no disco de quem tem o emulador — mas na pasta do **programa**, não
+na de dados. Ficou fora por decisão do Maycon. Se voltar, a forma já está escolhida: sondar as
+pastas vizinhas à pasta de dados e **verificar abrindo o arquivo**, nunca aceitar por palpite.
+
 ### 5.8 A assinatura marcava o dado do usuário — CORRIGIDO em 2026-08-03
 
 **O defeito mais sério encontrado até agora, e ele só apareceu rodando.** Ao apagar `memcards/`
@@ -419,8 +498,9 @@ Do **PCSX2**, tirado do código-fonte do emulador e ainda não confirmado contra
 7. **Memory card em pasta** (a opção "folder memory card") é um **diretório**, não um arquivo, e a
    varredura só olha arquivos. Hoje esse usuário fica sem backup do cartão, em silêncio. É a maior
    lacuna conhecida do perfil, e resolver exige área com descida recursiva.
-8. Se o `.ps2` de cartão tem alguma âncora estável de serial legível sem montar o sistema de
-   arquivos do PS2. Se tiver, a identidade deixa de ser opaca no caso padrão.
+8. ~~Se o `.ps2` de cartão tem alguma âncora estável de serial legível sem montar o sistema de
+   arquivos do PS2.~~ **RESPONDIDO em 2026-08-10, e a resposta foi montar o sistema de arquivos**
+   (ver 5.10). O serial está no nome da pasta de save, e o título no `icon.sys` dela.
 
 Do **Eden**, com a agravante de que o código-fonte da linhagem está indisponível:
 
