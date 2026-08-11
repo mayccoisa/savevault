@@ -1440,6 +1440,19 @@ impl Translator {
         translate("label-removed")
     }
 
+    pub fn unchanged_tooltip(&self) -> String {
+        translate("label-unchanged")
+    }
+
+    /// Dica do botão que esconde da lista os jogos sem alteração.
+    pub fn only_changes_tooltip(&self, showing_unchanged: bool) -> String {
+        if showing_unchanged {
+            translate("hide-unchanged-games")
+        } else {
+            translate("show-unchanged-games")
+        }
+    }
+
     fn consider_doing_a_preview(&self) -> String {
         translate("consider-doing-a-preview")
     }

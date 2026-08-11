@@ -105,6 +105,7 @@ impl Backup {
                         ),
                         self.log.is_filtered(),
                     ))
+                    .push(button::only_changes(config.scan.show_unchanged_games))
                     .push(button::filter(self.log.search.show)),
             )
             .push(make_status_row(

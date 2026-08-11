@@ -194,6 +194,7 @@ redirect-bidirectional = Bidirecional
 reverse-redirects-when-restoring = Reverter sequência de redirecionamentos durante restauração
 show-disabled-games = Mostrar jogos desativados
 show-unchanged-games = Mostrar jogos inalterados
+hide-unchanged-games = Esconder jogos inalterados
 show-unscanned-games = Mostrar jogos não escaneados
 override-max-threads = Substituir o número máximo de threads
 synchronize-automatically = Sincronizar automaticamente

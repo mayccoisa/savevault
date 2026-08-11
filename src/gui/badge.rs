@@ -54,7 +54,7 @@ impl Badge {
                 ScanChange::New => Some(TRANSLATOR.new_tooltip()),
                 ScanChange::Different => Some(TRANSLATOR.updated_tooltip()),
                 ScanChange::Removed => Some(TRANSLATOR.removed_tooltip()),
-                ScanChange::Same => None,
+                ScanChange::Same => Some(TRANSLATOR.unchanged_tooltip()),
                 ScanChange::Unknown => None,
             },
             width: Some(Length::Fixed(CHANGE_BADGE_WIDTH)),
@@ -81,6 +81,14 @@ impl Badge {
 
     pub fn removed_entry() -> Self {
         Self::scan_change(ScanChange::Removed)
+    }
+
+    /// O jogo foi varrido e está igual ao que já está no backup.
+    ///
+    /// Sem este selo, "varri e não mudou nada" e "ainda não varri" ficam idênticos na tela, e a
+    /// pessoa não tem como saber se o backup dela está em dia.
+    pub fn unchanged_entry() -> Self {
+        Self::scan_change(ScanChange::Same)
     }
 
     pub fn changed_entry_with_count(count: usize) -> Self {

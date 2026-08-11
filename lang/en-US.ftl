@@ -214,6 +214,7 @@ reverse-redirects-when-restoring = Reverse sequence of redirects when restoring
 
 show-disabled-games = Show disabled games
 show-unchanged-games = Show unchanged games
+hide-unchanged-games = Hide unchanged games
 show-unscanned-games = Show unscanned games
 override-max-threads = Override max threads
 synchronize-automatically = Synchronize automatically

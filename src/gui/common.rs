@@ -141,6 +141,9 @@ pub enum Message {
     ToggleGameListEntryExpanded {
         name: String,
     },
+    ToggleGameListGroupCollapsed {
+        origin: crate::scan::game_filter::Origin,
+    },
     ToggleGameListEntryTreeExpanded {
         name: String,
         keys: Vec<TreeNodeKey>,

@@ -155,6 +155,22 @@ pub fn filter<'a>(open: bool) -> Element<'a> {
     )
 }
 
+/// Esconde da lista os jogos que foram varridos e não mudaram.
+///
+/// Liga na **mesma** opção de Other/Options (`scan.show_unchanged_games`), de propósito: um
+/// segundo lugar onde esse estado vivesse daria duas verdades sobre a mesma coisa. O que muda é o
+/// alcance da mão — a pergunta "o que eu preciso salvar agora?" se faz na tela de backup, não
+/// numa tela de opções.
+pub fn only_changes<'a>(showing_unchanged: bool) -> Element<'a> {
+    template_extended(
+        Icon::VisibilityOff.text(),
+        Some(config::Event::ShowUnchangedGames(!showing_unchanged).into()),
+        (!showing_unchanged).then_some(style::Button::Negative),
+        None,
+        Some(TRANSLATOR.only_changes_tooltip(showing_unchanged)),
+    )
+}
+
 pub fn reset_filter<'a>(dirty: bool) -> Element<'a> {
     template(
         Icon::RemoveCircle.text(),

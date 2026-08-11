@@ -34,14 +34,46 @@ pub enum FilterKind {
 ///
 /// A lista mistura as duas coisas, e quem quer conferir o console não quer rolar por centenas de
 /// jogos de PC para achar meia dúzia de emulador.
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Hash)]
 pub enum Origin {
     #[default]
     Pc,
     Emulator(emulator::App),
 }
 
+/// Ordem de tela: os emuladores primeiro, o PC por último.
+///
+/// É a mesma regra que [`crate::scan::game_group::GameGroup`] já usa, e pelo mesmo motivo: o PC é
+/// o balde grande. Num backup real são 130 jogos de PC contra meia dúzia de emulador, e pôr o
+/// balde na frente obrigaria a rolar a lista inteira para chegar ao punhado que se veio conferir.
+impl Ord for Origin {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        let rank = |origin: &Self| match origin {
+            Self::Emulator(app) => (0, Some(*app)),
+            Self::Pc => (1, None),
+        };
+        rank(self).cmp(&rank(other))
+    }
+}
+
+impl PartialOrd for Origin {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
 impl Origin {
+    /// De onde vem este jogo, segundo o que o scan gravou.
+    ///
+    /// Mesma regra do [`Self::qualifies`], do outro lado: lá se pergunta "este jogo é deste
+    /// grupo?", aqui "de que grupo é este jogo?".
+    pub fn of(scan: &ScanInfo) -> Self {
+        match scan.semantics.emulator() {
+            Some(app) => Self::Emulator(app),
+            None => Self::Pc,
+        }
+    }
+
     /// O PC primeiro, depois cada emulador conhecido.
     pub fn all() -> Vec<Self> {
         std::iter::once(Self::Pc)
@@ -235,6 +267,30 @@ mod tests {
         assert!(Origin::Emulator(emulator::App::Eden).qualifies(&switch));
         // E um emulador não pega o save do outro.
         assert!(!Origin::Emulator(emulator::App::Sudachi).qualifies(&switch));
+    }
+
+    /// A mesma armadilha do nome, agora no agrupamento da tela.
+    #[test]
+    fn the_group_of_a_game_comes_from_the_scan_not_from_its_name() {
+        assert_eq!(Origin::Pc, Origin::of(&scan_of("Eden Ring", None)));
+        assert_eq!(
+            Origin::Emulator(emulator::App::Eden),
+            Origin::of(&scan_of("Eden 0100000000010000", Some(emulator::App::Eden)))
+        );
+    }
+
+    /// O PC é o balde grande e vai por último, senão os poucos jogos de emulador ficariam depois
+    /// de uma lista de centenas.
+    #[test]
+    fn the_pc_group_sorts_last() {
+        let mut groups = [
+            Origin::Pc,
+            Origin::Emulator(emulator::App::Ppsspp),
+            Origin::Emulator(emulator::App::DuckStation),
+        ];
+        groups.sort();
+
+        assert_eq!(Some(&Origin::Pc), groups.last());
     }
 
     #[test]

@@ -133,7 +133,9 @@ impl GameListEntry {
                             ScanChange::New => Some(Badge::new_entry().faded(!enabled).view()),
                             ScanChange::Different => Some(Badge::changed_entry().faded(!enabled).view()),
                             ScanChange::Removed => None,
-                            ScanChange::Same => None,
+                            // Só depois de varrer. `Unknown` é o estado de quem ainda não foi
+                            // varrido, e dizer "sem alteração" ali seria afirmar o que não se sabe.
+                            ScanChange::Same => Some(Badge::unchanged_entry().faded(!enabled).view()),
                             ScanChange::Unknown => None,
                         })
                         .push_if(self.scan_info.any_ignored(), || {
@@ -389,11 +391,36 @@ impl GameListEntry {
     }
 }
 
+/// Cabeçalho de um grupo da lista: de onde vêm os jogos abaixo dele, e quantos são.
+///
+/// A contagem é dos jogos **visíveis**, não do total: com um filtro ligado, dizer "PPSSPP 12"
+/// sobre três linhas seria mentira sobre o que está na tela.
+fn group_header<'a>(origin: game_filter::Origin, count: usize, open: bool) -> Button<'a> {
+    Button::new(
+        Row::new()
+            .spacing(10)
+            .align_y(Alignment::Center)
+            .push(if open {
+                Icon::KeyboardArrowDown.text()
+            } else {
+                Icon::KeyboardArrowRight.text()
+            })
+            .push(text(origin.to_string()).width(Length::Fill))
+            .push(text(count.to_string())),
+    )
+    .on_press(Message::ToggleGameListGroupCollapsed { origin })
+    .class(style::Button::GameListEntryTitle)
+    .width(Length::Fill)
+    .padding(5)
+}
+
 #[derive(Default)]
 pub struct GameList {
     pub entries: Vec<GameListEntry>,
     pub search: FilterComponent,
     expanded_games: HashSet<String>,
+    /// Grupos de origem que o usuário fechou. Ausente = aberto, que é o padrão.
+    collapsed_groups: HashSet<game_filter::Origin>,
     pub filter_duplicates_of: Option<String>,
 }
 
@@ -442,30 +469,54 @@ impl GameList {
                     )
                 })
                 .push({
-                    let content = self
+                    let visible: Vec<&GameListEntry> = self
                         .entries
                         .iter()
                         .filter(|entry| {
                             self.filter_game(entry, scan_kind, config, manifest, duplicate_detector, duplicatees)
                         })
-                        .fold(
-                            Column::new()
-                                .width(Length::Fill)
-                                .padding(padding::bottom(5).left(15).right(15))
-                                .spacing(5),
-                            |parent, x| {
-                                parent.push(x.view(
-                                    scan_kind,
-                                    config,
-                                    manifest,
-                                    duplicate_detector,
-                                    operation,
-                                    self.expanded_games.contains(&x.scan_info.game_name),
-                                    modifiers,
-                                    duplicatees.is_some(),
-                                ))
-                            },
-                        );
+                        .collect();
+
+                    // Sem emulador configurado, tudo cairia num grupo só: um cabeçalho "Este PC"
+                    // sobre a lista inteira não separa nada e só rouba uma linha.
+                    let grouped = visible
+                        .iter()
+                        .any(|entry| game_filter::Origin::of(&entry.scan_info) != game_filter::Origin::Pc);
+
+                    let mut content = Column::new()
+                        .width(Length::Fill)
+                        .padding(padding::bottom(5).left(15).right(15))
+                        .spacing(5);
+                    let mut open = true;
+                    let mut current: Option<game_filter::Origin> = None;
+
+                    for entry in visible.iter() {
+                        let origin = game_filter::Origin::of(&entry.scan_info);
+
+                        if grouped && current != Some(origin) {
+                            let count = visible
+                                .iter()
+                                .filter(|other| game_filter::Origin::of(&other.scan_info) == origin)
+                                .count();
+                            open = !self.collapsed_groups.contains(&origin);
+                            content = content.push(group_header(origin, count, open));
+                            current = Some(origin);
+                        }
+
+                        if open {
+                            content = content.push(entry.view(
+                                scan_kind,
+                                config,
+                                manifest,
+                                duplicate_detector,
+                                operation,
+                                self.expanded_games.contains(&entry.scan_info.game_name),
+                                modifiers,
+                                duplicatees.is_some(),
+                            ));
+                        }
+                    }
+
                     ScrollSubject::game_list(scan_kind).into_widget(content)
                 }),
         )
@@ -598,6 +649,12 @@ impl GameList {
         if sort.reversed {
             self.entries.reverse();
         }
+        // A origem entra DEPOIS de inverter, e não como parte da comparação, porque ela não é um
+        // critério de ordenação: é o agrupamento. Inverter a ordem tem que inverter os jogos
+        // dentro de cada grupo, nunca embaralhar os grupos entre si. `sort_by_key` é estável, o
+        // que preserva a ordem já escolhida dentro do grupo.
+        self.entries
+            .sort_by_key(|entry| game_filter::Origin::of(&entry.scan_info));
     }
 
     pub fn toggle_game_expanded(
@@ -645,6 +702,12 @@ impl GameList {
                 entry.clear_tree();
                 break;
             }
+        }
+    }
+
+    pub fn toggle_group_collapsed(&mut self, origin: game_filter::Origin) {
+        if !self.collapsed_groups.remove(&origin) {
+            self.collapsed_groups.insert(origin);
         }
     }
 

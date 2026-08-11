@@ -2196,6 +2196,14 @@ impl App {
                 self.close_specific_modal(modal::Kind::ConfirmAddMissingRoots)
             }
             Message::SwitchScreen(screen) => self.switch_screen(screen),
+            Message::ToggleGameListGroupCollapsed { origin } => {
+                match self.screen {
+                    Screen::Backup => self.backup_screen.log.toggle_group_collapsed(origin),
+                    Screen::Restore => self.restore_screen.log.toggle_group_collapsed(origin),
+                    _ => {}
+                }
+                Task::none()
+            }
             Message::ToggleGameListEntryExpanded { name } => {
                 match self.screen {
                     Screen::Backup => {
