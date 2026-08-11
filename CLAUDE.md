@@ -54,7 +54,8 @@ herdados que não são para consertar.
 - **Mescle o upstream antes de começar:** `git fetch upstream; git merge upstream/master`.
 - **Destino de emulador não resolvido NUNCA é escrito.** Cair no caminho absoluto do backup escreve
   na pasta de usuário de outra máquina, tem sucesso, e o usuário acredita que restaurou.
-- **Chave do jogo é o serial, nunca o título.** A chave é o nome da pasta de backup.
+- **Chave do jogo é o serial, nunca o título.** A pasta de backup é rótulo, não identidade: ela se
+  chama `<Título> (<serial>)`, e o backup é encontrado pelo nome gravado no `mapping.yaml`.
 - **Antes de estender uma struct, meça o custo:** `ScanInfo` custa ~2 edições, `ScannedFile` custa
   ~33, `IndividualMapping` ~37.
 - **Nunca insira campo em literal com expressão regular frouxa.** Já custou 47 linhas inválidas em

@@ -96,6 +96,33 @@ pub fn escape_folder_name(name: &str) -> String {
     escaped.replace(INVALID_FILE_CHARS, SAFE)
 }
 
+/// How much of a title goes into a folder name. A shared memory card lists every title on it, and
+/// a long one would eat the path budget that the backup's own files still need.
+const TITLE_IN_FOLDER_LIMIT: usize = 60;
+
+/// What to call an emulator game's backup folder: `"<title> (<identity>)"`.
+///
+/// The identity stays in the name because it is the game's key, and because it is the only part
+/// always available: a PS2 memory card is opaque by design and carries no title at all. The title
+/// leads because nobody memorises `SLUS-00774`, and the point of the folder list is to let someone
+/// see at a glance whether everything they wanted was backed up.
+///
+/// This is a label, never an identity. The backup is found by the name recorded inside its
+/// `mapping.yaml`, so a title that is read on one run and missed on the next only renames the
+/// folder; it cannot orphan a backup or create a second one for the same game.
+fn emulator_folder_name(id: &str, title: Option<&str>) -> String {
+    let Some(title) = title.map(str::trim).filter(|title| !title.is_empty() && *title != id) else {
+        return id.to_string();
+    };
+
+    let mut title = title.to_string();
+    if title.chars().count() > TITLE_IN_FOLDER_LIMIT {
+        title = title.chars().take(TITLE_IN_FOLDER_LIMIT).collect::<String>().trim_end().to_string();
+    }
+
+    format!("{title} ({id})")
+}
+
 pub struct LatestBackup {
     pub scan: ScanInfo,
     pub when: chrono::DateTime<chrono::Utc>,
@@ -1689,7 +1716,8 @@ impl GameLayout {
         Some(())
     }
 
-    /// Put this game's backup folder inside a folder named after its emulator.
+    /// Put this game's backup folder inside a folder named after its emulator, under a name a
+    /// person can read: see [`emulator_folder_name`].
     ///
     /// Without it, emulator games sit scattered among the PC games: on a real backup of 138 games,
     /// seven DuckStation folders and two PPSSPP ones end up sorted alphabetically among them.
@@ -1709,19 +1737,29 @@ impl GameLayout {
         let Some(parent) = self.path.parent() else { return };
         let Some(leaf) = self.path.leaf() else { return };
 
-        // Já está agrupado.
-        if parent.leaf().as_deref() == Some(app.name()) {
+        let grouped = parent.leaf().as_deref() == Some(app.name());
+        let app_dir = if grouped { parent.clone() } else { parent.joined(app.name()) };
+
+        // The identity comes from the game's key, never from the folder's own name. Once a folder
+        // carries a title, its name is no longer the identity, and reading it back would feed the
+        // title into the next name, one nesting per backup.
+        let id = crate::scan::emulator::App::from_game_key(&scan.game_name)
+            .filter(|(keyed, _)| *keyed == app)
+            .map(|(_, id)| id)
+            .unwrap_or_else(|| leaf.strip_prefix(&format!("{} ", app.name())).unwrap_or(&leaf).to_string());
+
+        let wanted = app_dir.joined(escape_folder_name(&emulator_folder_name(&id, scan.title.as_deref())));
+
+        // Already where it belongs, under the name it should have.
+        if self.path.equivalent(&wanted) {
             return;
         }
-
-        let name = leaf.strip_prefix(&format!("{} ", app.name())).unwrap_or(&leaf).to_string();
-        let wanted = parent.joined(app.name()).joined(escape_folder_name(&name));
 
         if wanted.exists() {
             log::warn!("[{}] not regrouping: {wanted:?} already exists", scan.game_name);
             return;
         }
-        if let Err(e) = parent.joined(app.name()).create_dirs() {
+        if let Err(e) = app_dir.create_dirs() {
             log::warn!("[{}] unable to create emulator folder: {e:?}", scan.game_name);
             return;
         }
@@ -2757,6 +2795,127 @@ mod tests {
                     .get("DuckStation SLUS-00067")
                     .is_some_and(|found| found.equivalent(&wanted)),
                 "o backup agrupado tem que continuar sendo encontrado"
+            );
+        }
+
+        /// Nobody memorises `SLUS-00774`, so the title the save carries leads the folder name and
+        /// the identity follows it in parentheses.
+        #[test]
+        fn an_emulator_folder_is_named_by_title_with_the_identity_in_parentheses() {
+            assert_eq!(
+                "CASTLEVANIA SOTN (SLUS-00067)",
+                emulator_folder_name("SLUS-00067", Some("CASTLEVANIA SOTN"))
+            );
+        }
+
+        /// A PS2 memory card is opaque by design and carries no title. The identity alone is the
+        /// honest answer; inventing a name would be a guess about someone's save.
+        #[test]
+        fn an_emulator_folder_without_a_title_is_just_the_identity() {
+            assert_eq!("SLUS-00067", emulator_folder_name("SLUS-00067", None));
+            assert_eq!("SLUS-00067", emulator_folder_name("SLUS-00067", Some("   ")));
+            assert_eq!("SLUS-00067", emulator_folder_name("SLUS-00067", Some("SLUS-00067")));
+        }
+
+        /// A shared memory card lists every title on it. Left whole, it would eat the path budget
+        /// that the backup's own files still need.
+        #[test]
+        fn a_long_title_is_truncated_in_the_folder_name() {
+            let long = "A".repeat(200);
+            let name = emulator_folder_name("shared memory cards", Some(&long));
+
+            assert_eq!(
+                format!("{} (shared memory cards)", "A".repeat(TITLE_IN_FOLDER_LIMIT)),
+                name
+            );
+        }
+
+        /// The whole point of the change, end to end: the folder on disk reads as a game.
+        #[test]
+        fn an_emulator_backup_folder_carries_the_title() {
+            let dir = tempfile::tempdir().unwrap();
+            let base = StrictPath::from(dir.path().to_path_buf());
+
+            let mut layout = BackupLayout::new(base.clone()).game_layout("DuckStation SLUS-00067");
+            layout.back_up(
+                &ScanInfo {
+                    title: Some("CASTLEVANIA SOTN".to_string()),
+                    ..emulator_scan("DuckStation SLUS-00067", crate::scan::emulator::App::DuckStation)
+                },
+                &now(),
+                &BackupFormats::default(),
+                Retention::default(),
+                false,
+            );
+
+            assert_eq!(
+                base.joined("DuckStation").joined("CASTLEVANIA SOTN (SLUS-00067)"),
+                layout.path
+            );
+            assert!(
+                BackupLayout::load(&base).contains_key("DuckStation SLUS-00067"),
+                "a chave continua sendo o serial, e o backup continua sendo encontrado por ela"
+            );
+        }
+
+        /// A backup made before the title was readable is renamed once it is known, and stays
+        /// restorable: the folder is a label, and the identity lives in `mapping.yaml`.
+        #[test]
+        fn a_grouped_backup_gains_the_title_on_the_next_backup() {
+            let dir = tempfile::tempdir().unwrap();
+            let base = StrictPath::from(dir.path().to_path_buf());
+
+            let old = base.joined("DuckStation").joined("SLUS-00067");
+            old.create_dirs().unwrap();
+            IndividualMapping::new("DuckStation SLUS-00067".to_string()).save(&old.joined("mapping.yaml"));
+
+            let mut layout = BackupLayout::new(base.clone()).game_layout("DuckStation SLUS-00067");
+            // Por equivalência: o caminho vem da listagem do sistema de arquivos, com a barra do
+            // Windows.
+            assert!(old.equivalent(&layout.path));
+
+            layout.back_up(
+                &ScanInfo {
+                    title: Some("CASTLEVANIA SOTN".to_string()),
+                    ..emulator_scan("DuckStation SLUS-00067", crate::scan::emulator::App::DuckStation)
+                },
+                &now(),
+                &BackupFormats::default(),
+                Retention::default(),
+                false,
+            );
+
+            let wanted = base.joined("DuckStation").joined("CASTLEVANIA SOTN (SLUS-00067)");
+            assert_eq!(wanted, layout.path);
+            assert!(!old.exists());
+            assert!(
+                BackupLayout::load(&base)
+                    .get("DuckStation SLUS-00067")
+                    .is_some_and(|found| found.equivalent(&wanted)),
+                "o backup renomeado tem que continuar sendo encontrado"
+            );
+        }
+
+        /// The folder name must never be read back as the identity: doing so would fold the title
+        /// into the next name, nesting one level per backup.
+        #[test]
+        fn a_titled_folder_is_not_renamed_again_on_the_next_backup() {
+            let dir = tempfile::tempdir().unwrap();
+            let base = StrictPath::from(dir.path().to_path_buf());
+
+            let scan = ScanInfo {
+                title: Some("CASTLEVANIA SOTN".to_string()),
+                ..emulator_scan("DuckStation SLUS-00067", crate::scan::emulator::App::DuckStation)
+            };
+
+            let mut layout = BackupLayout::new(base.clone()).game_layout("DuckStation SLUS-00067");
+            for _ in 0..2 {
+                layout.back_up(&scan, &now(), &BackupFormats::default(), Retention::default(), false);
+            }
+
+            assert_eq!(
+                base.joined("DuckStation").joined("CASTLEVANIA SOTN (SLUS-00067)"),
+                layout.path
             );
         }
 
