@@ -3,7 +3,7 @@
 SaveVault is a fork of [Ludusavi](https://github.com/mtkennerly/ludusavi) by Michael Kennerly.
 Everything under "Inherited from Ludusavi" is the upstream history, with its own version numbers.
 
-## SaveVault (não publicado)
+## SaveVault v0.6.0 (2026-08-10)
 
 * Added:
   * Emulator games find their name in more places, so fewer backup folders are just a code:
