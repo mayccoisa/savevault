@@ -11,8 +11,11 @@
 
 use crate::{path::CommonPath, prelude::StrictPath, resource::config::Root};
 
+pub mod duckstation_state;
 pub mod param_sfo;
+pub mod ps2_card;
 pub mod psx_card;
+pub mod text;
 
 /// Um emulador conhecido.
 #[derive(
@@ -210,6 +213,17 @@ pub enum Identity {
     /// Do identificador da PlayStation no começo do nome do arquivo, sem hífen
     /// (`ULUS12345_1.00_1.ppst`).
     FilenamePlaystationId,
+    /// De dentro do arquivo, lendo o sistema de arquivos do memory card do PS2.
+    ///
+    /// Mesma ideia do [`Self::PsxCard`], noutro formato: o cartão do PS2 tem uma pasta por jogo,
+    /// cujo nome traz o serial, e um `icon.sys` com o nome que o jogo escreveu.
+    Ps2Card,
+    /// Do cabeçalho do estado salvo do DuckStation, que declara serial **e** título.
+    ///
+    /// O nome do arquivo já traz o serial, então isto não muda quem é o jogo; o que ele
+    /// acrescenta é o **nome**, que o nome do arquivo não tem. Sem isso, quem só usa estado salvo
+    /// e nunca gravou num memory card vê o backup inteiro identificado por código.
+    DuckstationState,
 }
 
 impl Identity {
@@ -221,7 +235,11 @@ impl Identity {
             Self::TitleIdFolder => Some(title_id_in),
             Self::XboxTitleFolder => Some(xbox_title_id_in),
             Self::PlaystationFolder => Some(param_sfo::title_id_prefix),
-            Self::PsxCard | Self::FilenameMediaCode | Self::FilenamePlaystationId => None,
+            Self::PsxCard
+            | Self::Ps2Card
+            | Self::FilenameMediaCode
+            | Self::FilenamePlaystationId
+            | Self::DuckstationState => None,
         }
     }
 }
@@ -291,7 +309,7 @@ const DUCKSTATION: Profile = Profile {
             area: Area::Savestates,
             subdir: "savestates",
             extensions: &["sav"],
-            identity: Identity::FilenameMediaCode,
+            identity: Identity::DuckstationState,
             only_subdirs: &[],
         },
     ],
@@ -324,10 +342,10 @@ const PCSX2: Profile = Profile {
             subdir: "memcards",
             // O cartão do PS2 é `.ps2`; `.mcd` aparece em cartão importado de outra ferramenta.
             extensions: &["ps2", "mcd"],
-            // O cartão do PS2 não é o do PS1: é um sistema de arquivos interno, e o padrão
-            // `Mcd001.ps2` não carrega serial nenhum. Identidade opaca é melhor que palpite;
-            // ver a pendência do PCSX2 no HANDOFF.md.
-            identity: Identity::FilenameMediaCode,
+            // O cartão do PS2 é um sistema de arquivos interno, e o nome padrão `Mcd001.ps2` não
+            // carrega serial nenhum. A identidade vem de dentro: cada jogo tem uma pasta cujo
+            // nome traz o serial. Fonte no comentário de `ps2_card`.
+            identity: Identity::Ps2Card,
             only_subdirs: &[],
         },
         AreaSpec {
@@ -1078,36 +1096,22 @@ fn attribute(app: App, spec: &AreaSpec, area_root: &StrictPath, file: &StrictPat
 
     match spec.identity {
         Identity::PsxCard => {
-            let entries = file
-                .as_std_path_buf()
-                .ok()
-                .and_then(|path| std::fs::read(path).ok())
-                .map(|bytes| psx_card::read_entries(&bytes))
-                .unwrap_or_default();
-
-            let mut codes: Vec<&psx_card::CardEntry> = vec![];
-            for entry in &entries {
-                if !codes.iter().any(|seen| seen.serial == entry.serial) {
-                    codes.push(entry);
-                }
-            }
-
-            match codes.as_slice() {
-                // Cartão vazio, ilegível ou fora do formato: não some, vira jogo pelo nome.
-                [] => vec![make(GameId::Unidentified(file_stem(file)), None)],
-                // Um jogo só dentro do cartão: o cartão é desse jogo, mesmo que o nome do
-                // arquivo diga outra coisa. É o que faz o modo "um cartão por título" funcionar.
-                [only] => vec![make(GameId::Media(only.serial.clone()), only.title.clone())],
-                // Vários jogos num arquivo indivisível.
-                many => {
-                    let title = many
-                        .iter()
-                        .map(|entry| entry.title.clone().unwrap_or_else(|| entry.serial.clone()))
-                        .collect::<Vec<_>>()
-                        .join(", ");
-                    vec![make(GameId::SharedCard, Some(title))]
-                }
-            }
+            let games = read_card(file, |bytes| {
+                psx_card::read_entries(bytes)
+                    .into_iter()
+                    .map(|entry| (entry.serial, entry.title))
+                    .collect()
+            });
+            card_identity(games, file, &make)
+        }
+        Identity::Ps2Card => {
+            let games = read_card(file, |bytes| {
+                ps2_card::read_entries(bytes)
+                    .into_iter()
+                    .map(|entry| (entry.serial, entry.title))
+                    .collect()
+            });
+            card_identity(games, file, &make)
         }
         // Tratadas antes de chegar aqui, em `discover_saves`, porque a unidade não é o arquivo:
         // é a pasta, e ela precisa de descida recursiva.
@@ -1128,7 +1132,97 @@ fn attribute(app: App, spec: &AreaSpec, area_root: &StrictPath, file: &StrictPat
             };
             vec![make(game, None)]
         }
+        Identity::DuckstationState => {
+            let header = read_prefix(file, duckstation_state::HEADER_PREFIX)
+                .as_deref()
+                .and_then(duckstation_state::read_header);
+
+            let stem = file_stem(file);
+            // O serial do cabeçalho manda, mas o nome do arquivo continua valendo quando ele
+            // falha: um estado salvo de versão antiga ainda é progresso, e perdê-lo de vista
+            // seria pior que ficar sem o nome.
+            let serial = header
+                .as_ref()
+                .and_then(|info| info.serial.clone())
+                .or_else(|| psx_card::media_code_in(&stem));
+
+            let game = match serial {
+                Some(code) => GameId::Media(code),
+                None => GameId::Unidentified(stem),
+            };
+            vec![make(game, header.and_then(|info| info.title))]
+        }
     }
+}
+
+/// Lê uma imagem de cartão e devolve os jogos que ela contém, como pares de serial e título.
+fn read_card(file: &StrictPath, parse: impl Fn(&[u8]) -> Vec<(String, Option<String>)>) -> Vec<(String, Option<String>)> {
+    file.as_std_path_buf()
+        .ok()
+        .and_then(|path| std::fs::read(path).ok())
+        .map(|bytes| parse(&bytes))
+        .unwrap_or_default()
+}
+
+/// A identidade de um arquivo de cartão, a partir dos jogos gravados dentro dele.
+///
+/// Vale para o PS1 e para o PS2, porque a regra é a mesma nos dois e vem do formato, não do
+/// console: o **arquivo é indivisível**, então um cartão com vários jogos é uma unidade de backup
+/// só, e não pode ser anexado a cada jogo que mora nele.
+fn card_identity(
+    games: Vec<(String, Option<String>)>,
+    file: &StrictPath,
+    make: &impl Fn(GameId, Option<String>) -> DiscoveredSave,
+) -> Vec<DiscoveredSave> {
+    let mut unique: Vec<(String, Option<String>)> = vec![];
+    for (serial, title) in games {
+        if !unique.iter().any(|(seen, _)| *seen == serial) {
+            unique.push((serial, title));
+        }
+    }
+
+    match unique.as_slice() {
+        // Cartão vazio, ilegível ou fora do formato. O conteúdo não disse nada, mas o nome do
+        // arquivo ainda é evidência: quem nomeia o cartão pelo serial ganha a identificação de
+        // graça. Sem nem isso, o save não some — vira jogo pelo nome do arquivo.
+        [] => {
+            let stem = file_stem(file);
+            let game = match psx_card::media_code_in(&stem) {
+                Some(code) => GameId::Media(code),
+                None => GameId::Unidentified(stem),
+            };
+            vec![make(game, None)]
+        }
+        // Um jogo só dentro do cartão: o cartão é desse jogo, mesmo que o nome do arquivo diga
+        // outra coisa. É o que faz o modo "um cartão por título" funcionar.
+        [(serial, title)] => vec![make(GameId::Media(serial.clone()), title.clone())],
+        // Vários jogos num arquivo indivisível.
+        many => {
+            let title = many
+                .iter()
+                .map(|(serial, title)| title.clone().unwrap_or_else(|| serial.clone()))
+                .collect::<Vec<_>>()
+                .join(", ");
+            vec![make(GameId::SharedCard, Some(title))]
+        }
+    }
+}
+
+/// Lê só o começo de um arquivo.
+///
+/// Existe pelo estado salvo do DuckStation, que chega a 32 MB e do qual só interessam 168 bytes.
+/// Ler o arquivo inteiro para descobrir o nome do jogo custaria centenas de megabytes de leitura
+/// numa pasta com algumas dezenas de estados salvos, a cada varredura.
+fn read_prefix(file: &StrictPath, len: usize) -> Option<Vec<u8>> {
+    use std::io::Read;
+
+    let mut buffer = Vec::with_capacity(len);
+    std::fs::File::open(file.as_std_path_buf().ok()?)
+        .ok()?
+        .take(len as u64)
+        .read_to_end(&mut buffer)
+        .ok()?;
+    Some(buffer)
 }
 
 fn file_stem(file: &StrictPath) -> String {
@@ -1615,6 +1709,46 @@ mod tests {
         assert_eq!(GameId::Unidentified("resume".to_string()), found[0].game);
     }
 
+    /// Monta o cabeçalho de um estado salvo do DuckStation, segundo o formato.
+    fn duckstation_state_bytes(title: &str, serial: &str) -> Vec<u8> {
+        let mut bytes = vec![0u8; duckstation_state::HEADER_PREFIX];
+        bytes[0..4].copy_from_slice(&0x4343_5544u32.to_le_bytes());
+        bytes[4..8].copy_from_slice(&83u32.to_le_bytes());
+        bytes[0x08..0x08 + title.len()].copy_from_slice(title.as_bytes());
+        bytes[0x88..0x88 + serial.len()].copy_from_slice(serial.as_bytes());
+        bytes
+    }
+
+    /// O ganho da fatia: o estado salvo passa a dizer o nome do jogo, que o nome do arquivo não
+    /// tem. Antes disto, quem só usa estado salvo via o backup inteiro identificado por código.
+    #[test]
+    fn a_savestate_declares_the_title_of_its_game() {
+        let install = FakeInstall::installed().dir("savestates").file(
+            "savestates/SLUS-00774_1.sav",
+            &duckstation_state_bytes("X-Men - Mutant Academy", "SLUS-00774"),
+        );
+
+        let found = discover_saves(App::DuckStation, &install.root);
+
+        assert_eq!(1, found.len());
+        assert_eq!(GameId::Media("SLUS-00774".to_string()), found[0].game);
+        assert_eq!(Some("X-Men - Mutant Academy".to_string()), found[0].title);
+    }
+
+    /// O cabeçalho manda sobre o nome do arquivo, que é o que faz o estado salvo renomeado à mão
+    /// continuar caindo junto do resto do progresso daquele jogo.
+    #[test]
+    fn a_savestate_is_identified_by_its_header_not_its_filename() {
+        let install = FakeInstall::installed().dir("savestates").file(
+            "savestates/estado antigo.sav",
+            &duckstation_state_bytes("X-Men - Mutant Academy", "SLUS-00774"),
+        );
+
+        let found = discover_saves(App::DuckStation, &install.root);
+
+        assert_eq!(GameId::Media("SLUS-00774".to_string()), found[0].game);
+    }
+
     #[test]
     fn recognizes_a_pcsx2_data_root() {
         let install = FakeInstall::pcsx2();
@@ -1677,6 +1811,37 @@ mod tests {
         assert_eq!(Area::Memcards, found[0].area);
         assert_eq!(GameId::Unidentified("Mcd001".to_string()), found[0].game);
         assert_eq!("PCSX2 Mcd001", found[0].game.game_key(App::Pcsx2));
+    }
+
+    /// O cartão do PS2 deixou de ser opaco: o jogo é identificado pelo que está **dentro** dele,
+    /// mesmo com o nome padrão `Mcd001.ps2`, que não carrega serial nenhum.
+    #[test]
+    fn a_pcsx2_memory_card_is_identified_by_its_contents() {
+        let card = ps2_card::tests::card_with(&[("BASLUS-21004MAYC", "DEF JAM FIGHT FOR NY")]);
+        let install = FakeInstall::pcsx2().file("memcards/Mcd001.ps2", &card);
+
+        let found = discover_saves(App::Pcsx2, &install.root);
+
+        assert_eq!(1, found.len());
+        assert_eq!(GameId::Media("SLUS-21004".to_string()), found[0].game);
+        assert_eq!(Some("DEF JAM FIGHT FOR NY".to_string()), found[0].title);
+    }
+
+    /// Um cartão com vários jogos é **uma** unidade de backup, porque o arquivo é indivisível.
+    /// Anexá-lo a cada jogo faria o mesmo arquivo ser gravado uma vez por jogo.
+    #[test]
+    fn a_pcsx2_memory_card_with_several_games_becomes_one_shared_entry() {
+        let card = ps2_card::tests::card_with(&[
+            ("BASLUS-21004MAYC", "DEF JAM"),
+            ("BASCUS-97399GodOfWar", "GOD OF WAR"),
+        ]);
+        let install = FakeInstall::pcsx2().file("memcards/Mcd001.ps2", &card);
+
+        let found = discover_saves(App::Pcsx2, &install.root);
+
+        assert_eq!(1, found.len());
+        assert_eq!(GameId::SharedCard, found[0].game);
+        assert_eq!(Some("DEF JAM, GOD OF WAR".to_string()), found[0].title);
     }
 
     /// Quem nomeia o cartão por jogo ganha a identificação de graça, pela mesma regra do

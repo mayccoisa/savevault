@@ -117,37 +117,9 @@ fn read_title(frame: &[u8]) -> Option<String> {
         return None;
     }
 
-    let raw = frame.get(TITLE_TEXT)?;
-    // O título é preenchido com zeros até 64 bytes. Cortar antes de decodificar, para o
+    // O título é preenchido com zeros até 64 bytes; a decodificação corta no zero, para o
     // decodificador não ver o preenchimento como caractere.
-    let raw = match raw.iter().position(|byte| *byte == 0) {
-        Some(end) => &raw[..end],
-        None => raw,
-    };
-
-    let (decoded, _, had_errors) = encoding_rs::SHIFT_JIS.decode(raw);
-    if had_errors {
-        return None;
-    }
-
-    let title = normalize_width(decoded.trim());
-    (!title.is_empty()).then_some(title)
-}
-
-/// Converte as formas de largura inteira para ASCII comum.
-///
-/// Jogos de PS1 gravam o título em largura inteira com frequência (`ＦＦ９` em vez de `FF9`),
-/// porque o cartão é lido por um menu japonês. É mapeamento canônico do Unicode, não adivinhação.
-fn normalize_width(text: &str) -> String {
-    text.chars()
-        .map(|c| match c {
-            '\u{3000}' => ' ',
-            '\u{FF01}'..='\u{FF5E}' => char::from_u32(c as u32 - 0xFF01 + 0x21).unwrap_or(c),
-            _ => c,
-        })
-        .collect::<String>()
-        .trim()
-        .to_string()
+    super::text::decode_shift_jis(frame.get(TITLE_TEXT)?)
 }
 
 #[cfg(test)]
