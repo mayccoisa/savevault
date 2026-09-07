@@ -147,6 +147,8 @@ pub enum Text {
     #[default]
     Default,
     Failure,
+    /// Secondary text, for the context strip under the command bar.
+    Muted,
 }
 impl iced::widget::text::Catalog for Theme {
     type Class<'a> = Text;
@@ -158,6 +160,9 @@ impl iced::widget::text::Catalog for Theme {
     fn style(&self, item: &Self::Class<'_>) -> iced::widget::text::Style {
         match item {
             Text::Default => iced::widget::text::Style { color: None },
+            Text::Muted => iced::widget::text::Style {
+                color: Some(self.text_skipped),
+            },
             Text::Failure => iced::widget::text::Style {
                 color: Some(self.negative),
             },
@@ -202,6 +207,10 @@ pub enum Button {
     GameListEntryTitleUnscanned,
     NavButtonActive,
     NavButtonInactive,
+    SideNavActive,
+    SideNavInactive,
+    /// Outlined button, for what shares a bar with the primary action without competing with it.
+    Secondary,
     Badge,
     Bare,
 }
@@ -221,18 +230,19 @@ impl button::Catalog for Theme {
                 Button::GameListEntryTitleDisabled => Some(self.skipped.into()),
                 Button::GameListEntryTitleUnscanned => None,
                 Button::Negative => Some(self.negative.into()),
-                Button::NavButtonActive => Some(self.navigation.alpha(0.9).into()),
-                Button::NavButtonInactive => None,
+                Button::NavButtonActive | Button::SideNavActive => Some(self.navigation.alpha(0.9).into()),
+                Button::NavButtonInactive | Button::SideNavInactive | Button::Secondary => None,
                 Button::Badge => None,
                 Button::Bare => None,
             },
             border: Border {
                 color: match class {
                     Button::NavButtonActive | Button::NavButtonInactive => self.navigation,
+                    Button::Secondary => self.field,
                     _ => Color::TRANSPARENT,
                 },
                 width: match class {
-                    Button::NavButtonActive | Button::NavButtonInactive => 1.0,
+                    Button::NavButtonActive | Button::NavButtonInactive | Button::Secondary => 1.0,
                     _ => 0.0,
                 },
                 radius: match class {
@@ -242,20 +252,29 @@ impl button::Catalog for Theme {
                     | Button::GameListEntryTitleDisabled
                     | Button::GameListEntryTitleUnscanned
                     | Button::NavButtonActive
-                    | Button::NavButtonInactive => 10.0.into(),
+                    | Button::NavButtonInactive
+                    | Button::SideNavActive
+                    | Button::SideNavInactive => 9.0.into(),
                     _ => 4.0.into(),
                 },
             },
             text_color: match class {
                 Button::GameListEntryTitleDisabled => self.text_skipped.alpha(0.8),
                 Button::GameListEntryTitleUnscanned => self.text.alpha(0.8),
-                Button::NavButtonActive | Button::NavButtonInactive | Button::Bare => self.text,
+                Button::NavButtonActive | Button::NavButtonInactive | Button::Bare | Button::SideNavActive => {
+                    self.text
+                }
+                Button::Secondary => self.text,
+                Button::SideNavInactive => self.text_skipped,
                 Button::Primary | Button::GameActionPrimary => self.accent_ink,
                 _ => self.text_button.alpha(0.8),
             },
             shadow: Shadow {
                 offset: match class {
-                    Button::NavButtonActive | Button::NavButtonInactive => Vector::new(0.0, 0.0),
+                    Button::NavButtonActive
+                    | Button::NavButtonInactive
+                    | Button::SideNavActive
+                    | Button::SideNavInactive => Vector::new(0.0, 0.0),
                     _ => Vector::new(1.0, 1.0),
                 },
                 ..Default::default()
@@ -267,8 +286,9 @@ impl button::Catalog for Theme {
             button::Status::Active => active,
             button::Status::Hovered => button::Style {
                 background: match class {
-                    Button::NavButtonActive => Some(self.navigation.alpha(0.95).into()),
-                    Button::NavButtonInactive => Some(self.navigation.alpha(0.2).into()),
+                    Button::NavButtonActive | Button::SideNavActive => Some(self.navigation.alpha(0.95).into()),
+                    Button::NavButtonInactive | Button::SideNavInactive => Some(self.navigation.alpha(0.5).into()),
+                    Button::Secondary => Some(self.field.into()),
                     _ => active.background,
                 },
                 border: Border {
@@ -287,16 +307,22 @@ impl button::Catalog for Theme {
                 },
                 text_color: match class {
                     Button::GameListEntryTitleDisabled => self.text_skipped,
-                    Button::GameListEntryTitleUnscanned | Button::NavButtonActive | Button::NavButtonInactive => {
-                        self.text
-                    }
+                    Button::GameListEntryTitleUnscanned
+                    | Button::NavButtonActive
+                    | Button::NavButtonInactive
+                    | Button::SideNavActive
+                    | Button::SideNavInactive => self.text,
                     Button::Bare => self.text.alpha(0.9),
+                    Button::Secondary => self.text,
                     Button::Primary | Button::GameActionPrimary => self.accent_ink,
                     _ => self.text_button,
                 },
                 shadow: Shadow {
                     offset: match class {
-                        Button::NavButtonActive | Button::NavButtonInactive => Vector::new(0.0, 0.0),
+                        Button::NavButtonActive
+                        | Button::NavButtonInactive
+                        | Button::SideNavActive
+                        | Button::SideNavInactive => Vector::new(0.0, 0.0),
                         _ => Vector::new(1.0, 2.0),
                     },
                     ..Default::default()
@@ -337,6 +363,14 @@ pub enum Container {
     #[default]
     Wrapper,
     Primary,
+    /// The navigation column on the left.
+    Sidebar,
+    /// The strip above the content, carrying the title of the screen.
+    Topbar,
+    /// The row of column names at the top of a table.
+    TableHeader,
+    /// One line of a table.
+    TableRow,
     ModalForeground,
     ModalBackground,
     GameListEntry,
@@ -365,6 +399,10 @@ impl container::Catalog for Theme {
                 Container::GameListEntry => self.field.alpha(0.15).into(),
                 Container::ModalBackground => self.field.alpha(0.75).into(),
                 Container::Notification => self.field.alpha(0.5).into(),
+                Container::TableHeader => self.field.into(),
+                Container::TableRow => Color::TRANSPARENT.into(),
+                Container::Sidebar => self.panel.into(),
+                Container::Topbar => self.background.into(),
                 Container::ModalForeground => self.panel.into(),
                 Container::Tooltip => self.field.into(),
                 Container::DisabledBackup => self.disabled.into(),
@@ -375,6 +413,7 @@ impl container::Catalog for Theme {
                 color: match class {
                     Container::Wrapper => Color::TRANSPARENT,
                     Container::GameListEntry | Container::Notification => self.field,
+                    Container::Sidebar | Container::Topbar | Container::TableRow => self.field,
                     Container::ChangeBadge { change, faded } => {
                         if *faded {
                             self.disabled
@@ -398,7 +437,10 @@ impl container::Catalog for Theme {
                     | Container::BadgeActivated
                     | Container::BadgeFaded
                     | Container::ChangeBadge { .. }
-                    | Container::Notification => 1.0,
+                    | Container::Notification
+                    | Container::Sidebar
+                    | Container::Topbar
+                    | Container::TableRow => 1.0,
                     _ => 0.0,
                 },
                 radius: match class {
@@ -428,6 +470,7 @@ impl container::Catalog for Theme {
                         }
                     }
                 }
+                Container::TableHeader => Some(self.text_skipped),
                 Container::BadgeActivated => Some(self.text_button),
                 Container::BadgeFaded => Some(self.disabled),
                 _ => Some(self.text),

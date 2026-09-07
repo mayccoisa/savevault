@@ -72,6 +72,7 @@ pub mod id {
     pub static RESTORE_SCROLL: LazyLock<Id> = LazyLock::new(Id::unique);
     pub static CUSTOM_GAMES_SCROLL: LazyLock<Id> = LazyLock::new(Id::unique);
     pub static EMULATORS_SCROLL: LazyLock<Id> = LazyLock::new(Id::unique);
+    pub static LOGS_SCROLL: LazyLock<Id> = LazyLock::new(Id::unique);
     pub static OTHER_SCROLL: LazyLock<Id> = LazyLock::new(Id::unique);
     pub static MODAL_SCROLL: LazyLock<Id> = LazyLock::new(Id::unique);
 
@@ -93,6 +94,10 @@ pub mod id {
 
     pub fn emulators_scroll() -> Id {
         (*EMULATORS_SCROLL).clone()
+    }
+
+    pub fn logs_scroll() -> Id {
+        (*LOGS_SCROLL).clone()
     }
 
     pub fn other_scroll() -> Id {

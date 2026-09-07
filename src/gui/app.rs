@@ -20,6 +20,7 @@ use crate::{
         style,
         widget::{
             Column, Container, Element, IcedParentExt, Progress, Row, Stack, id, operation::container_scroll_offset,
+            text,
         },
     },
     lang::TRANSLATOR,
@@ -100,6 +101,7 @@ pub struct App {
     restore_screen: screen::Restore,
     custom_games_screen: screen::CustomGames,
     emulators_screen: screen::Emulators,
+    logs: crate::gui::logs::Logs,
     operation_should_cancel: std::sync::Arc<std::sync::atomic::AtomicBool>,
     operation_steps: Vec<OperationStep>,
     operation_steps_active: usize,
@@ -1320,6 +1322,12 @@ impl App {
             self.emulators_screen.refresh(&self.config);
         }
 
+        // Mesma razão do diagnóstico acima: o registro é lido do disco ao entrar na tela, e não
+        // guardado à parte. Um segundo registro do mesmo fato diverge do primeiro.
+        if screen == Screen::Logs {
+            self.logs = crate::gui::logs::Logs::load(&self.config);
+        }
+
         self.refresh_scroll_position()
     }
 
@@ -2199,6 +2207,17 @@ impl App {
                 self.close_specific_modal(modal::Kind::ConfirmAddMissingRoots)
             }
             Message::SwitchScreen(screen) => self.switch_screen(screen),
+            Message::ToggleTargetEditor { scan_kind } => {
+                match scan_kind {
+                    crate::scan::ScanKind::Backup => {
+                        self.backup_screen.target_editor_open = !self.backup_screen.target_editor_open;
+                    }
+                    crate::scan::ScanKind::Restore => {
+                        self.restore_screen.target_editor_open = !self.restore_screen.target_editor_open;
+                    }
+                }
+                Task::none()
+            }
             Message::ToggleGameListGroupCollapsed { origin } => {
                 match self.screen {
                     Screen::Backup => self.backup_screen.log.toggle_group_collapsed(origin),
@@ -2276,7 +2295,7 @@ impl App {
                             task = Some(iced::widget::operation::focus(id::custom_games_search()));
                         }
                         // A tela de emuladores não tem lista de jogos filtrável.
-                        Screen::Emulators | Screen::Other => {}
+                        Screen::Emulators | Screen::Logs | Screen::Other => {}
                     },
                     game_filter::Event::ToggledFilter { filter, enabled } => match self.screen {
                         Screen::Backup => {
@@ -2287,7 +2306,7 @@ impl App {
                         }
                         Screen::CustomGames => {}
                         // A tela de emuladores não tem lista de jogos filtrável.
-                        Screen::Emulators | Screen::Other => {}
+                        Screen::Emulators | Screen::Logs | Screen::Other => {}
                     },
                     game_filter::Event::EditedGameName(value) => match self.screen {
                         Screen::Backup => {
@@ -2303,7 +2322,7 @@ impl App {
                             self.custom_games_screen.filter.name = value;
                         }
                         // A tela de emuladores não tem lista de jogos filtrável.
-                        Screen::Emulators | Screen::Other => {}
+                        Screen::Emulators | Screen::Logs | Screen::Other => {}
                     },
                     game_filter::Event::Reset => match self.screen {
                         Screen::Backup => {
@@ -2319,7 +2338,7 @@ impl App {
                             self.text_histories.custom_games_search_game_name.push("");
                         }
                         // A tela de emuladores não tem lista de jogos filtrável.
-                        Screen::Emulators | Screen::Other => {}
+                        Screen::Emulators | Screen::Logs | Screen::Other => {}
                     },
                     game_filter::Event::EditedFilterUniqueness(value) => match self.screen {
                         Screen::Backup => {
@@ -2330,7 +2349,7 @@ impl App {
                         }
                         Screen::CustomGames => {}
                         // A tela de emuladores não tem lista de jogos filtrável.
-                        Screen::Emulators | Screen::Other => {}
+                        Screen::Emulators | Screen::Logs | Screen::Other => {}
                     },
                     game_filter::Event::EditedFilterCompleteness(value) => match self.screen {
                         Screen::Backup => {
@@ -2341,7 +2360,7 @@ impl App {
                         }
                         Screen::CustomGames => {}
                         // A tela de emuladores não tem lista de jogos filtrável.
-                        Screen::Emulators | Screen::Other => {}
+                        Screen::Emulators | Screen::Logs | Screen::Other => {}
                     },
                     game_filter::Event::EditedFilterEnablement(value) => match self.screen {
                         Screen::Backup => {
@@ -2352,7 +2371,7 @@ impl App {
                         }
                         Screen::CustomGames => {}
                         // A tela de emuladores não tem lista de jogos filtrável.
-                        Screen::Emulators | Screen::Other => {}
+                        Screen::Emulators | Screen::Logs | Screen::Other => {}
                     },
                     game_filter::Event::EditedFilterChange(value) => match self.screen {
                         Screen::Backup => {
@@ -2363,7 +2382,7 @@ impl App {
                         }
                         Screen::CustomGames => {}
                         // A tela de emuladores não tem lista de jogos filtrável.
-                        Screen::Emulators | Screen::Other => {}
+                        Screen::Emulators | Screen::Logs | Screen::Other => {}
                     },
                     game_filter::Event::EditedFilterManifest(value) => match self.screen {
                         Screen::Backup => {
@@ -2374,7 +2393,7 @@ impl App {
                         }
                         Screen::CustomGames => {}
                         // A tela de emuladores não tem lista de jogos filtrável.
-                        Screen::Emulators | Screen::Other => {}
+                        Screen::Emulators | Screen::Logs | Screen::Other => {}
                     },
                     game_filter::Event::EditedFilterOrigin(value) => match self.screen {
                         Screen::Backup => {
@@ -2385,7 +2404,7 @@ impl App {
                         }
                         Screen::CustomGames => {}
                         // A tela de emuladores não tem lista de jogos filtrável.
-                        Screen::Emulators | Screen::Other => {}
+                        Screen::Emulators | Screen::Logs | Screen::Other => {}
                     },
                 }
 
@@ -3091,19 +3110,57 @@ impl App {
     }
 
     pub fn view(&self) -> Element {
+        let sidebar = Container::new(
+            Column::new()
+                .padding([18, 14])
+                .spacing(4)
+                .push(
+                    Column::new()
+                        .padding([6, 8])
+                        .push(text("Save Vault").size(15))
+                        .push(text(format!("v{}", *crate::prelude::VERSION)).size(11)),
+                )
+                .push(button::side_nav(Screen::Backup, self.screen))
+                .push(button::side_nav(Screen::Restore, self.screen))
+                .push(button::side_nav(Screen::CustomGames, self.screen))
+                .push(button::side_nav(Screen::Emulators, self.screen))
+                .push(button::side_nav(Screen::Logs, self.screen))
+                .push(button::side_nav(Screen::Other, self.screen))
+                // O rodape da coluna fica colado embaixo, como no desenho.
+                .push(iced::widget::space().height(Length::Fill))
+                .push(button::check_for_update(&self.updating_app)),
+        )
+        .width(236)
+        .height(Length::Fill)
+        .class(style::Container::Sidebar);
+
+        let topbar = Container::new(
+            Row::new()
+                .padding([0, 24])
+                .height(62)
+                .spacing(12)
+                .align_y(Alignment::Center)
+                .push(text(self.screen.title()).size(16))
+                .push(iced::widget::space().width(Length::Fill))
+                .push(match self.screen {
+                    Screen::Backup => {
+                        self.backup_screen
+                            .commands(&self.config, &self.manifest.extended, &self.operation)
+                    }
+                    Screen::Restore => {
+                        self.restore_screen
+                            .commands(&self.config, &self.manifest.extended, &self.operation)
+                    }
+                    _ => Row::new(),
+                }),
+        )
+        .width(Length::Fill)
+        .class(style::Container::Topbar);
+
         let content = Column::new()
+            .width(Length::Fill)
             .align_x(Alignment::Center)
-            .push(
-                Row::new()
-                    .padding([10, 20])
-                    .spacing(20)
-                    .push(button::nav(Screen::Backup, self.screen))
-                    .push(button::nav(Screen::Restore, self.screen))
-                    .push(button::nav(Screen::CustomGames, self.screen))
-                    .push(button::nav(Screen::Emulators, self.screen))
-                    .push(button::nav(Screen::Other, self.screen))
-                    .push(button::check_for_update(&self.updating_app)),
-            )
+            .push(topbar)
             .push(match self.screen {
                 Screen::Backup => self.backup_screen.view(
                     &self.config,
@@ -3130,6 +3187,7 @@ impl App {
                     self.emulators_screen
                         .view(&self.config, &self.text_histories, &self.modifiers)
                 }
+                Screen::Logs => self.logs.view(),
                 Screen::Other => screen::other(
                     self.updating_manifest,
                     &self.config,
@@ -3142,8 +3200,15 @@ impl App {
             .push(self.timed_notification.as_ref().map(|x| x.view()))
             .push(self.manifest_notification.as_ref().map(|x| x.view()));
 
+        let shell = Row::new().width(Length::Fill).push(sidebar).push(content);
+
         let stack = Stack::new()
-            .push(Container::new(content).class(style::Container::Primary))
+            .push(
+                Container::new(shell)
+                    .width(Length::Fill)
+                    .height(Length::Fill)
+                    .class(style::Container::Primary),
+            )
             .push(
                 self.modals
                     .last()

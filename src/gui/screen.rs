@@ -17,45 +17,127 @@ use crate::{
         widget::{Button, Column, Container, Element, IcedParentExt, Row, checkbox, number_input, pick_list, text},
     },
     lang::{Language, TRANSLATOR},
-    prelude::{AVAILABLE_PARALELLISM, STEAM_DECK},
+    prelude::{AVAILABLE_PARALELLISM, STEAM_DECK, StrictPath},
     resource::{
         cache::Cache,
-        config::{self, Accent, BackupFormat, CloudFilter, Config, SortKey, Theme, ZipCompression},
+        config::{self, Accent, BackupFormat, CloudFilter, Config, Theme, ZipCompression},
         manifest::{Manifest, Store},
     },
-    scan::{DuplicateDetector, Duplication, OperationStatus, ScanKind},
+    scan::{DuplicateDetector, Duplication, OperationStatus, ScanKind, game_filter},
 };
 
 const RCLONE_URL: &str = "https://rclone.org/downloads";
 const RELEASE_URL: &str = "https://github.com/mtkennerly/ludusavi/releases";
 
 fn template(content: Column) -> Element {
-    Container::new(content.spacing(15).align_x(Alignment::Center))
+    // A coluna precisa declarar a largura: sem isto ela fica com a largura natural do que
+    // ha dentro, e o que e Fill la dentro passa por cima da borda direita da janela.
+    Container::new(content.width(Length::Fill).spacing(15).align_x(Alignment::Center))
         .height(Length::Fill)
         .center_x(Length::Fill)
         .padding(padding::all(5))
         .into()
 }
 
-fn make_status_row<'a>(status: &OperationStatus, duplication: Duplication) -> Row<'a> {
-    let size = 25;
-
+/// A faixa de contexto: o resumo da varredura à esquerda, o destino recolhido à direita.
+///
+/// Ela substitui a faixa de status em corpo 25, que era o maior tipo da tela e competia com o
+/// título logo acima. Nenhum número saiu: o que mudou foi o peso.
+fn context_strip<'a>(
+    summary: String,
+    status: &OperationStatus,
+    duplication: Duplication,
+    target: Element<'a>,
+) -> Element<'a> {
     Row::new()
-        .padding([0, 20])
+        .height(38)
+        .padding([0, 24])
+        .spacing(10)
         .align_y(Alignment::Center)
-        .spacing(15)
-        .push(text(TRANSLATOR.processed_games(status)).size(size))
+        .push(text(summary).size(12).class(style::Text::Muted))
         .push_if(status.changed_games.new > 0, || {
             Badge::new_entry_with_count(status.changed_games.new).view()
         })
         .push_if(status.changed_games.different > 0, || {
             Badge::changed_entry_with_count(status.changed_games.different).view()
         })
-        .push(text("|").size(size))
-        .push(text(TRANSLATOR.processed_bytes(status)).size(size))
-        .push_if(!duplication.resolved(), || {
-            Badge::new(&TRANSLATOR.badge_duplicates()).view()
+        .push_if(!duplication.unique(), || {
+            Badge::new(&TRANSLATOR.badge_duplicates())
+                .faded(duplication.resolved())
+                .view()
         })
+        .push(iced::widget::space().width(Length::Fill))
+        .push(target)
+        .into()
+}
+
+/// O texto do resumo, que também é onde o motivo de a ação principal estar apagada aparece.
+fn scan_summary(log: &GameList, operation: &Operation, status: &OperationStatus) -> String {
+    if !operation.idle() {
+        return TRANSLATOR.scanning_label();
+    }
+    if log.entries.is_empty() {
+        return TRANSLATOR.not_scanned_yet_label();
+    }
+
+    let counted = format!(
+        "{} · {}",
+        TRANSLATOR.processed_games(status),
+        TRANSLATOR.adjusted_size(status.total_bytes)
+    );
+
+    if status.changed_games.new + status.changed_games.different == 0 {
+        format!("{} · {}", counted, TRANSLATOR.nothing_changed_label())
+    } else {
+        counted
+    }
+}
+
+/// O destino recolhido: prefixo, nome da última pasta, e o caminho inteiro na dica.
+fn target_chip<'a>(
+    label: String,
+    path: &StrictPath,
+    scan_kind: ScanKind,
+    operation: &Operation,
+) -> Element<'a> {
+    let rendered = path.render();
+    let leaf = rendered
+        .replace('\\', "/")
+        .rsplit('/')
+        .find(|part| !part.is_empty())
+        .unwrap_or(&rendered)
+        .to_string();
+
+    button::secondary(
+        format!("{label} {leaf}"),
+        operation
+            .idle()
+            .then_some(Message::ToggleTargetEditor { scan_kind }),
+        Some(rendered),
+    )
+}
+
+/// A gaveta: o mesmo campo de sempre, com o mesmo histórico de desfazer.
+///
+/// Não existe passo de confirmação porque o campo já grava a cada tecla e já é reversível pelo
+/// desfazer dele. Um "Salvar" aqui criaria um estado intermediário que o resto do app não tem.
+fn target_drawer<'a>(field: Element<'a>, browse: Element<'a>, scan_kind: ScanKind) -> Element<'a> {
+    Container::new(
+        Row::new()
+            .height(52)
+            .padding([0, 24])
+            .spacing(10)
+            .align_y(Alignment::Center)
+            .push(field)
+            .push(browse)
+            .push(button::secondary(
+                TRANSLATOR.done_button(),
+                Some(Message::ToggleTargetEditor { scan_kind }),
+                None,
+            )),
+    )
+    .class(style::Container::GameListEntry)
+    .into()
 }
 
 #[derive(Default)]
@@ -63,6 +145,9 @@ pub struct Backup {
     pub log: GameList,
     pub previewed_games: HashSet<String>,
     pub duplicate_detector: DuplicateDetector,
+    /// A gaveta do destino. Recolhida por padrão: o caminho do cofre se escolhe uma vez e se
+    /// consulta de vez em quando, então ele não paga uma faixa da tela o tempo todo.
+    pub target_editor_open: bool,
 }
 
 impl Backup {
@@ -75,6 +160,53 @@ impl Backup {
         }
     }
 
+    /// Os comandos da tela, montados na barra de título.
+    ///
+    /// Eles moram lá porque a barra já existe e já reserva 62px carregando uma palavra só. Uma
+    /// faixa própria de ações abaixo dela reporia o empilhamento que esta rodada veio desfazer.
+    pub fn commands<'a>(&'a self, config: &Config, manifest: &Manifest, operation: &Operation) -> Row<'a> {
+        let duplicatees = self.log.duplicatees(&self.duplicate_detector);
+        let status = self.log.compute_operation_status(
+            config,
+            Self::SCAN_KIND,
+            manifest,
+            &self.duplicate_detector,
+            duplicatees.as_ref(),
+        );
+        let scanned = !self.log.entries.is_empty();
+        let has_changes = status.changed_games.new + status.changed_games.different > 0;
+
+        Row::new()
+            .spacing(8)
+            .align_y(Alignment::Center)
+            .push(button::scan(operation, Self::SCAN_KIND, scanned))
+            // Sem lista varrida não há sobre o que filtrar, e um filtro que não filtra nada é
+            // um controle que só ensina que clicar ali não faz nada.
+            .push(button::bar_icon(
+                Icon::VisibilityOff,
+                (scanned && operation.idle())
+                    .then(|| config::Event::ShowUnchangedGames(!config.scan.show_unchanged_games).into()),
+                !config.scan.show_unchanged_games,
+                Some(TRANSLATOR.only_changes_tooltip(config.scan.show_unchanged_games)),
+            ))
+            .push(button::bar_icon(
+                Icon::Filter,
+                (scanned && operation.idle()).then_some(Message::Filter {
+                    event: game_filter::Event::Toggled,
+                }),
+                self.log.search.show,
+                None,
+            ))
+            .push(iced::widget::space().width(16))
+            // A ação principal só existe quando existe conjunto sobre o que agir. Antes da
+            // primeira varredura a ação possível é encontrar os jogos, e ela já está aí à
+            // esquerda; depois de varrer sem nada novo, o botão fica presente e apagado com o
+            // motivo, porque sumir faria a barra dançar a cada varredura.
+            .push_if(scanned, || {
+                button::backup_main(operation, self.log.is_filtered(), has_changes)
+            })
+    }
+
     pub fn view(
         &self,
         config: &Config,
@@ -83,57 +215,36 @@ impl Backup {
         histories: &TextHistories,
         modifiers: &keyboard::Modifiers,
     ) -> Element {
-        let sort = &config.backup.sort;
 
         let duplicatees = self.log.duplicatees(&self.duplicate_detector);
 
+        let status = self.log.compute_operation_status(
+            config,
+            Self::SCAN_KIND,
+            manifest,
+            &self.duplicate_detector,
+            duplicatees.as_ref(),
+        );
+
         let content = Column::new()
-            .push(
-                Row::new()
-                    .padding([0, 20])
-                    .spacing(20)
-                    .align_y(Alignment::Center)
-                    .push(button::backup_preview(operation, self.log.is_filtered()))
-                    .push(button::backup(operation, self.log.is_filtered()))
-                    .push(button::toggle_all_scanned_games(
-                        self.log.all_visible_entries_selected(
-                            config,
-                            Self::SCAN_KIND,
-                            manifest,
-                            &self.duplicate_detector,
-                            duplicatees.as_ref(),
-                        ),
-                        self.log.is_filtered(),
-                    ))
-                    .push(button::only_changes(config.scan.show_unchanged_games))
-                    .push(button::filter(self.log.search.show)),
-            )
-            .push(make_status_row(
-                &self.log.compute_operation_status(
-                    config,
-                    Self::SCAN_KIND,
-                    manifest,
-                    &self.duplicate_detector,
-                    duplicatees.as_ref(),
-                ),
+            .push(context_strip(
+                scan_summary(&self.log, operation, &status),
+                &status,
                 self.duplicate_detector.overall(),
+                target_chip(
+                    TRANSLATOR.backup_target_label(),
+                    &config.backup.path,
+                    Self::SCAN_KIND,
+                    operation,
+                ),
             ))
-            .push(
-                Row::new()
-                    .padding([0, 20])
-                    .spacing(20)
-                    .align_y(Alignment::Center)
-                    .push(text(TRANSLATOR.backup_target_label()))
-                    .push(histories.input(UndoSubject::BackupTarget))
-                    .push(button::choose_folder(BrowseSubject::BackupTarget, modifiers))
-                    .push("|")
-                    .push(text(TRANSLATOR.sort_label()))
-                    .push(
-                        pick_list(SortKey::ALL, Some(sort.key), Message::config(config::Event::SortKey))
-                            .class(style::PickList::Primary),
-                    )
-                    .push(button::sort_order(sort.reversed)),
-            )
+            .push_if(self.target_editor_open && operation.idle(), || {
+                target_drawer(
+                    histories.input(UndoSubject::BackupTarget),
+                    button::choose_folder(BrowseSubject::BackupTarget, modifiers),
+                    Self::SCAN_KIND,
+                )
+            })
             .push(self.log.view(
                 Self::SCAN_KIND,
                 config,
@@ -153,6 +264,8 @@ impl Backup {
 pub struct Restore {
     pub log: GameList,
     pub duplicate_detector: DuplicateDetector,
+    /// Ver o campo irmão em [`Backup`].
+    pub target_editor_open: bool,
 }
 
 impl Restore {
@@ -165,6 +278,39 @@ impl Restore {
         }
     }
 
+    /// Os comandos da tela, montados na barra de título.
+    ///
+    /// Eles moram lá porque a barra já existe e já reserva 62px carregando uma palavra só. Uma
+    /// faixa própria de ações abaixo dela reporia o empilhamento que esta rodada veio desfazer.
+    pub fn commands<'a>(&'a self, config: &Config, _manifest: &Manifest, operation: &Operation) -> Row<'a> {
+        let scanned = !self.log.entries.is_empty();
+
+        Row::new()
+            .spacing(8)
+            .align_y(Alignment::Center)
+            .push(button::scan(operation, Self::SCAN_KIND, scanned))
+            // Sem lista varrida não há sobre o que filtrar, e um filtro que não filtra nada é
+            // um controle que só ensina que clicar ali não faz nada.
+            .push(button::bar_icon(
+                Icon::VisibilityOff,
+                (scanned && operation.idle())
+                    .then(|| config::Event::ShowUnchangedGames(!config.scan.show_unchanged_games).into()),
+                !config.scan.show_unchanged_games,
+                Some(TRANSLATOR.only_changes_tooltip(config.scan.show_unchanged_games)),
+            ))
+            .push(button::bar_icon(
+                Icon::Filter,
+                (scanned && operation.idle()).then_some(Message::Filter {
+                    event: game_filter::Event::Toggled,
+                }),
+                self.log.search.show,
+                None,
+            ))
+            .push_if(scanned && operation.idle(), || button::validate_backups(operation))
+            .push(iced::widget::space().width(16))
+            .push_if(scanned, || button::restore_main(operation, self.log.is_filtered()))
+    }
+
     pub fn view(
         &self,
         config: &Config,
@@ -173,57 +319,36 @@ impl Restore {
         histories: &TextHistories,
         modifiers: &keyboard::Modifiers,
     ) -> Element {
-        let sort = &config.restore.sort;
 
         let duplicatees = self.log.duplicatees(&self.duplicate_detector);
 
+        let status = self.log.compute_operation_status(
+            config,
+            Self::SCAN_KIND,
+            manifest,
+            &self.duplicate_detector,
+            duplicatees.as_ref(),
+        );
+
         let content = Column::new()
-            .push(
-                Row::new()
-                    .padding([0, 20])
-                    .spacing(20)
-                    .align_y(Alignment::Center)
-                    .push(button::restore_preview(operation, self.log.is_filtered()))
-                    .push(button::restore(operation, self.log.is_filtered()))
-                    .push(button::toggle_all_scanned_games(
-                        self.log.all_visible_entries_selected(
-                            config,
-                            Self::SCAN_KIND,
-                            manifest,
-                            &self.duplicate_detector,
-                            duplicatees.as_ref(),
-                        ),
-                        self.log.is_filtered(),
-                    ))
-                    .push(button::validate_backups(operation))
-                    .push(button::filter(self.log.search.show)),
-            )
-            .push(make_status_row(
-                &self.log.compute_operation_status(
-                    config,
-                    Self::SCAN_KIND,
-                    manifest,
-                    &self.duplicate_detector,
-                    duplicatees.as_ref(),
-                ),
+            .push(context_strip(
+                scan_summary(&self.log, operation, &status),
+                &status,
                 self.duplicate_detector.overall(),
+                target_chip(
+                    TRANSLATOR.restore_source_label(),
+                    &config.restore.path,
+                    Self::SCAN_KIND,
+                    operation,
+                ),
             ))
-            .push(
-                Row::new()
-                    .padding([0, 20])
-                    .spacing(20)
-                    .align_y(Alignment::Center)
-                    .push(text(TRANSLATOR.restore_source_label()))
-                    .push(histories.input(UndoSubject::RestoreSource))
-                    .push(button::choose_folder(BrowseSubject::RestoreSource, modifiers))
-                    .push("|")
-                    .push(text(TRANSLATOR.sort_label()))
-                    .push(
-                        pick_list(SortKey::ALL, Some(sort.key), Message::config(config::Event::SortKey))
-                            .class(style::PickList::Primary),
-                    )
-                    .push(button::sort_order(sort.reversed)),
-            )
+            .push_if(self.target_editor_open && operation.idle(), || {
+                target_drawer(
+                    histories.input(UndoSubject::RestoreSource),
+                    button::choose_folder(BrowseSubject::RestoreSource, modifiers),
+                    Self::SCAN_KIND,
+                )
+            })
             .push(self.log.view(
                 Self::SCAN_KIND,
                 config,

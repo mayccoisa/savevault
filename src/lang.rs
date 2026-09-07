@@ -733,6 +733,96 @@ impl Translator {
         translate("button-nav-other")
     }
 
+    pub fn nav_logs_button(&self) -> String {
+        translate("button-nav-logs")
+    }
+
+    pub fn scan_button(&self) -> String {
+        translate("button-scan")
+    }
+
+    pub fn rescan_button(&self) -> String {
+        translate("button-rescan")
+    }
+
+    pub fn done_button(&self) -> String {
+        translate("button-done")
+    }
+
+    pub fn not_scanned_yet_label(&self) -> String {
+        translate("label-not-scanned-yet")
+    }
+
+    pub fn scanning_label(&self) -> String {
+        translate("label-scanning")
+    }
+
+    pub fn nothing_changed_label(&self) -> String {
+        translate("label-nothing-changed")
+    }
+
+    pub fn nothing_to_back_up_tooltip(&self) -> String {
+        translate("tooltip-nothing-to-back-up")
+    }
+
+    pub fn logs_column_when(&self) -> String {
+        translate("logs-column-when")
+    }
+
+    pub fn logs_column_game(&self) -> String {
+        translate("logs-column-game")
+    }
+
+    pub fn logs_column_backup(&self) -> String {
+        translate("logs-column-backup")
+    }
+
+    pub fn logs_column_change(&self) -> String {
+        translate("logs-column-change")
+    }
+
+    pub fn logs_column_files(&self) -> String {
+        translate("logs-column-files")
+    }
+
+    pub fn logs_column_size(&self) -> String {
+        translate("logs-column-size")
+    }
+
+    pub fn logs_kind_full(&self) -> String {
+        translate("logs-kind-full")
+    }
+
+    pub fn logs_kind_differential(&self) -> String {
+        translate("logs-kind-differential")
+    }
+
+    pub fn logs_no_change(&self) -> String {
+        translate("logs-no-change")
+    }
+
+    pub fn logs_added(&self, count: usize) -> String {
+        let mut args = FluentArgs::new();
+        args.set("count", count);
+        translate_args("logs-added", &args)
+    }
+
+    pub fn logs_changed(&self, count: usize) -> String {
+        let mut args = FluentArgs::new();
+        args.set("count", count);
+        translate_args("logs-changed", &args)
+    }
+
+    pub fn logs_removed(&self, count: usize) -> String {
+        let mut args = FluentArgs::new();
+        args.set("count", count);
+        translate_args("logs-removed", &args)
+    }
+
+    pub fn logs_empty(&self) -> String {
+        translate("logs-empty")
+    }
+
     pub fn add_emulator_folder_button(&self) -> String {
         translate("button-add-emulator-folder")
     }

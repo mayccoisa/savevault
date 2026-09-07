@@ -105,6 +105,10 @@ pub enum ValidatePhase {
 
 #[derive(Debug, Clone)]
 pub enum Message {
+    /// Abre ou fecha a gaveta do caminho do cofre, na tela indicada.
+    ToggleTargetEditor {
+        scan_kind: crate::scan::ScanKind,
+    },
     Ignore,
     Exit {
         user: bool,
@@ -684,7 +688,23 @@ pub enum Screen {
     Restore,
     CustomGames,
     Emulators,
+    Logs,
     Other,
+}
+
+impl Screen {
+    /// The name shown in the bar above the content. It is the same label the navigation column
+    /// uses, on purpose: two names for one screen is how a user stops trusting the navigation.
+    pub fn title(&self) -> String {
+        match self {
+            Self::Backup => TRANSLATOR.nav_backup_button(),
+            Self::Restore => TRANSLATOR.nav_restore_button(),
+            Self::CustomGames => TRANSLATOR.nav_custom_games_button(),
+            Self::Emulators => TRANSLATOR.nav_emulators_button(),
+            Self::Logs => TRANSLATOR.nav_logs_button(),
+            Self::Other => TRANSLATOR.nav_other_button(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -775,6 +795,7 @@ pub enum ScrollSubject {
     Restore,
     CustomGames,
     Emulators,
+    Logs,
     Other,
     Modal,
 }
@@ -793,6 +814,7 @@ impl ScrollSubject {
             Self::Restore => crate::gui::widget::id::restore_scroll(),
             Self::CustomGames => crate::gui::widget::id::custom_games_scroll(),
             Self::Emulators => crate::gui::widget::id::emulators_scroll(),
+            Self::Logs => crate::gui::widget::id::logs_scroll(),
             Self::Other => crate::gui::widget::id::other_scroll(),
             Self::Modal => crate::gui::widget::id::modal_scroll(),
         }
@@ -820,6 +842,7 @@ impl From<Screen> for ScrollSubject {
             Screen::Restore => Self::Restore,
             Screen::CustomGames => Self::CustomGames,
             Screen::Emulators => Self::Emulators,
+            Screen::Logs => Self::Logs,
             Screen::Other => Self::Other,
         }
     }

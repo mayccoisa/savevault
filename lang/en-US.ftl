@@ -1,4 +1,4 @@
-ludusavi = Ludusavi
+ludusavi = Save Vault
 
 language = Language
 game-name = Name
@@ -29,10 +29,33 @@ cli-game-line-item-redirecting = Redirecting to: {$path}
 button-backup = Back up
 button-preview = Preview
 button-restore = Restore
-button-nav-backup = BACKUP MODE
-button-nav-restore = RESTORE MODE
-button-nav-custom-games = CUSTOM GAMES
-button-nav-other = OTHER
+button-nav-backup = Backup
+button-nav-restore = Restore
+button-nav-custom-games = Custom games
+button-nav-other = Other
+button-nav-logs = Logs
+
+button-scan = Scan
+button-rescan = Rescan
+button-done = Done
+label-not-scanned-yet = Not scanned yet
+label-scanning = Scanning…
+label-nothing-changed = nothing changed
+tooltip-nothing-to-back-up = Nothing has changed since the last backup
+
+logs-column-when = When
+logs-column-game = Game
+logs-column-backup = Backup
+logs-column-change = Change
+logs-column-files = Files
+logs-column-size = Size
+logs-kind-full = Full
+logs-kind-differential = Differential
+logs-no-change = No change
+logs-added = {$count} new
+logs-changed = {$count} changed
+logs-removed = {$count} removed
+logs-empty = No backup has been made yet, so there is nothing to log.
 button-add-game = Add game
 button-continue = Continue
 button-cancel = Cancel
@@ -309,7 +332,7 @@ custom-game-will-extend = This custom game extends a manifest entry
 
 operation-will-only-include-listed-games = This will only process the games that are currently listed
 
-button-nav-emulators = EMULATORS
+button-nav-emulators = Emulators
 button-add-emulator-folder = Add folder
 button-check-for-update = Check for update
 emulators-explanation = Point at each emulator's data folder. Saves are backed up and restored from there, even if the folder moves.

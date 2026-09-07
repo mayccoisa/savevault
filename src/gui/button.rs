@@ -129,6 +129,228 @@ pub fn hide<'a>(action: Message) -> Element<'a> {
     template(Icon::VisibilityOff.text_small(), Some(action), None)
 }
 
+/// A bar button that is not the primary action: outlined, and only as wide as its label.
+///
+/// The fixed 125px of `primary` is what made the old row of actions read like a form. In a
+/// command bar the width has to come from the word.
+pub fn secondary<'a>(content: String, action: Option<Message>, tooltip: Option<String>) -> Element<'a> {
+    let button: Element<'a> = Button::new(text(content).align_x(alignment::Horizontal::Center))
+        .on_press_maybe(action)
+        .class(style::Button::Secondary)
+        .padding([6, 14])
+        .into();
+
+    match tooltip {
+        Some(tooltip) => Tooltip::new(button, text(tooltip), iced::widget::tooltip::Position::Bottom)
+            .class(style::Container::Tooltip)
+            .into(),
+        None => button,
+    }
+}
+
+/// The primary action of the bar: filled, and as wide as its label.
+pub fn primary_bar<'a>(content: String, action: Option<Message>, tooltip: Option<String>) -> Element<'a> {
+    let button: Element<'a> = Button::new(text(content).align_x(alignment::Horizontal::Center))
+        .on_press_maybe(action)
+        .class(style::Button::Primary)
+        .padding([6, 16])
+        .into();
+
+    match tooltip {
+        Some(tooltip) => Tooltip::new(button, text(tooltip), iced::widget::tooltip::Position::Bottom)
+            .class(style::Container::Tooltip)
+            .into(),
+        None => button,
+    }
+}
+
+/// An icon button in the command bar.
+pub fn bar_icon<'a>(icon: Icon, action: Option<Message>, active: bool, tooltip: Option<String>) -> Element<'a> {
+    let button: Element<'a> = Button::new(icon.text_narrow())
+        .on_press_maybe(action)
+        .class(if active {
+            style::Button::Negative
+        } else {
+            style::Button::Secondary
+        })
+        .padding([6, 12])
+        .into();
+
+    match tooltip {
+        Some(tooltip) => Tooltip::new(button, text(tooltip), iced::widget::tooltip::Position::Bottom)
+            .class(style::Container::Tooltip)
+            .into(),
+        None => button,
+    }
+}
+
+/// Finding the games. It is the same message in every state; only the word and the weight change,
+/// because before the first scan there is nothing to preview and "Preview" would be a lie.
+pub fn scan<'a>(ongoing: &Operation, scan_kind: crate::scan::ScanKind, scanned: bool) -> Element<'a> {
+    use crate::scan::ScanKind;
+
+    let cancelling = matches!(
+        ongoing,
+        Operation::Backup {
+            finality: Finality::Preview,
+            cancelling: true,
+            ..
+        } | Operation::Restore {
+            finality: Finality::Preview,
+            cancelling: true,
+            ..
+        }
+    );
+    let scanning = matches!(
+        ongoing,
+        Operation::Backup {
+            finality: Finality::Preview,
+            cancelling: false,
+            ..
+        } | Operation::Restore {
+            finality: Finality::Preview,
+            cancelling: false,
+            ..
+        }
+    );
+
+    let label = if cancelling {
+        TRANSLATOR.cancelling_button()
+    } else if scanning {
+        TRANSLATOR.cancel_button()
+    } else if scanned {
+        TRANSLATOR.rescan_button()
+    } else {
+        TRANSLATOR.scan_button()
+    };
+
+    let action = if scanning {
+        Some(Message::CancelOperation)
+    } else if ongoing.idle() {
+        Some(match scan_kind {
+            ScanKind::Backup => Message::Backup(BackupPhase::Start {
+                preview: true,
+                repair: false,
+                jump: false,
+                games: None,
+            }),
+            ScanKind::Restore => Message::Restore(RestorePhase::Start {
+                preview: true,
+                games: None,
+            }),
+        })
+    } else {
+        None
+    };
+
+    // Antes da primeira varredura ela É a ação principal, e por isso vem preenchida.
+    if !scanned && !scanning && !cancelling {
+        primary_bar(label, action, None)
+    } else if scanning || cancelling {
+        let button: Element<'a> = Button::new(text(label).align_x(alignment::Horizontal::Center))
+            .on_press_maybe(action)
+            .class(style::Button::Negative)
+            .padding([6, 16])
+            .into();
+        button
+    } else {
+        secondary(label, action, None)
+    }
+}
+
+/// The primary action of the backup bar.
+///
+/// Presence and availability are different questions, and collapsing them is what produced the
+/// button that offered to back up nothing. It is absent before the first scan, because there is
+/// no set to act on; it is present and disabled when the scan found nothing new, because there is
+/// a set and no delta — and hiding it there would make the bar jump on every scan.
+pub fn backup_main<'a>(ongoing: &Operation, filtered: bool, has_changes: bool) -> Element<'a> {
+    let cancelling = matches!(
+        ongoing,
+        Operation::Backup {
+            finality: Finality::Final,
+            cancelling: true,
+            ..
+        }
+    );
+    let running = matches!(
+        ongoing,
+        Operation::Backup {
+            finality: Finality::Final,
+            cancelling: false,
+            ..
+        }
+    );
+
+    if cancelling {
+        return primary_bar(TRANSLATOR.cancelling_button(), None, None);
+    }
+    if running {
+        let button: Element<'a> = Button::new(text(TRANSLATOR.cancel_button()).align_x(alignment::Horizontal::Center))
+            .on_press(Message::CancelOperation)
+            .class(style::Button::Negative)
+            .padding([6, 16])
+            .into();
+        return button;
+    }
+
+    let enabled = ongoing.idle() && has_changes;
+    primary_bar(
+        TRANSLATOR.backup_button(),
+        enabled.then_some(Message::Backup(BackupPhase::Confirm { games: None })),
+        if !has_changes {
+            Some(TRANSLATOR.nothing_to_back_up_tooltip())
+        } else if filtered {
+            Some(TRANSLATOR.operation_will_only_include_listed_games())
+        } else {
+            None
+        },
+    )
+}
+
+/// The primary action of the restore bar.
+///
+/// It has no "nothing changed" state on purpose: restoring a backup that matches what is on disk
+/// is a legitimate operation, and it is how a local overwrite gets undone.
+pub fn restore_main<'a>(ongoing: &Operation, filtered: bool) -> Element<'a> {
+    let cancelling = matches!(
+        ongoing,
+        Operation::Restore {
+            finality: Finality::Final,
+            cancelling: true,
+            ..
+        }
+    );
+    let running = matches!(
+        ongoing,
+        Operation::Restore {
+            finality: Finality::Final,
+            cancelling: false,
+            ..
+        }
+    );
+
+    if cancelling {
+        return primary_bar(TRANSLATOR.cancelling_button(), None, None);
+    }
+    if running {
+        let button: Element<'a> = Button::new(text(TRANSLATOR.cancel_button()).align_x(alignment::Horizontal::Center))
+            .on_press(Message::CancelOperation)
+            .class(style::Button::Negative)
+            .padding([6, 16])
+            .into();
+        return button;
+    }
+
+    primary_bar(
+        TRANSLATOR.restore_button(),
+        ongoing
+            .idle()
+            .then_some(Message::Restore(RestorePhase::Confirm { games: None })),
+        filtered.then(|| TRANSLATOR.operation_will_only_include_listed_games()),
+    )
+}
+
 pub fn choose_folder<'a>(subject: BrowseSubject, modifiers: &keyboard::Modifiers) -> Element<'a> {
     if modifiers.shift() {
         template(Icon::OpenInNew.text(), Some(Message::OpenDirSubject(subject)), None)
@@ -155,22 +377,6 @@ pub fn filter<'a>(open: bool) -> Element<'a> {
     )
 }
 
-/// Esconde da lista os jogos que foram varridos e não mudaram.
-///
-/// Liga na **mesma** opção de Other/Options (`scan.show_unchanged_games`), de propósito: um
-/// segundo lugar onde esse estado vivesse daria duas verdades sobre a mesma coisa. O que muda é o
-/// alcance da mão — a pergunta "o que eu preciso salvar agora?" se faz na tela de backup, não
-/// numa tela de opções.
-pub fn only_changes<'a>(showing_unchanged: bool) -> Element<'a> {
-    template_extended(
-        Icon::VisibilityOff.text(),
-        Some(config::Event::ShowUnchangedGames(!showing_unchanged).into()),
-        (!showing_unchanged).then_some(style::Button::Negative),
-        None,
-        Some(TRANSLATOR.only_changes_tooltip(showing_unchanged)),
-    )
-}
-
 pub fn reset_filter<'a>(dirty: bool) -> Element<'a> {
     template(
         Icon::RemoveCircle.text(),
@@ -183,18 +389,6 @@ pub fn reset_filter<'a>(dirty: bool) -> Element<'a> {
 
 pub fn sort<'a>(message: impl Into<Message>) -> Element<'a> {
     template(text(TRANSLATOR.sort_button()).width(WIDTH), Some(message.into()), None)
-}
-
-pub fn sort_order<'a>(reversed: bool) -> Element<'a> {
-    template(
-        if reversed {
-            Icon::ArrowDownward.text()
-        } else {
-            Icon::ArrowUpward.text()
-        },
-        Some(config::Event::SortReversed(!reversed).into()),
-        None,
-    )
 }
 
 pub fn refresh<'a>(action: Message, ongoing: bool) -> Element<'a> {
@@ -279,26 +473,6 @@ pub fn previous_page<'a>(action: impl Fn(usize) -> Message, page: usize) -> Elem
     template(Icon::ArrowBack.text(), (page > 0).then(|| action(page - 1)), None)
 }
 
-pub fn toggle_all_scanned_games<'a>(all_enabled: bool, filtered: bool) -> Element<'a> {
-    if all_enabled {
-        template_extended(
-            text(TRANSLATOR.disable_all_button()).width(WIDTH),
-            Some(Message::DeselectAllGames),
-            None,
-            filtered.then_some(Icon::Filter),
-            filtered.then(|| TRANSLATOR.operation_will_only_include_listed_games()),
-        )
-    } else {
-        template_extended(
-            text(TRANSLATOR.enable_all_button()).width(WIDTH),
-            Some(Message::SelectAllGames),
-            None,
-            filtered.then_some(Icon::Filter),
-            filtered.then(|| TRANSLATOR.operation_will_only_include_listed_games()),
-        )
-    }
-}
-
 pub fn toggle_all_custom_games<'a>(all_enabled: bool, filtered: bool) -> Element<'a> {
     if all_enabled {
         template_extended(
@@ -359,22 +533,24 @@ pub fn open_url_icon<'a>(url: String) -> Element<'a> {
     template(Icon::OpenInBrowser.text(), Some(Message::OpenUrl(url)), None)
 }
 
-pub fn nav<'a>(screen: Screen, current_screen: Screen) -> Button<'a> {
+pub fn side_nav<'a>(screen: Screen, current_screen: Screen) -> Button<'a> {
     let label = match screen {
         Screen::Backup => TRANSLATOR.nav_backup_button(),
         Screen::Restore => TRANSLATOR.nav_restore_button(),
         Screen::CustomGames => TRANSLATOR.nav_custom_games_button(),
         Screen::Emulators => TRANSLATOR.nav_emulators_button(),
+        Screen::Logs => TRANSLATOR.nav_logs_button(),
         Screen::Other => TRANSLATOR.nav_other_button(),
     };
 
-    Button::new(text(label).size(14).align_x(alignment::Horizontal::Center))
+    Button::new(text(label).size(14).align_x(alignment::Horizontal::Left))
         .on_press(Message::SwitchScreen(screen))
-        .padding([5, 20])
+        .width(Length::Fill)
+        .padding([10, 11])
         .class(if current_screen == screen {
-            style::Button::NavButtonActive
+            style::Button::SideNavActive
         } else {
-            style::Button::NavButtonInactive
+            style::Button::SideNavInactive
         })
 }
 
@@ -423,170 +599,6 @@ pub fn download<'a>(operation: &Operation) -> Element<'a> {
             } => Some(style::Button::Negative),
             _ => None,
         },
-    )
-}
-
-pub fn backup<'a>(ongoing: &Operation, filtered: bool) -> Element<'a> {
-    template_extended(
-        text(match ongoing {
-            Operation::Backup {
-                finality: Finality::Final,
-                cancelling: false,
-                ..
-            } => TRANSLATOR.cancel_button(),
-            Operation::Backup {
-                finality: Finality::Final,
-                cancelling: true,
-                ..
-            } => TRANSLATOR.cancelling_button(),
-            _ => TRANSLATOR.backup_button(),
-        })
-        .width(WIDTH)
-        .align_x(alignment::Horizontal::Center),
-        match ongoing {
-            Operation::Idle => Some(Message::Backup(BackupPhase::Confirm { games: None })),
-            Operation::Backup {
-                finality: Finality::Final,
-                cancelling: false,
-                ..
-            } => Some(Message::CancelOperation),
-            _ => None,
-        },
-        matches!(
-            ongoing,
-            Operation::Backup {
-                finality: Finality::Final,
-                ..
-            }
-        )
-        .then_some(style::Button::Negative),
-        filtered.then_some(Icon::Filter),
-        filtered.then(|| TRANSLATOR.operation_will_only_include_listed_games()),
-    )
-}
-
-pub fn backup_preview<'a>(ongoing: &Operation, filtered: bool) -> Element<'a> {
-    template_extended(
-        text(match ongoing {
-            Operation::Backup {
-                finality: Finality::Preview,
-                cancelling: false,
-                ..
-            } => TRANSLATOR.cancel_button(),
-            Operation::Backup {
-                finality: Finality::Preview,
-                cancelling: true,
-                ..
-            } => TRANSLATOR.cancelling_button(),
-            _ => TRANSLATOR.preview_button(),
-        })
-        .width(WIDTH)
-        .align_x(alignment::Horizontal::Center),
-        match ongoing {
-            Operation::Idle => Some(Message::Backup(BackupPhase::Start {
-                preview: true,
-                repair: false,
-                jump: false,
-                games: None,
-            })),
-            Operation::Backup {
-                finality: Finality::Preview,
-                cancelling: false,
-                ..
-            } => Some(Message::CancelOperation),
-            _ => None,
-        },
-        matches!(
-            ongoing,
-            Operation::Backup {
-                finality: Finality::Preview,
-                ..
-            }
-        )
-        .then_some(style::Button::Negative),
-        filtered.then_some(Icon::Filter),
-        filtered.then(|| TRANSLATOR.operation_will_only_include_listed_games()),
-    )
-}
-
-pub fn restore<'a>(ongoing: &Operation, filtered: bool) -> Element<'a> {
-    template_extended(
-        text(match ongoing {
-            Operation::Restore {
-                finality: Finality::Final,
-                cancelling: false,
-                ..
-            } => TRANSLATOR.cancel_button(),
-            Operation::Restore {
-                finality: Finality::Final,
-                cancelling: true,
-                ..
-            } => TRANSLATOR.cancelling_button(),
-            _ => TRANSLATOR.restore_button(),
-        })
-        .width(WIDTH)
-        .align_x(alignment::Horizontal::Center),
-        match ongoing {
-            Operation::Idle => Some(Message::Restore(RestorePhase::Confirm { games: None })),
-            Operation::Restore {
-                finality: Finality::Final,
-                cancelling: false,
-                ..
-            } => Some(Message::CancelOperation),
-            _ => None,
-        },
-        matches!(
-            ongoing,
-            Operation::Restore {
-                finality: Finality::Final,
-                ..
-            }
-        )
-        .then_some(style::Button::Negative),
-        filtered.then_some(Icon::Filter),
-        filtered.then(|| TRANSLATOR.operation_will_only_include_listed_games()),
-    )
-}
-
-pub fn restore_preview<'a>(ongoing: &Operation, filtered: bool) -> Element<'a> {
-    template_extended(
-        text(match ongoing {
-            Operation::Restore {
-                finality: Finality::Preview,
-                cancelling: false,
-                ..
-            } => TRANSLATOR.cancel_button(),
-            Operation::Restore {
-                finality: Finality::Preview,
-                cancelling: true,
-                ..
-            } => TRANSLATOR.cancelling_button(),
-            _ => TRANSLATOR.preview_button(),
-        })
-        .width(WIDTH)
-        .align_x(alignment::Horizontal::Center),
-        match ongoing {
-            Operation::Idle => Some(Message::Restore(RestorePhase::Start {
-                preview: true,
-                games: None,
-            })),
-            Operation::Restore {
-                finality: Finality::Preview,
-                cancelling: false,
-                ..
-            } => Some(Message::CancelOperation),
-            _ => None,
-        },
-        matches!(
-            ongoing,
-            Operation::Restore {
-                finality: Finality::Preview,
-                ..
-            }
-        )
-        .then_some(style::Button::Negative),
-        filtered.then_some(Icon::Filter),
-        filtered.then(|| TRANSLATOR.operation_will_only_include_listed_games()),
     )
 }
 

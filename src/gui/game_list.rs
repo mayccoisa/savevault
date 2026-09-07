@@ -18,14 +18,14 @@ use crate::{
         shortcuts::TextHistories,
         style,
         widget::{
-            Button, Column, Container, IcedButtonExt, IcedParentExt, Row, Tooltip, checkbox, pick_list, text,
+            Button, Column, Container, Element, IcedButtonExt, IcedParentExt, Row, Tooltip, checkbox, pick_list, text,
             text_editor,
         },
     },
     lang::TRANSLATOR,
     resource::{
         cache::Cache,
-        config::{self, Config, Sort},
+        config::{self, Config, Sort, SortKey},
         manifest::{self, Manifest, Os},
     },
     scan::{
@@ -437,6 +437,74 @@ impl GameList {
         })
     }
 
+    /// The widths the tail columns of a row use. The header reads them from here so it cannot
+    /// drift away from the rows it names.
+    const COLUMN_BACKUP: f32 = 150.0;
+    const COLUMN_ACTION: f32 = 49.0;
+    const COLUMN_SIZE: f32 = 115.0;
+
+    fn table_header<'a>(scan_kind: ScanKind, sort: &Sort, all_selected: bool) -> Container<'a> {
+        // O nome da coluna É o controle de ordenação: o rótulo "Organizar:" e o seletor que
+        // viviam na barra diziam duas vezes o que a coluna já nomeia.
+        let column = |label: String, key: SortKey, width: Option<f32>| {
+            let active = sort.key == key;
+            let label = if active {
+                format!("{} {}", label, if sort.reversed { "▼" } else { "▲" })
+            } else {
+                label
+            };
+            let content: Element<'a> = Button::new(text(label).size(12))
+                .on_press(if active {
+                    config::Event::SortReversed(!sort.reversed).into()
+                } else {
+                    config::Event::SortKey(key).into()
+                })
+                .class(style::Button::Bare)
+                .padding(0)
+                .into();
+
+            match width {
+                Some(width) => Container::new(content).center_x(width),
+                None => Container::new(content).width(Length::Fill),
+            }
+        };
+
+        Container::new(
+            Row::new()
+                .spacing(15)
+                .align_y(Alignment::Center)
+                .padding(padding::top(6).bottom(6).left(15).right(15))
+                // A caixa que marca e desmarca todos passa a ficar em cima da coluna que ela
+                // governa, em vez de ser um botão de 125px na barra de ações.
+                .push(
+                    Container::new(
+                        checkbox("", all_selected, move |enabled| {
+                            if enabled {
+                                Message::SelectAllGames
+                            } else {
+                                Message::DeselectAllGames
+                            }
+                        })
+                        .spacing(0)
+                        .class(style::Checkbox),
+                    )
+                    .width(18.0),
+                )
+                .push(column(TRANSLATOR.logs_column_game(), SortKey::Name, None))
+                .push(column(
+                    match scan_kind {
+                        ScanKind::Backup => TRANSLATOR.logs_column_change(),
+                        ScanKind::Restore => TRANSLATOR.logs_column_backup(),
+                    },
+                    SortKey::Status,
+                    Some(Self::COLUMN_BACKUP),
+                ))
+                .push(Container::new(text("").size(12)).width(Self::COLUMN_ACTION))
+                .push(column(TRANSLATOR.logs_column_size(), SortKey::Size, Some(Self::COLUMN_SIZE))),
+        )
+        .class(style::Container::TableHeader)
+    }
+
     pub fn view(
         &self,
         scan_kind: ScanKind,
@@ -450,6 +518,7 @@ impl GameList {
     ) -> Container {
         Container::new(
             Column::new()
+                .width(Length::Fill)
                 .spacing(15)
                 .push({
                     self.search.view(
@@ -468,6 +537,14 @@ impl GameList {
                             .any(|root| matches!(root, crate::resource::config::Root::Emulator(_))),
                     )
                 })
+                .push(Self::table_header(
+                    scan_kind,
+                    match scan_kind {
+                        ScanKind::Backup => &config.backup.sort,
+                        ScanKind::Restore => &config.restore.sort,
+                    },
+                    self.all_visible_entries_selected(config, scan_kind, manifest, duplicate_detector, duplicatees),
+                ))
                 .push({
                     let visible: Vec<&GameListEntry> = self
                         .entries
@@ -520,6 +597,7 @@ impl GameList {
                     ScrollSubject::game_list(scan_kind).into_widget(content)
                 }),
         )
+        .width(Length::Fill)
     }
 
     pub fn all_visible_entries_selected(

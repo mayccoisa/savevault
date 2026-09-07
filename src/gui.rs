@@ -7,6 +7,7 @@ mod file_tree;
 mod font;
 mod game_list;
 mod icon;
+mod logs;
 mod modal;
 mod notification;
 mod popup_menu;
@@ -33,7 +34,7 @@ pub fn run(flags: Flags) {
             ..Default::default()
         })
         .window(iced::window::Settings {
-            min_size: Some(Size::new(800.0, 600.0)),
+            min_size: Some(Size::new(1036.0, 600.0)),
             exit_on_close_request: false,
             #[cfg(target_os = "linux")]
             platform_specific: iced::window::settings::PlatformSpecific {
