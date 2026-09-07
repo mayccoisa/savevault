@@ -20,7 +20,7 @@ use crate::{
     prelude::{AVAILABLE_PARALELLISM, STEAM_DECK},
     resource::{
         cache::Cache,
-        config::{self, BackupFormat, CloudFilter, Config, SortKey, Theme, ZipCompression},
+        config::{self, Accent, BackupFormat, CloudFilter, Config, SortKey, Theme, ZipCompression},
         manifest::{Manifest, Store},
     },
     scan::{DuplicateDetector, Duplication, OperationStatus, ScanKind},
@@ -500,6 +500,16 @@ pub fn other<'a>(
                         .push(text(TRANSLATOR.field_theme()))
                         .push(
                             pick_list(Theme::ALL, Some(config.theme), Message::config(config::Event::Theme))
+                                .class(style::PickList::Primary),
+                        ),
+                )
+                .push(
+                    Row::new()
+                        .align_y(iced::Alignment::Center)
+                        .spacing(20)
+                        .push(text(TRANSLATOR.field_accent()))
+                        .push(
+                            pick_list(Accent::ALL, Some(config.accent), Message::config(config::Event::Accent))
                                 .class(style::PickList::Primary),
                         ),
                 )

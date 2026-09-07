@@ -9,7 +9,7 @@ use unic_langid::LanguageIdentifier;
 use crate::{
     prelude::{CommandError, Error, StrictPath, VARIANT},
     resource::{
-        config::{BackupFormat, CustomGameKind, RedirectKind, Root, SortKey, Theme, ZipCompression},
+        config::{Accent, BackupFormat, CustomGameKind, RedirectKind, Root, SortKey, Theme, ZipCompression},
         manifest::Store,
     },
     scan::{BackupError, OperationStatus, OperationStepDecision, ScanChange, game_filter},
@@ -531,6 +531,10 @@ impl Translator {
 
     pub fn field_theme(&self) -> String {
         self.field(&translate("theme"))
+    }
+
+    pub fn field_accent(&self) -> String {
+        self.field(&translate("accent"))
     }
 
     pub fn badge_failed(&self) -> String {
@@ -1150,6 +1154,16 @@ impl Translator {
         translate(match theme {
             Theme::Light => "theme-light",
             Theme::Dark => "theme-dark",
+        })
+    }
+
+    pub fn accent_name(&self, accent: &Accent) -> String {
+        translate(match accent {
+            Accent::Green => "accent-green",
+            Accent::Blue => "accent-blue",
+            Accent::Purple => "accent-purple",
+            Accent::Orange => "accent-orange",
+            Accent::Red => "accent-red",
         })
     }
 

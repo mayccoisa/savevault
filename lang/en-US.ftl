@@ -209,6 +209,13 @@ theme = Theme
 theme-light = Light
 theme-dark = Dark
 
+accent = Accent color
+accent-green = Green
+accent-blue = Blue
+accent-purple = Purple
+accent-orange = Orange
+accent-red = Red
+
 redirect-bidirectional = Bidirectional
 reverse-redirects-when-restoring = Reverse sequence of redirects when restoring
 

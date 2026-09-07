@@ -25,6 +25,8 @@ impl ColorExt for Color {
 pub struct Theme {
     source: config::Theme,
     background: Color,
+    panel: Color,
+    accent_ink: Color,
     field: Color,
     text: Color,
     text_inverted: Color,
@@ -43,38 +45,67 @@ pub struct Theme {
 
 impl Default for Theme {
     fn default() -> Self {
-        Self::from(config::Theme::Light)
+        Self::new(config::Theme::default(), config::Accent::default())
     }
 }
 
 impl From<config::Theme> for Theme {
     fn from(source: config::Theme) -> Self {
+        Self::new(source, config::Accent::default())
+    }
+}
+
+impl Theme {
+    /// Colors come from the Save Vault v2 mockup (`save-vault-mockup.html`), which is the visual
+    /// source of truth. The accent is picked by the user and applies on top of either theme.
+    pub fn new(source: config::Theme, choice: config::Accent) -> Self {
+        // Every accent carries its own ink: the text drawn on top of the accent itself. A single
+        // ink for all of them would be unreadable on at least one, since they differ in lightness.
+        let (accent, accent_ink) = match choice {
+            config::Accent::Green => (rgb8!(0x38, 0xe0, 0x8a), rgb8!(0x04, 0x16, 0x0c)),
+            config::Accent::Blue => (rgb8!(0x5b, 0x8d, 0xef), rgb8!(0x04, 0x0d, 0x1e)),
+            config::Accent::Purple => (rgb8!(0xc7, 0x7d, 0xff), rgb8!(0x18, 0x06, 0x2a)),
+            config::Accent::Orange => (rgb8!(0xf5, 0x85, 0x4a), rgb8!(0x25, 0x0d, 0x02)),
+            config::Accent::Red => (rgb8!(0xf0, 0x55, 0x6a), rgb8!(0x2a, 0x05, 0x0c)),
+        };
+
         match source {
             config::Theme::Light => Self {
                 source,
-                background: Color::WHITE,
-                field: rgb8!(230, 230, 230),
-                text: Color::BLACK,
+                background: rgb8!(0xee, 0xf0, 0xf4),
+                panel: Color::WHITE,
+                accent_ink,
+                field: rgb8!(0xf6, 0xf7, 0xfa),
+                text: rgb8!(0x1a, 0x1d, 0x27),
                 text_inverted: Color::WHITE,
                 text_button: Color::WHITE,
-                text_skipped: Color::BLACK,
-                text_selection: Color::from_rgb(0.8, 0.8, 1.0),
-                positive: rgb8!(28, 107, 223),
-                negative: rgb8!(255, 0, 0),
-                disabled: rgb8!(169, 169, 169),
-                navigation: rgb8!(136, 0, 219),
-                success: rgb8!(77, 127, 201),
-                failure: rgb8!(201, 77, 77),
-                skipped: rgb8!(230, 230, 230),
-                added: rgb8!(28, 223, 86),
+                text_skipped: rgb8!(0x5a, 0x61, 0x73),
+                text_selection: accent.alpha(0.35),
+                positive: accent,
+                negative: rgb8!(0xf0, 0x55, 0x6a),
+                disabled: rgb8!(0x8b, 0x93, 0xa5),
+                navigation: rgb8!(0xe2, 0xe5, 0xec),
+                success: rgb8!(0x2f, 0x9e, 0x6a),
+                failure: rgb8!(0xd9, 0x3f, 0x53),
+                skipped: rgb8!(0xe2, 0xe5, 0xec),
+                // Kept blue on purpose: "new" and "different" sit side by side in the file tree,
+                // and tying "new" to the accent would collapse them whenever the accent is green.
+                added: rgb8!(0x5b, 0x8d, 0xef),
             },
             config::Theme::Dark => Self {
                 source,
-                background: rgb8!(41, 41, 41),
-                field: rgb8!(74, 74, 74),
-                text: Color::WHITE,
-                text_inverted: Color::BLACK,
-                ..Self::from(config::Theme::Light)
+                background: rgb8!(0x0e, 0x0f, 0x13),
+                panel: rgb8!(0x15, 0x17, 0x1d),
+                field: rgb8!(0x1a, 0x1d, 0x25),
+                text: rgb8!(0xe8, 0xea, 0xf0),
+                text_inverted: rgb8!(0x0e, 0x0f, 0x13),
+                text_skipped: rgb8!(0x9a, 0xa0, 0xb2),
+                disabled: rgb8!(0x6b, 0x72, 0x85),
+                navigation: rgb8!(0x20, 0x24, 0x2e),
+                success: rgb8!(0x27, 0x8c, 0x5c),
+                failure: rgb8!(0xa8, 0x36, 0x47),
+                skipped: rgb8!(0x1a, 0x1d, 0x25),
+                ..Self::new(config::Theme::Light, choice)
             },
         }
     }
@@ -153,7 +184,7 @@ impl iced::widget::overlay::menu::Catalog for Theme {
             },
             text_color: self.text,
             selected_background: self.positive.into(),
-            selected_text_color: Color::WHITE,
+            selected_text_color: self.accent_ink,
             shadow: Shadow::default(),
         }
     }
@@ -218,7 +249,8 @@ impl button::Catalog for Theme {
             text_color: match class {
                 Button::GameListEntryTitleDisabled => self.text_skipped.alpha(0.8),
                 Button::GameListEntryTitleUnscanned => self.text.alpha(0.8),
-                Button::NavButtonInactive | Button::Bare => self.text,
+                Button::NavButtonActive | Button::NavButtonInactive | Button::Bare => self.text,
+                Button::Primary | Button::GameActionPrimary => self.accent_ink,
                 _ => self.text_button.alpha(0.8),
             },
             shadow: Shadow {
@@ -255,8 +287,11 @@ impl button::Catalog for Theme {
                 },
                 text_color: match class {
                     Button::GameListEntryTitleDisabled => self.text_skipped,
-                    Button::GameListEntryTitleUnscanned | Button::NavButtonInactive => self.text,
+                    Button::GameListEntryTitleUnscanned | Button::NavButtonActive | Button::NavButtonInactive => {
+                        self.text
+                    }
                     Button::Bare => self.text.alpha(0.9),
+                    Button::Primary | Button::GameActionPrimary => self.accent_ink,
                     _ => self.text_button,
                 },
                 shadow: Shadow {
@@ -330,6 +365,7 @@ impl container::Catalog for Theme {
                 Container::GameListEntry => self.field.alpha(0.15).into(),
                 Container::ModalBackground => self.field.alpha(0.75).into(),
                 Container::Notification => self.field.alpha(0.5).into(),
+                Container::ModalForeground => self.panel.into(),
                 Container::Tooltip => self.field.into(),
                 Container::DisabledBackup => self.disabled.into(),
                 Container::BadgeActivated => self.negative.into(),

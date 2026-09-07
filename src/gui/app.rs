@@ -1495,7 +1495,7 @@ impl App {
     }
 
     pub fn theme(&self) -> crate::gui::style::Theme {
-        crate::gui::style::Theme::from(self.config.theme)
+        crate::gui::style::Theme::new(self.config.theme, self.config.accent)
     }
 
     pub fn update(&mut self, message: Message) -> Task<Message> {
@@ -1537,6 +1537,9 @@ impl App {
                 match event {
                     config::Event::Theme(theme) => {
                         self.config.theme = theme;
+                    }
+                    config::Event::Accent(accent) => {
+                        self.config.accent = accent;
                     }
                     config::Event::Language(language) => {
                         TRANSLATOR.set_language(language);

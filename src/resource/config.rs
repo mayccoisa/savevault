@@ -28,6 +28,7 @@ fn default_backup_dir() -> StrictPath {
 #[derive(Debug, Clone)]
 pub enum Event {
     Theme(Theme),
+    Accent(Accent),
     Language(Language),
     CheckRelease(bool),
     BackupTarget(String),
@@ -116,6 +117,7 @@ pub struct Config {
     pub manifest: ManifestConfig,
     pub language: Language,
     pub theme: Theme,
+    pub accent: Accent,
     pub roots: Vec<Root>,
     pub redirects: Vec<RedirectConfig>,
     pub backup: BackupConfig,
@@ -333,8 +335,9 @@ impl Default for SecondaryManifestConfig {
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub enum Theme {
-    #[default]
     Light,
+    /// The default since Save Vault v2: the palette was designed dark first.
+    #[default]
     Dark,
 }
 
@@ -345,6 +348,31 @@ impl Theme {
 impl ToString for Theme {
     fn to_string(&self) -> String {
         TRANSLATOR.theme_name(self)
+    }
+}
+
+/// Highlight color, applied on top of the light or dark theme.
+///
+/// The color values live in the GUI layer (`gui::style`), not here: this crate also builds
+/// without the `app` feature, where `iced::Color` does not exist.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize, schemars::JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub enum Accent {
+    #[default]
+    Green,
+    Blue,
+    Purple,
+    Orange,
+    Red,
+}
+
+impl Accent {
+    pub const ALL: &'static [Self] = &[Self::Green, Self::Blue, Self::Purple, Self::Orange, Self::Red];
+}
+
+impl ToString for Accent {
+    fn to_string(&self) -> String {
+        TRANSLATOR.accent_name(self)
     }
 }
 
@@ -2145,7 +2173,8 @@ mod tests {
                     secondary: vec![]
                 },
                 language: Language::English,
-                theme: Theme::Light,
+                theme: Theme::Dark,
+                accent: Accent::Green,
                 roots: vec![],
                 redirects: vec![],
                 backup: BackupConfig {
@@ -2269,7 +2298,8 @@ mod tests {
                     }]
                 },
                 language: Language::English,
-                theme: Theme::Light,
+                theme: Theme::Dark,
+                accent: Accent::Green,
                 roots: vec![Root::new("~/steam", Store::Steam), Root::new("~/other", Store::Other),],
                 redirects: vec![RedirectConfig {
                     kind: RedirectKind::Restore,
@@ -2373,6 +2403,7 @@ manifest:
   enable: true
 language: en-US
 theme: light
+accent: green
 roots:
   - store: steam
     path: ~/steam
@@ -2490,6 +2521,7 @@ customGames:
                 },
                 language: Language::English,
                 theme: Theme::Light,
+                accent: Accent::Green,
                 roots: vec![Root::new("~/steam", Store::Steam), Root::new("~/other", Store::Other),],
                 redirects: vec![RedirectConfig {
                     kind: RedirectKind::Restore,
