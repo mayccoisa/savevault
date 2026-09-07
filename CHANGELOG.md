@@ -3,6 +3,19 @@
 SaveVault is a fork of [Ludusavi](https://github.com/mtkennerly/ludusavi) by Michael Kennerly.
 Everything under "Inherited from Ludusavi" is the upstream history, with its own version numbers.
 
+## SaveVault v0.7.0 (2026-09-07)
+
+* Added:
+  * An accent color for the interface: green (the default), blue, purple, orange or red. It
+    applies on top of either theme and is remembered, in Other > Accent color.
+
+* Changed:
+  * The light and dark themes were repainted with the Save Vault palette, so the app finally
+    looks like itself instead of the tool it was forked from. The dark theme is deeper, panels
+    and fields are separated, and buttons, selected menu entries and the active tab now follow
+    your accent color.
+  * New installs now start on the dark theme. If you already picked a theme, it is kept.
+
 ## SaveVault v0.6.0 (2026-08-10)
 
 * Added:
@@ -21,6 +34,9 @@ Everything under "Inherited from Ludusavi" is the upstream history, with its own
   * A button on the backup screen hides games that were scanned and did not change, and unchanged
     games now get their own badge. Before, "scanned, nothing to do" and "not scanned yet" looked
     exactly the same.
+  * A `sources` command, for checking where SaveVault thinks each of your games comes from. It is
+    a diagnostic: it exists to prove the app can tell a Steam game from an Epic one before that is
+    used to group the game list on screen.
 
 * Changed:
   * An emulator game's backup folder is now named after the game, with its code in parentheses:
@@ -28,20 +44,6 @@ Everything under "Inherited from Ludusavi" is the upstream history, with its own
     you check that everything you wanted was saved, and nobody memorises serials.
     Existing backups are renamed on their next backup, and stay restorable.
     Saves that carry no title of their own, such as a PS2 memory card, keep showing just the code.
-
-* Added:
-  * An accent color for the interface: green (the default), blue, purple, orange or red. It
-    applies on top of either theme and is remembered, in Other > Accent color.
-  * A `sources` command, for checking where SaveVault thinks each of your games comes from. It is
-    a diagnostic: it exists to prove the app can tell a Steam game from an Epic one before that is
-    used to group the game list on screen.
-
-* Changed:
-  * The light and dark themes were repainted with the Save Vault palette, so the app finally
-    looks like itself instead of the tool it was forked from. The dark theme is deeper, panels
-    and fields are separated, and buttons, selected menu entries and the active tab now follow
-    your accent color.
-  * New installs now start on the dark theme. If you already picked a theme, it is kept.
 
 ## SaveVault v0.5.0 (2026-08-03)
 
