@@ -289,98 +289,90 @@ pub fn custom_games<'a>(
     let content = config.custom_games.iter().enumerate().fold(
         Column::new()
             .width(Length::Fill)
-            .padding(padding::top(0).bottom(5).left(15).right(15))
-            .spacing(design::space::SM),
+            .padding([0.0, design::space::XL])
+            .spacing(design::space::MD),
         |parent, (i, x)| {
             if !filter.qualifies(x) {
                 return parent;
             }
             parent.push({
-                let mut content = Column::new()
-                    .padding(design::space::XS)
-                    .spacing(design::space::XS)
-                    .push(
-                        Row::new()
-                            .spacing(design::space::LG)
-                            .align_y(iced::Alignment::Center)
-                            .push(button::expand(
-                                x.expanded,
-                                Message::ToggleCustomGameExpanded {
-                                    index: i,
-                                    expanded: !x.expanded,
-                                },
-                            ))
-                            .push(
-                                Row::new()
-                                    .width(110)
-                                    .spacing(design::space::LG)
-                                    .align_y(Alignment::Center)
-                                    .push(
-                                        checkbox(
-                                            "",
-                                            config.is_custom_game_enabled(i),
-                                            Message::config(move |enabled| config::Event::CustomGameEnabled {
-                                                index: i,
-                                                enabled,
-                                            }),
-                                        )
-                                        .spacing(0)
-                                        .class(style::Checkbox),
-                                    )
-                                    .push(button::move_up_maybe(
-                                        Message::config(config::Event::CustomGame),
-                                        i,
-                                        !filter.enabled,
-                                    ))
-                                    .push(button::move_down_maybe(
-                                        Message::config(config::Event::CustomGame),
-                                        i,
-                                        config.custom_games.len(),
-                                        !filter.enabled,
-                                    )),
+                // Subject on the left, actions on the right. It used to be one strip of eight
+                // controls at equal weight — chevron, checkbox, two arrows, the name, the kind, a
+                // refresh and a delete — so the thing the row is ABOUT, its name, was just the
+                // fifth control along.
+                let mut content = Column::new().spacing(design::space::MD).push(
+                    Row::new()
+                        .spacing(design::space::MD)
+                        .align_y(iced::Alignment::Center)
+                        .push(button::expand(
+                            x.expanded,
+                            Message::ToggleCustomGameExpanded {
+                                index: i,
+                                expanded: !x.expanded,
+                            },
+                        ))
+                        .push(
+                            checkbox(
+                                "",
+                                config.is_custom_game_enabled(i),
+                                Message::config(move |enabled| config::Event::CustomGameEnabled { index: i, enabled }),
                             )
-                            .push(histories.input(UndoSubject::CustomGameName(i)))
-                            .push(if manifest.0.get(&x.name).is_some_and(|game| game.is_from_manifest()) {
-                                Some(match x.effective_integration() {
-                                    Integration::Override => Badge::icon(Icon::CallSplit)
-                                        .tooltip(TRANSLATOR.custom_game_will_override())
-                                        .view(),
-                                    Integration::Extend => Badge::icon(Icon::CallMerge)
-                                        .tooltip(TRANSLATOR.custom_game_will_extend())
-                                        .view(),
-                                })
-                            } else {
-                                None
+                            .spacing(0)
+                            .class(style::Checkbox),
+                        )
+                        .push(histories.input(UndoSubject::CustomGameName(i)))
+                        .push(button::move_up_maybe(
+                            Message::config(config::Event::CustomGame),
+                            i,
+                            !filter.enabled,
+                        ))
+                        .push(button::move_down_maybe(
+                            Message::config(config::Event::CustomGame),
+                            i,
+                            config.custom_games.len(),
+                            !filter.enabled,
+                        ))
+                        .push(if manifest.0.get(&x.name).is_some_and(|game| game.is_from_manifest()) {
+                            Some(match x.effective_integration() {
+                                Integration::Override => Badge::icon(Icon::CallSplit)
+                                    .tooltip(TRANSLATOR.custom_game_will_override())
+                                    .view(),
+                                Integration::Extend => Badge::icon(Icon::CallMerge)
+                                    .tooltip(TRANSLATOR.custom_game_will_extend())
+                                    .view(),
                             })
-                            .push(
-                                pick_list(
-                                    CustomGameKind::ALL,
-                                    Some(config.custom_games[i].kind()),
-                                    Message::config(move |v| config::Event::CustomGameKind(i, v)),
-                                )
-                                .class(style::PickList::Primary)
-                                .width(100),
+                        } else {
+                            None
+                        })
+                        .push(
+                            pick_list(
+                                CustomGameKind::ALL,
+                                Some(config.custom_games[i].kind()),
+                                Message::config(move |v| config::Event::CustomGameKind(i, v)),
                             )
-                            .push(
-                                Tooltip::new(
-                                    button::refresh_custom_game(
-                                        Message::Backup(BackupPhase::Start {
-                                            games: Some(GameSelection::single(config.custom_games[i].name.clone())),
-                                            preview: true,
-                                            jump: true,
-                                            repair: false,
-                                        }),
-                                        operating,
-                                        config.is_custom_game_individually_scannable(i),
-                                    ),
-                                    text(TRANSLATOR.preview_button_in_custom_mode()).size(design::text::BODY),
-                                    tooltip::Position::Top,
-                                )
-                                .gap(5)
-                                .class(style::Container::Tooltip),
+                            .class(style::PickList::Primary)
+                            .width(100),
+                        )
+                        .push(
+                            Tooltip::new(
+                                button::refresh_custom_game(
+                                    Message::Backup(BackupPhase::Start {
+                                        games: Some(GameSelection::single(config.custom_games[i].name.clone())),
+                                        preview: true,
+                                        jump: true,
+                                        repair: false,
+                                    }),
+                                    operating,
+                                    config.is_custom_game_individually_scannable(i),
+                                ),
+                                text(TRANSLATOR.preview_button_in_custom_mode()).size(design::text::BODY),
+                                tooltip::Position::Top,
                             )
-                            .push(button::delete(Message::config(config::Event::CustomGame), i)),
-                    );
+                            .gap(5)
+                            .class(style::Container::Tooltip),
+                        )
+                        .push(button::delete(Message::config(config::Event::CustomGame), i)),
+                );
 
                 if x.expanded {
                     let top_side = 5;
@@ -419,7 +411,7 @@ pub fn custom_games<'a>(
                                     Column::new()
                                         .width(left_side)
                                         .padding(padding::top(top_side))
-                                        .push(text(TRANSLATOR.field(&TRANSLATOR.integration_label()))),
+                                        .push(text(field_label(TRANSLATOR.integration_label()))),
                                 )
                                 .push(
                                     pick_list(
@@ -524,7 +516,7 @@ pub fn custom_games<'a>(
                                     Column::new()
                                         .width(left_side)
                                         .padding(padding::top(top_side))
-                                        .push(text(TRANSLATOR.field(&TRANSLATOR.custom_installed_name_label()))),
+                                        .push(text(field_label(TRANSLATOR.custom_installed_name_label()))),
                                 )
                                 .push(
                                     x.install_dir
@@ -567,7 +559,7 @@ pub fn custom_games<'a>(
                                     Column::new()
                                         .width(left_side)
                                         .padding(padding::top(top_side))
-                                        .push(text(TRANSLATOR.field(&TRANSLATOR.wine_prefix()))),
+                                        .push(text(field_label(TRANSLATOR.wine_prefix()))),
                                 )
                                 .push(
                                     x.wine_prefix
@@ -607,7 +599,10 @@ pub fn custom_games<'a>(
 
                 Container::new(content)
                     .id(config.custom_games[i].name.clone())
-                    .class(style::Container::GameListEntry)
+                    // Tighter than a settings section: this is a list of rows, and each card here
+                    // holds one line until it is opened.
+                    .padding(design::space::MD)
+                    .class(style::Container::Card)
             })
         },
     );

@@ -181,7 +181,7 @@ label-primary-manifest = Manifesto primário
 # This refers to how we integrate a custom game with the manifest data.
 label-integration = Integração
 # This is a folder name where a specific game is installed
-label-installed-name = Nome Instalado
+label-installed-name = Nome instalado
 store-ea = EA
 store-epic = Epic
 store-gog = GOG

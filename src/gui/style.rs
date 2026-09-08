@@ -246,7 +246,9 @@ impl button::Catalog for Theme {
                 color: match class {
                     Button::NavButtonActive | Button::NavButtonInactive => self.navigation,
                     Button::Secondary => self.field,
-                    Button::Danger => self.negative.alpha(design::alpha::HALF),
+                    // Neutral at rest, like any other quiet button. The trash icon already says what
+                    // it does; the red is what the pointer reveals, and it is the whole warning.
+                    Button::Danger => self.field,
                     _ => Color::TRANSPARENT,
                 },
                 width: match class {
@@ -265,7 +267,7 @@ impl button::Catalog for Theme {
                 Button::GameListEntryTitleUnscanned => self.text.alpha(0.8),
                 Button::NavButtonActive | Button::NavButtonInactive | Button::Bare | Button::SideNavActive => self.text,
                 Button::Secondary => self.text,
-                Button::Danger => self.negative,
+                Button::Danger => self.text_skipped,
                 Button::SideNavInactive => self.text_skipped,
                 Button::Primary | Button::GameActionPrimary => self.accent_ink,
                 _ => self.text_button.alpha(0.8),
