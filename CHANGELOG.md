@@ -3,6 +3,58 @@
 SaveVault is a fork of [Ludusavi](https://github.com/mtkennerly/ludusavi) by Michael Kennerly.
 Everything under "Inherited from Ludusavi" is the upstream history, with its own version numbers.
 
+## SaveVault v0.8.0 (2026-09-07)
+
+* Added:
+  * A navigation column on the left, with the app's name, its version and the update check at
+    the bottom, replacing the row of tabs. Above the content there is now a title bar carrying
+    the screen's name and its commands.
+  * A **Logs** screen: every backup ever made, newest first, and what each one changed —
+    "3 new, 2 changed, 1 removed". Nothing extra is recorded to produce it; it is read from the
+    mapping file each backup already writes.
+  * The Emulators screen shows each emulator's logo, and the console it plays games from. Most
+    people looking for their saves know they played a PS2 game, not that PCSX2 is the thing
+    that runs it.
+  * The Emulators screen opens with the number that matters first: how many of the eight are
+    actually on this computer. Until now the only way to know was to read all eight entries.
+
+* Changed:
+  * **The text is smaller.** The body was 16px, which on Windows at 125% scaling draws at 20
+    physical pixels — too large for an app whose screens are mostly folder paths and file
+    counts. Everything now comes from one type scale (12 / 14 / 16 / 20) with the body at 14,
+    and emphasis is carried by weight and colour instead of size.
+  * Every button is the same height, and its label is centred in it. There were three button
+    heights, none of them declared.
+  * One corner radius across the app, instead of seven. Badges keep their pill shape, which is
+    a shape and not a radius.
+  * Buttons had a shadow with an offset and no blur at all — a hard black step rather than a
+    shadow, and what made each one look pasted onto the screen. Elevation is now a five-step
+    ladder chosen by how far off the surface a thing sits.
+  * The sidebar, the title bar and each list row carried a 1px border on top of a background
+    that already set them apart. A block now gets a surface **or** an outline, never both, so
+    the screen stops reading as boxes inside boxes.
+  * The Emulators screen is a grid of cards, two across, all the same width. It was eight
+    blocks in a single column, each as wide as its own text, so none of them lined up and two
+    thirds of a normal monitor went unused.
+  * On an emulator card, "Add folder" is a secondary action and "Check again" is the one filled
+    button on the screen. Eight filled green buttons were eight primary actions competing with
+    each other and with the one action that leads the screen.
+  * An emulator card no longer repeats itself: the long sentence stays only when it says more
+    than the one-word state already did — the folder in use, the count, the instruction.
+  * The action bar shrank from three ~150px strips to one 38px strip. The commands moved up
+    into the title bar, which already reserved space for a single word. The backup destination
+    became a chip that opens a drawer. Nothing was lost: select-all became the header checkbox,
+    and sorting became a clickable column.
+  * The main action is no longer drawn before the first scan, since there is nothing to act on,
+    and it stays present but dimmed with the reason when a scan found no changes — disappearing
+    would make the bar jump.
+  * The window says "Save Vault". The binary and the config and backup folders keep the
+    `ludusavi` name, because renaming those would be a migration and not a rename.
+
+* Fixed:
+  * The Brazilian Portuguese strings for the emulator screen and the update check were written
+    without any accents ("nao", "restauracao", "atualizacao"). Thirteen lines corrected.
+
 ## SaveVault v0.7.0 (2026-09-07)
 
 * Added:

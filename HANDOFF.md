@@ -534,6 +534,35 @@ cd C:\proj\savevault; cargo run -- emulators
 A saída desse comando é o que confirma ou corrige os cinco itens acima. Quando ela chegar, ajustar o
 perfil e atualizar esta seção.
 
+## 6.1. Corrigido: o "conteúdo transborda à direita" NÃO existe
+
+O commit `1a94e09` fechou com um **defeito conhecido** registrado assim: *"o conteúdo transborda a
+direita e os comandos ficam fora da tela"*, com a observação de que alargar a coluna de 236 para 400
+não movia o ponto do corte e que declarar largura na casca, no template e na lista não resolvia.
+
+**Esse defeito não existe.** Foi medido de novo em 2026-09-07, e é artefato da ferramenta de
+captura, não do app.
+
+O que acontece: o processo que tira o screenshot (PowerShell, e qualquer coisa que não declare
+ciência de DPI) é **DPI-unaware**. Num monitor a 125%, o `GetWindowRect` dele volta em coordenadas
+virtualizadas — 1050×806 para uma janela que de fato tem 1313×1007. O bitmap sai com 1050 de largura,
+o `PrintWindow` desenha o conteúdo real de 1313 dentro dele, e o que sobra é cortado à direita e
+embaixo. Daí "o ponto do corte não se move": ele é fixado pelo tamanho do bitmap, não pelo layout.
+
+A prova é uma linha, antes de medir qualquer coisa:
+
+```powershell
+[void][User32]::SetProcessDpiAwarenessContext([IntPtr](-4))   # PER_MONITOR_AWARE_V2
+```
+
+Com ela, a mesma janela volta 1313×1007 e a captura mostra a tela inteira, sem corte nenhum, com a
+ação principal e a coluna de tamanho no lugar. O app declara `permonitorv2` em
+`assets/windows/manifest.xml` e está certo; quem estava errado era o medidor.
+
+**Regra que fica:** antes de concluir qualquer coisa sobre layout a partir de um screenshot nesta
+máquina, torne o processo que captura ciente de DPI. Sem isso, todo achado de "está cortado" é
+suspeito, e essa suspeita já custou duas rodadas.
+
 ## 7. Guardas para trabalho não assistido
 
 Se esta sessão está rodando sem o Maycon acompanhando:
