@@ -12,6 +12,7 @@ use crate::{
             BackupPhase, GameAction, GameSelection, Message, Operation, RestorePhase, Screen, ScrollSubject,
             UndoSubject,
         },
+        design,
         file_tree::FileTree,
         icon::Icon,
         search::FilterComponent,
@@ -74,12 +75,12 @@ impl GameListEntry {
 
         Container::new(
             Column::new()
-                .padding(5)
-                .spacing(5)
+                .padding(design::space::XS)
+                .spacing(design::space::XS)
                 .align_x(Alignment::Center)
                 .push(
                     Row::new()
-                        .spacing(15)
+                        .spacing(design::space::MD)
                         .align_y(Alignment::Center)
                         .push({
                             let name = name.clone();
@@ -127,7 +128,7 @@ impl GameListEntry {
                                     style::Button::GameListEntryTitleFailed
                                 })
                                 .width(Length::Fill)
-                                .padding(2),
+                                .padding(design::space::XS),
                         )
                         .push(match changes {
                             ScanChange::New => Some(Badge::new_entry().faded(!enabled).view()),
@@ -175,7 +176,7 @@ impl GameListEntry {
                                 .map(|comment| {
                                     Tooltip::new(
                                         Icon::Comment.text().width(Length::Shrink),
-                                        text(comment).size(16),
+                                        text(comment).size(design::text::BODY),
                                         tooltip::Position::Top,
                                     )
                                     .gap(5)
@@ -210,7 +211,7 @@ impl GameListEntry {
                                         self.scan_info.backup.as_ref().map(|backup| {
                                             Container::new(
                                                 text(backup.label())
-                                                    .size(14)
+                                                    .size(design::text::BODY)
                                                     .line_height(1.1)
                                                     .align_x(HorizontalAlignment::Center),
                                             )
@@ -224,7 +225,7 @@ impl GameListEntry {
                                                 Container::new(
                                                     Container::new(
                                                         text(backup.label())
-                                                            .size(14)
+                                                            .size(design::text::BODY)
                                                             .align_x(HorizontalAlignment::Center),
                                                     )
                                                     .padding(padding::top(2))
@@ -280,11 +281,11 @@ impl GameListEntry {
                                                 game: self.scan_info.game_name.clone(),
                                             })
                                             .class(style::Button::GameActionPrimary)
-                                            .padding(2);
+                                            .padding(design::space::XS);
                                         Container::new(
                                             Tooltip::new(
                                                 button,
-                                                text(action.to_string()).size(16),
+                                                text(action.to_string()).size(design::text::BODY),
                                                 tooltip::Position::Top,
                                             )
                                             .gap(5)
@@ -332,8 +333,8 @@ impl GameListEntry {
                 .push(self.comment_editor.as_ref().map(|x| {
                     Row::new()
                         .align_y(Alignment::Center)
-                        .padding([0, 20])
-                        .spacing(20)
+                        .padding([0.0, design::space::XL])
+                        .spacing(design::space::LG)
                         .push(text(TRANSLATOR.comment_label()))
                         .push(text_editor(
                             x,
@@ -398,7 +399,7 @@ impl GameListEntry {
 fn group_header<'a>(origin: game_filter::Origin, count: usize, open: bool) -> Button<'a> {
     Button::new(
         Row::new()
-            .spacing(10)
+            .spacing(design::space::SM)
             .align_y(Alignment::Center)
             .push(if open {
                 Icon::KeyboardArrowDown.text()
@@ -411,7 +412,7 @@ fn group_header<'a>(origin: game_filter::Origin, count: usize, open: bool) -> Bu
     .on_press(Message::ToggleGameListGroupCollapsed { origin })
     .class(style::Button::GameListEntryTitle)
     .width(Length::Fill)
-    .padding(5)
+    .padding(design::space::XS)
 }
 
 #[derive(Default)]
@@ -453,7 +454,7 @@ impl GameList {
             } else {
                 label
             };
-            let content: Element<'a> = Button::new(text(label).size(12))
+            let content: Element<'a> = Button::new(text(label).size(design::text::CAPTION))
                 .on_press(if active {
                     config::Event::SortReversed(!sort.reversed).into()
                 } else {
@@ -471,7 +472,7 @@ impl GameList {
 
         Container::new(
             Row::new()
-                .spacing(15)
+                .spacing(design::space::MD)
                 .align_y(Alignment::Center)
                 .padding(padding::top(6).bottom(6).left(15).right(15))
                 // A caixa que marca e desmarca todos passa a ficar em cima da coluna que ela
@@ -499,8 +500,12 @@ impl GameList {
                     SortKey::Status,
                     Some(Self::COLUMN_BACKUP),
                 ))
-                .push(Container::new(text("").size(12)).width(Self::COLUMN_ACTION))
-                .push(column(TRANSLATOR.logs_column_size(), SortKey::Size, Some(Self::COLUMN_SIZE))),
+                .push(Container::new(text("").size(design::text::CAPTION)).width(Self::COLUMN_ACTION))
+                .push(column(
+                    TRANSLATOR.logs_column_size(),
+                    SortKey::Size,
+                    Some(Self::COLUMN_SIZE),
+                )),
         )
         .class(style::Container::TableHeader)
     }
@@ -519,7 +524,7 @@ impl GameList {
         Container::new(
             Column::new()
                 .width(Length::Fill)
-                .spacing(15)
+                .spacing(design::space::MD)
                 .push({
                     self.search.view(
                         match scan_kind {
@@ -563,7 +568,7 @@ impl GameList {
                     let mut content = Column::new()
                         .width(Length::Fill)
                         .padding(padding::bottom(5).left(15).right(15))
-                        .spacing(5);
+                        .spacing(design::space::XS);
                     let mut open = true;
                     let mut current: Option<game_filter::Origin> = None;
 

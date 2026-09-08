@@ -8,6 +8,7 @@ use crate::{
         badge::Badge,
         button,
         common::{Message, TreeNodeKey},
+        design,
         icon::Icon,
         style,
         widget::{Button, Column, Container, IcedParentExt, Row, checkbox, text},
@@ -141,7 +142,7 @@ impl FileTreeNode {
                             }
                         }),
                     )
-                    .spacing(5)
+                    .spacing(design::space::XS)
                     .class(style::Checkbox),
                 )
                 .align_x(iced::alignment::Horizontal::Center)
@@ -154,15 +155,19 @@ impl FileTreeNode {
                 Row::new()
                     .align_y(Alignment::Center)
                     .padding(padding::left(35 * level).right(10))
-                    .spacing(10)
+                    .spacing(design::space::SM)
                     .push(match self.node_type {
-                        FileTreeNodeType::File | FileTreeNodeType::RegistryValue(_) => {
-                            Container::new(Icon::SubdirectoryArrowRight.text().height(25).width(25).size(25))
-                        }
+                        FileTreeNodeType::File | FileTreeNodeType::RegistryValue(_) => Container::new(
+                            Icon::SubdirectoryArrowRight
+                                .text()
+                                .height(design::icon::LG)
+                                .width(design::icon::LG)
+                                .size(design::icon::LG),
+                        ),
                         FileTreeNodeType::RegistryKey => Container::new(
                             Button::new(Icon::KeyboardArrowDown.text_small())
                                 .class(style::Button::Primary)
-                                .padding(5)
+                                .padding(design::space::XS)
                                 .height(25)
                                 .width(25),
                         ),
@@ -227,7 +232,7 @@ impl FileTreeNode {
                     Row::new()
                         .align_y(Alignment::Center)
                         .padding(padding::left(35 * level).right(10))
-                        .spacing(10)
+                        .spacing(design::space::SM)
                         .push(button::expand(
                             expanded,
                             Message::ToggleGameListEntryTreeExpanded {
@@ -239,7 +244,7 @@ impl FileTreeNode {
                         .push(
                             Row::new()
                                 .align_y(Alignment::Center)
-                                .spacing(10)
+                                .spacing(design::space::SM)
                                 .push(text(if label.is_empty() && self.node_type == FileTreeNodeType::File {
                                     "/".to_string()
                                 } else {
@@ -255,7 +260,7 @@ impl FileTreeNode {
                                         Button::new(Icon::OpenInNew.text_small())
                                             .on_press(Message::OpenDir { path: path.clone() })
                                             .class(style::Button::Primary)
-                                            .padding(5)
+                                            .padding(design::space::XS)
                                             .height(25),
                                     ),
                                     _ => None,
@@ -265,7 +270,7 @@ impl FileTreeNode {
                                         Button::new(Icon::OpenInNew.text_small())
                                             .on_press(Message::OpenRegistry(item.clone()))
                                             .class(style::Button::Primary)
-                                            .padding(5)
+                                            .padding(design::space::XS)
                                             .height(25),
                                     ),
                                     _ => None,
@@ -275,7 +280,7 @@ impl FileTreeNode {
                                         Button::new(Icon::Copy.text_small())
                                             .on_press(Message::CopyText(item.interpret()))
                                             .class(style::Button::Primary)
-                                            .padding(5)
+                                            .padding(design::space::XS)
                                             .height(25),
                                     ),
                                     _ => None,
@@ -577,7 +582,7 @@ impl FileTree {
     pub fn view(&self, game_name: &str, config: &Config, scan_kind: ScanKind) -> Container {
         Container::new(
             self.nodes.iter().filter(|(_, v)| v.anything_showable()).fold(
-                Column::new().spacing(4),
+                Column::new().spacing(design::space::XS),
                 |parent, (k, v)| {
                     parent.push(v.view(0, k.raw().to_string(), game_name, config, scan_kind, &self.expansion))
                 },

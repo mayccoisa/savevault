@@ -1,7 +1,7 @@
 use iced::{Length, alignment};
 
 use crate::gui::{
-    font,
+    design, font,
     widget::{Text, text},
 };
 
@@ -40,6 +40,8 @@ pub enum Icon {
     #[allow(unused)]
     Settings,
     SubdirectoryArrowRight,
+    /// The stand-in for an emulator whose project publishes no artwork we can ship.
+    VideogameAsset,
     Upload,
     VisibilityOff,
 }
@@ -80,6 +82,7 @@ impl Icon {
             Self::Search => '\u{e8b6}',
             Self::Settings => '\u{E8B8}',
             Self::SubdirectoryArrowRight => '\u{E5DA}',
+            Self::VideogameAsset => '\u{E338}',
             Self::Upload => '\u{f09b}',
             Self::VisibilityOff => '\u{e8f5}',
         }
@@ -88,9 +91,9 @@ impl Icon {
     pub fn text(self) -> Text<'static> {
         text(self.as_char().to_string())
             .font(font::ICONS)
-            .size(20)
+            .size(design::icon::MD)
             .width(60)
-            .height(20)
+            .height(design::icon::MD)
             .align_x(alignment::Horizontal::Center)
             .align_y(iced::alignment::Vertical::Center)
             .line_height(1.0)
@@ -103,9 +106,9 @@ impl Icon {
     pub fn text_small(self) -> Text<'static> {
         text(self.as_char().to_string())
             .font(font::ICONS)
-            .size(15)
-            .width(15)
-            .height(15)
+            .size(design::icon::SM)
+            .width(design::icon::SM)
+            .height(design::icon::SM)
             .align_x(alignment::Horizontal::Center)
             .align_y(iced::alignment::Vertical::Center)
             .line_height(1.0)

@@ -9,6 +9,7 @@ use crate::{
     cloud::Remote,
     gui::{
         common::{ERROR_ICON, Message, UndoSubject},
+        design,
         modal::{ModalField, ModalInputKind},
         style,
         widget::{Element, TextInput, Undoable, id},
@@ -515,7 +516,7 @@ impl TextHistories {
                     .on_input(event)
                     .class(style::TextInput)
                     .width(Length::Fill)
-                    .padding(5);
+                    .padding(design::space::XS);
 
                 if let Some(icon) = icon {
                     input = input.icon(icon);

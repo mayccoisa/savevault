@@ -3,7 +3,7 @@ use std::time::Instant;
 use iced::{alignment, padding};
 
 use crate::gui::{
-    style,
+    design, style,
     widget::{Container, text},
 };
 
@@ -37,7 +37,7 @@ impl Notification {
     pub fn view(&self) -> Container {
         Container::new(
             Container::new(text(self.text.clone()))
-                .padding([3, 40])
+                .padding([design::space::XS, design::space::XXL])
                 .align_x(alignment::Horizontal::Center)
                 .align_y(alignment::Vertical::Center)
                 .class(style::Container::Notification),

@@ -12,6 +12,7 @@ use crate::{
         badge::Badge,
         button,
         common::{BackupPhase, GameSelection, Message, Operation, RestorePhase, ScrollSubject, UndoSubject},
+        design,
         icon::Icon,
         shortcuts::TextHistories,
         style,
@@ -440,7 +441,7 @@ impl Modal {
     pub fn body(&self, config: &Config, histories: &TextHistories, operation: &Operation) -> Column {
         let mut col = Column::new()
             .width(Length::Fill)
-            .spacing(15)
+            .spacing(design::space::MD)
             .padding(padding::right(10))
             .align_x(Alignment::Center)
             .push(text(self.text(config)));
@@ -467,7 +468,7 @@ impl Modal {
                     col = col
                         .push_if(!state.idle(), || {
                             Row::new()
-                                .spacing(20)
+                                .spacing(design::space::LG)
                                 .align_y(Alignment::Center)
                                 .push(text(TRANSLATOR.change_count_label(changes.len())))
                                 .push_if(changes.is_empty(), || text(TRANSLATOR.loading()))
@@ -489,7 +490,7 @@ impl Modal {
                                     |parent, CloudChange { change, path }| {
                                         parent.push(
                                             Row::new()
-                                                .spacing(20)
+                                                .spacing(design::space::LG)
                                                 .align_y(Alignment::Start)
                                                 .push(Badge::scan_change(*change).view())
                                                 .push(text(path)),
@@ -527,9 +528,13 @@ impl Modal {
                             .push(Container::new(Icon::Info.text_narrow()).padding(padding::top(2).left(5).right(10)))
                             .push(
                                 Column::new()
-                                    .spacing(5)
-                                    .push(text(&note.message).size(16))
-                                    .push(note.source.as_ref().map(|source| text(source).size(12))),
+                                    .spacing(design::space::XS)
+                                    .push(text(&note.message).size(design::text::BODY))
+                                    .push(
+                                        note.source
+                                            .as_ref()
+                                            .map(|source| text(source).size(design::text::CAPTION)),
+                                    ),
                             ),
                     )
                 });
@@ -551,7 +556,7 @@ impl Modal {
                             );
                             parent.push(text(format!("{readable} - {game}")))
                         });
-                    col = col.align_x(Alignment::Start).spacing(2);
+                    col = col.align_x(Alignment::Start).spacing(design::space::XS);
                 }
             }
         }
@@ -577,7 +582,10 @@ impl Modal {
                 .height(Length::Fill)
                 .push(
                     Container::new(
-                        ScrollSubject::Modal.into_widget(self.body(config, histories, operation).padding([0, 30])),
+                        ScrollSubject::Modal.into_widget(
+                            self.body(config, histories, operation)
+                                .padding([0.0, design::space::XXL]),
+                        ),
                     )
                     .padding(padding::top(30).right(5))
                     .width(Length::Fill)
@@ -592,8 +600,8 @@ impl Modal {
                                 .push_if(!matches!(self, Modal::BackupValidation { .. }), || positive_button)
                                 .push(negative_button),
                         }
-                        .padding([30, 0])
-                        .spacing(20)
+                        .padding([design::space::XXL, 0.0])
+                        .spacing(design::space::LG)
                         .align_y(Alignment::Center),
                     )
                     .width(Length::Fill)

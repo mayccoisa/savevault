@@ -7,6 +7,7 @@
 use std::collections::BTreeMap;
 
 use crate::{
+    gui::design,
     lang::TRANSLATOR,
     resource::config::Config,
     scan::layout::{Backup, BackupLayout, IndividualMappingFile},
@@ -139,7 +140,10 @@ impl Logs {
 
         // One place decides the shape of the table, so the header can never drift from the rows.
         fn row<'a>(cells: Vec<(Element<'a>, u16)>) -> Row<'a> {
-            let mut row = Row::new().spacing(12).align_y(Alignment::Center).padding([8, 14]);
+            let mut row = Row::new()
+                .spacing(design::space::MD)
+                .align_y(Alignment::Center)
+                .padding([design::space::SM, design::space::MD]);
             for (cell, portion) in cells {
                 row = row.push(Container::new(cell).width(Length::FillPortion(portion)));
             }
@@ -147,19 +151,37 @@ impl Logs {
         }
 
         if !self.loaded || self.entries.is_empty() {
-            return Container::new(text(TRANSLATOR.logs_empty()).size(14))
-                .padding(40)
+            return Container::new(text(TRANSLATOR.logs_empty()).size(design::text::BODY))
+                .padding(design::space::XXL)
                 .width(Length::Fill)
                 .into();
         }
 
         let header = Container::new(row(vec![
-            (text(TRANSLATOR.logs_column_when()).size(12).into(), 3),
-            (text(TRANSLATOR.logs_column_game()).size(12).into(), 5),
-            (text(TRANSLATOR.logs_column_backup()).size(12).into(), 2),
-            (text(TRANSLATOR.logs_column_change()).size(12).into(), 5),
-            (text(TRANSLATOR.logs_column_files()).size(12).into(), 2),
-            (text(TRANSLATOR.logs_column_size()).size(12).into(), 2),
+            (
+                text(TRANSLATOR.logs_column_when()).size(design::text::CAPTION).into(),
+                3,
+            ),
+            (
+                text(TRANSLATOR.logs_column_game()).size(design::text::CAPTION).into(),
+                5,
+            ),
+            (
+                text(TRANSLATOR.logs_column_backup()).size(design::text::CAPTION).into(),
+                2,
+            ),
+            (
+                text(TRANSLATOR.logs_column_change()).size(design::text::CAPTION).into(),
+                5,
+            ),
+            (
+                text(TRANSLATOR.logs_column_files()).size(design::text::CAPTION).into(),
+                2,
+            ),
+            (
+                text(TRANSLATOR.logs_column_size()).size(design::text::CAPTION).into(),
+                2,
+            ),
         ]))
         .class(style::Container::TableHeader);
 
@@ -168,17 +190,19 @@ impl Logs {
             body = body.push(
                 Container::new(row(vec![
                     (
-                        text(entry.when.format("%Y-%m-%d %H:%M").to_string()).size(13).into(),
+                        text(entry.when.format("%Y-%m-%d %H:%M").to_string())
+                            .size(design::text::BODY)
+                            .into(),
                         3,
                     ),
-                    (text(entry.game.clone()).size(13).into(), 5),
+                    (text(entry.game.clone()).size(design::text::BODY).into(), 5),
                     (
                         text(if entry.full {
                             TRANSLATOR.logs_kind_full()
                         } else {
                             TRANSLATOR.logs_kind_differential()
                         })
-                        .size(13)
+                        .size(design::text::BODY)
                         .into(),
                         2,
                     ),
@@ -190,12 +214,17 @@ impl Logs {
                             Some(comment) => format!("{} — {}", entry.change(), comment),
                             None => entry.change(),
                         })
-                        .size(13)
+                        .size(design::text::BODY)
                         .into(),
                         5,
                     ),
-                    (text(entry.files.to_string()).size(13).into(), 2),
-                    (text(TRANSLATOR.adjusted_size(entry.bytes)).size(13).into(), 2),
+                    (text(entry.files.to_string()).size(design::text::BODY).into(), 2),
+                    (
+                        text(TRANSLATOR.adjusted_size(entry.bytes))
+                            .size(design::text::BODY)
+                            .into(),
+                        2,
+                    ),
                 ]))
                 .class(style::Container::TableRow),
             );

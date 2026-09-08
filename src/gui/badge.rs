@@ -3,6 +3,7 @@ use iced::{Length, alignment, padding, widget::tooltip};
 use crate::{
     gui::{
         common::Message,
+        design,
         icon::Icon,
         style,
         widget::{Button, Container, Tooltip, text},
@@ -119,7 +120,7 @@ impl Badge {
         Container::new({
             let content = Container::new({
                 let mut text = text(self.text)
-                    .size(12)
+                    .size(design::text::CAPTION)
                     .align_x(alignment::Horizontal::Center)
                     .width(self.width.unwrap_or(Length::Shrink));
 
@@ -129,7 +130,7 @@ impl Badge {
 
                 text
             })
-            .padding([2, 10])
+            .padding([design::space::XS, design::space::SM])
             .class(match self.change {
                 None => match self.on_press.as_ref() {
                     Some(Message::FilterDuplicates { game: None, .. }) => style::Container::BadgeActivated,
@@ -145,7 +146,7 @@ impl Badge {
             let content = match self.tooltip {
                 None => content,
                 Some(tooltip) => Container::new(
-                    Tooltip::new(content, text(tooltip).size(16), tooltip::Position::Top)
+                    Tooltip::new(content, text(tooltip).size(design::text::BODY), tooltip::Position::Top)
                         .gap(5)
                         .class(style::Container::Tooltip),
                 ),

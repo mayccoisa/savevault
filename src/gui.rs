@@ -2,7 +2,9 @@ mod app;
 mod badge;
 mod button;
 mod common;
+mod design;
 mod editor;
+mod emulator_art;
 mod file_tree;
 mod font;
 mod game_list;
@@ -31,6 +33,10 @@ pub fn run(flags: Flags) {
         .executor::<app::Executor>()
         .settings(iced::Settings {
             default_font: font::TEXT,
+            // Set explicitly: iced defaults to 16, which on Windows at 125% scaling draws at 20
+            // physical pixels. Every screen inherits this, so it is the one number that decides
+            // how dense the app reads.
+            default_text_size: iced::Pixels(design::text::BODY),
             ..Default::default()
         })
         .window(iced::window::Settings {

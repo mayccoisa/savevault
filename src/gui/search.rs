@@ -5,6 +5,7 @@ use crate::{
     gui::{
         button,
         common::{Message, Screen, UndoSubject},
+        design,
         shortcuts::TextHistories,
         style,
         widget::{Column, Container, Element, IcedParentExt, Row, checkbox, pick_list, text},
@@ -42,7 +43,7 @@ fn template<'a, T: 'static + Default + Copy + Eq + PartialEq + ToString>(
     message: fn(T) -> Message,
 ) -> Element<'a> {
     Row::new()
-        .spacing(10)
+        .spacing(design::space::SM)
         .align_y(Alignment::Center)
         .push(
             checkbox("", filter.active, move |enabled| Message::Filter {
@@ -61,7 +62,7 @@ fn template_noncopy<T: 'static + Default + Clone + Eq + PartialEq + ToString>(
     message: fn(T) -> Message,
 ) -> Element {
     Row::new()
-        .spacing(10)
+        .spacing(design::space::SM)
         .align_y(Alignment::Center)
         .push(
             checkbox("", filter.active, move |enabled| Message::Filter {
@@ -81,7 +82,7 @@ fn template_with_label<T: 'static + Default + Clone + Eq + PartialEq + ToString>
     message: fn(T) -> Message,
 ) -> Element {
     Row::new()
-        .spacing(10)
+        .spacing(design::space::SM)
         .align_y(Alignment::Center)
         .push(checkbox(label, filter.active, move |enabled| Message::Filter {
             event: game_filter::Event::ToggledFilter { filter: kind, enabled },
@@ -168,10 +169,10 @@ impl FilterComponent {
 
         let content = Column::new()
             .padding(padding::left(5).right(5))
-            .spacing(15)
+            .spacing(design::space::MD)
             .push(
                 Row::new()
-                    .spacing(20)
+                    .spacing(design::space::LG)
                     .align_y(Alignment::Center)
                     .push(text(TRANSLATOR.filter_label()))
                     .push(histories.input(match screen {
@@ -182,7 +183,7 @@ impl FilterComponent {
             )
             .push(
                 Row::new()
-                    .spacing(15)
+                    .spacing(design::space::MD)
                     .align_y(Alignment::Center)
                     .push(template(
                         &self.uniqueness,
@@ -292,7 +293,7 @@ impl CustomGamesFilter {
 
         let content = Row::new()
             .padding(padding::left(5).right(5))
-            .spacing(20)
+            .spacing(design::space::LG)
             .align_y(Alignment::Center)
             .push(text(TRANSLATOR.filter_label()))
             .push(histories.input(UndoSubject::CustomGamesSearchGameName))

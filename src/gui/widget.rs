@@ -5,6 +5,7 @@ use iced::{Alignment, Length, widget as w};
 use crate::{
     gui::{
         common::{Message, Operation, UndoSubject},
+        design,
         icon::Icon,
         style::{self, Theme},
     },
@@ -39,7 +40,7 @@ pub fn checkbox<'a>(
     Checkbox::new(is_checked)
         .label(label)
         .on_toggle(f)
-        .size(20)
+        .size(design::icon::MD)
         .text_shaping(w::text::Shaping::Advanced)
 }
 
@@ -57,7 +58,7 @@ where
 {
     PickList::new(options, selected, on_selected)
         .text_shaping(w::text::Shaping::Advanced)
-        .padding(5)
+        .padding(design::space::XS)
 }
 
 pub fn text<'a>(content: impl iced::widget::text::IntoFragment<'a>) -> Text<'a> {
@@ -129,7 +130,7 @@ pub fn number_input<'a>(
 ) -> Element<'a> {
     Container::new(
         Row::new()
-            .spacing(5)
+            .spacing(design::space::XS)
             .align_y(Alignment::Center)
             .push(text(label))
             .push(text(value.to_string()))
@@ -137,13 +138,13 @@ pub fn number_input<'a>(
                 Button::new(Icon::Remove.text().width(Length::Shrink))
                     .on_press_if(&value > range.start(), || (change)(value - 1))
                     .class(style::Button::Negative)
-                    .padding(5)
+                    .padding(design::space::XS)
             })
             .push({
                 Button::new(Icon::Add.text().width(Length::Shrink))
                     .on_press_if(&value < range.end(), || (change)(value + 1))
                     .class(style::Button::Primary)
-                    .padding(5)
+                    .padding(design::space::XS)
             }),
     )
     .into()
@@ -300,8 +301,8 @@ impl Progress {
             Button::new(
                 Row::new()
                     .width(Length::Fill)
-                    .spacing(5)
-                    .padding([0, 5])
+                    .spacing(design::space::XS)
+                    .padding([0.0, design::space::XS])
                     .align_y(Alignment::Center)
                     .push(label.map(|x| text(x).size(text_size)))
                     .push(elapsed.map(|x| text(x).size(text_size)))

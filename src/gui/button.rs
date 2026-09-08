@@ -5,6 +5,7 @@ use crate::{
         common::{
             BackupPhase, BrowseFileSubject, BrowseSubject, Message, Operation, RestorePhase, Screen, ValidatePhase,
         },
+        design,
         icon::Icon,
         style,
         widget::{Button, Container, Element, Row, Text, Tooltip, text},
@@ -18,11 +19,7 @@ use crate::{
 const WIDTH: u32 = 125;
 
 fn template(content: Text, action: Option<Message>, style: Option<style::Button>) -> Element {
-    Button::new(content.align_x(alignment::Horizontal::Center))
-        .on_press_maybe(action)
-        .class(style.unwrap_or(style::Button::Primary))
-        .padding(5)
-        .into()
+    template_complex(content.align_x(alignment::Horizontal::Center), action, style)
 }
 
 fn template_bare(content: Text, action: Option<Message>, style: Option<style::Button>) -> Element {
@@ -44,7 +41,7 @@ fn template_extended(
         Some(icon) => template_complex(
             Container::new(
                 Row::new()
-                    .spacing(5)
+                    .spacing(design::space::XS)
                     .push(icon.text_narrow())
                     .push(content.width(Length::Shrink)),
             )
@@ -68,28 +65,41 @@ fn template_complex<'a>(
     action: Option<Message>,
     style: Option<style::Button>,
 ) -> Element<'a> {
-    Button::new(content)
+    Button::new(centered(content))
         .on_press_maybe(action)
         .class(style.unwrap_or(style::Button::Primary))
-        .padding(5)
+        .height(design::control::HEIGHT)
+        .padding([0.0, design::control::PAD_X_ICON])
         .into()
 }
 
+/// Centres a button's content in the fixed control height.
+///
+/// This wrapper is not optional. `Button` gives its child the content box and lets the child decide
+/// where to sit in it, and a `Text` or a `Row` is only as tall as it needs to be — so the moment the
+/// button got a declared height, every label went to the top of it and the buttons looked broken.
+/// Before the declared height the padding happened to produce the centring by accident.
+fn centered<'a>(content: impl Into<Element<'a>>) -> Container<'a> {
+    Container::new(content).center_y(Length::Fill)
+}
+
 pub fn primary<'a>(content: String, action: Option<Message>) -> Element<'a> {
-    Button::new(text(content).align_x(alignment::Horizontal::Center))
+    Button::new(centered(text(content).align_x(alignment::Horizontal::Center)))
         .on_press_maybe(action)
         .class(style::Button::Primary)
-        .padding(5)
+        .height(design::control::HEIGHT)
+        .padding([0.0, design::control::PAD_X])
         .width(WIDTH)
         .into()
 }
 
 pub fn negative<'a>(content: String, action: Option<Message>) -> Element<'a> {
-    Button::new(text(content).align_x(alignment::Horizontal::Center))
+    Button::new(centered(text(content).align_x(alignment::Horizontal::Center)))
         .on_press_maybe(action)
         .class(style::Button::Negative)
         .width(WIDTH)
-        .padding(5)
+        .height(design::control::HEIGHT)
+        .padding([0.0, design::control::PAD_X])
         .into()
 }
 
@@ -134,10 +144,11 @@ pub fn hide<'a>(action: Message) -> Element<'a> {
 /// The fixed 125px of `primary` is what made the old row of actions read like a form. In a
 /// command bar the width has to come from the word.
 pub fn secondary<'a>(content: String, action: Option<Message>, tooltip: Option<String>) -> Element<'a> {
-    let button: Element<'a> = Button::new(text(content).align_x(alignment::Horizontal::Center))
+    let button: Element<'a> = Button::new(centered(text(content).align_x(alignment::Horizontal::Center)))
         .on_press_maybe(action)
         .class(style::Button::Secondary)
-        .padding([6, 14])
+        .height(design::control::HEIGHT)
+        .padding([0.0, design::control::PAD_X])
         .into();
 
     match tooltip {
@@ -150,10 +161,11 @@ pub fn secondary<'a>(content: String, action: Option<Message>, tooltip: Option<S
 
 /// The primary action of the bar: filled, and as wide as its label.
 pub fn primary_bar<'a>(content: String, action: Option<Message>, tooltip: Option<String>) -> Element<'a> {
-    let button: Element<'a> = Button::new(text(content).align_x(alignment::Horizontal::Center))
+    let button: Element<'a> = Button::new(centered(text(content).align_x(alignment::Horizontal::Center)))
         .on_press_maybe(action)
         .class(style::Button::Primary)
-        .padding([6, 16])
+        .height(design::control::HEIGHT)
+        .padding([0.0, design::control::PAD_X])
         .into();
 
     match tooltip {
@@ -166,14 +178,15 @@ pub fn primary_bar<'a>(content: String, action: Option<Message>, tooltip: Option
 
 /// An icon button in the command bar.
 pub fn bar_icon<'a>(icon: Icon, action: Option<Message>, active: bool, tooltip: Option<String>) -> Element<'a> {
-    let button: Element<'a> = Button::new(icon.text_narrow())
+    let button: Element<'a> = Button::new(centered(icon.text_narrow()))
         .on_press_maybe(action)
         .class(if active {
             style::Button::Negative
         } else {
             style::Button::Secondary
         })
-        .padding([6, 12])
+        .height(design::control::HEIGHT)
+        .padding([0.0, design::control::PAD_X_ICON])
         .into();
 
     match tooltip {
@@ -247,10 +260,11 @@ pub fn scan<'a>(ongoing: &Operation, scan_kind: crate::scan::ScanKind, scanned: 
     if !scanned && !scanning && !cancelling {
         primary_bar(label, action, None)
     } else if scanning || cancelling {
-        let button: Element<'a> = Button::new(text(label).align_x(alignment::Horizontal::Center))
+        let button: Element<'a> = Button::new(centered(text(label).align_x(alignment::Horizontal::Center)))
             .on_press_maybe(action)
             .class(style::Button::Negative)
-            .padding([6, 16])
+            .height(design::control::HEIGHT)
+            .padding([0.0, design::control::PAD_X])
             .into();
         button
     } else {
@@ -286,11 +300,14 @@ pub fn backup_main<'a>(ongoing: &Operation, filtered: bool, has_changes: bool) -
         return primary_bar(TRANSLATOR.cancelling_button(), None, None);
     }
     if running {
-        let button: Element<'a> = Button::new(text(TRANSLATOR.cancel_button()).align_x(alignment::Horizontal::Center))
-            .on_press(Message::CancelOperation)
-            .class(style::Button::Negative)
-            .padding([6, 16])
-            .into();
+        let button: Element<'a> = Button::new(centered(
+            text(TRANSLATOR.cancel_button()).align_x(alignment::Horizontal::Center),
+        ))
+        .on_press(Message::CancelOperation)
+        .class(style::Button::Negative)
+        .height(design::control::HEIGHT)
+        .padding([0.0, design::control::PAD_X])
+        .into();
         return button;
     }
 
@@ -334,11 +351,14 @@ pub fn restore_main<'a>(ongoing: &Operation, filtered: bool) -> Element<'a> {
         return primary_bar(TRANSLATOR.cancelling_button(), None, None);
     }
     if running {
-        let button: Element<'a> = Button::new(text(TRANSLATOR.cancel_button()).align_x(alignment::Horizontal::Center))
-            .on_press(Message::CancelOperation)
-            .class(style::Button::Negative)
-            .padding([6, 16])
-            .into();
+        let button: Element<'a> = Button::new(centered(
+            text(TRANSLATOR.cancel_button()).align_x(alignment::Horizontal::Center),
+        ))
+        .on_press(Message::CancelOperation)
+        .class(style::Button::Negative)
+        .height(design::control::HEIGHT)
+        .padding([0.0, design::control::PAD_X])
+        .into();
         return button;
     }
 
@@ -501,11 +521,15 @@ pub fn add_game<'a>() -> Element<'a> {
     )
 }
 
+/// Secondary, and deliberately so: there are eight of these on the screen at once.
+///
+/// Filled and accent-coloured, they were eight primary actions competing with each other and with
+/// the one action that actually leads the screen, which is re-checking the disk.
 pub fn add_emulator_root<'a>(app: crate::scan::emulator::App) -> Element<'a> {
     template(
-        text(TRANSLATOR.add_emulator_folder_button()).width(WIDTH),
+        text(TRANSLATOR.add_emulator_folder_button()),
         Some(config::Event::AddEmulatorRoot(app).into()),
-        None,
+        Some(style::Button::Secondary),
     )
 }
 
@@ -515,14 +539,26 @@ pub fn add_emulator_root<'a>(app: crate::scan::emulator::App) -> Element<'a> {
 /// que iriam mexer no mesmo arquivo ao mesmo tempo.
 pub fn check_for_update<'a>(updating: &bool) -> Element<'a> {
     template(
-        text(TRANSLATOR.check_for_update_button()).size(14),
+        text(TRANSLATOR.check_for_update_button()).size(design::text::BODY),
         (!*updating).then_some(Message::UpdateApp),
         None,
     )
 }
 
+/// The one action that leads the Emulators screen, so it is the one filled button on it.
+///
+/// It carries its label now. As a bare circular-arrow icon it was the loudest thing on the screen
+/// and still did not say what pressing it would do.
 pub fn refresh_emulators<'a>() -> Element<'a> {
-    template(Icon::Refresh.text(), Some(Message::RefreshEmulators), None)
+    template_complex(
+        Row::new()
+            .spacing(design::space::SM)
+            .align_y(alignment::Vertical::Center)
+            .push(Icon::Refresh.text_narrow().size(design::icon::SM))
+            .push(text(TRANSLATOR.recheck_emulators_button()).width(Length::Shrink)),
+        Some(Message::RefreshEmulators),
+        None,
+    )
 }
 
 pub fn open_url<'a>(label: String, url: String) -> Element<'a> {
@@ -543,10 +579,11 @@ pub fn side_nav<'a>(screen: Screen, current_screen: Screen) -> Button<'a> {
         Screen::Other => TRANSLATOR.nav_other_button(),
     };
 
-    Button::new(text(label).size(14).align_x(alignment::Horizontal::Left))
+    Button::new(centered(text(label).align_x(alignment::Horizontal::Left)))
         .on_press(Message::SwitchScreen(screen))
         .width(Length::Fill)
-        .padding([10, 11])
+        .height(design::control::HEIGHT)
+        .padding([0.0, design::control::PAD_X_ICON])
         .class(if current_screen == screen {
             style::Button::SideNavActive
         } else {
@@ -639,7 +676,7 @@ pub fn expand<'a>(expanded: bool, on_press: Message) -> Element<'a> {
     )
     .on_press(on_press)
     .class(style::Button::Primary)
-    .padding(5)
+    .padding(design::space::XS)
     .height(25)
     .width(25)
     .into()

@@ -8,6 +8,7 @@ use crate::{
         badge::Badge,
         button,
         common::{BackupPhase, BrowseFileSubject, BrowseSubject, GameSelection, Message, ScrollSubject, UndoSubject},
+        design,
         icon::Icon,
         search::CustomGamesFilter,
         shortcuts::TextHistories,
@@ -23,7 +24,7 @@ use crate::{
 };
 
 pub fn root<'a>(config: &Config, histories: &TextHistories, modifiers: &keyboard::Modifiers) -> Container<'a> {
-    let mut content = Column::new().width(Length::Fill).spacing(5);
+    let mut content = Column::new().width(Length::Fill).spacing(design::space::XS);
     if config.roots.is_empty() {
         content = content.push(text(TRANSLATOR.no_roots_are_configured()));
     } else {
@@ -35,7 +36,7 @@ pub fn root<'a>(config: &Config, histories: &TextHistories, modifiers: &keyboard
                 Store::Lutris => parent
                     .push(
                         Row::new()
-                            .spacing(20)
+                            .spacing(design::space::LG)
                             .push(button::move_up(Message::config(config::Event::Root), i))
                             .push(button::move_down(
                                 Message::config(config::Event::Root),
@@ -56,7 +57,7 @@ pub fn root<'a>(config: &Config, histories: &TextHistories, modifiers: &keyboard
                     )
                     .push(
                         Row::new()
-                            .spacing(20)
+                            .spacing(design::space::LG)
                             .align_y(Alignment::Center)
                             .push(space::horizontal().width(70))
                             .push(text(TRANSLATOR.field("pga.db")))
@@ -65,7 +66,7 @@ pub fn root<'a>(config: &Config, histories: &TextHistories, modifiers: &keyboard
                     ),
                 _ => parent.push(
                     Row::new()
-                        .spacing(20)
+                        .spacing(design::space::LG)
                         .push(button::move_up(Message::config(config::Event::Root), i))
                         .push(button::move_down(
                             Message::config(config::Event::Root),
@@ -89,7 +90,7 @@ pub fn root<'a>(config: &Config, histories: &TextHistories, modifiers: &keyboard
 
     content = content.push(
         Row::new()
-            .spacing(20)
+            .spacing(design::space::LG)
             .push(button::add(Message::config(config::Event::Root)))
             .push(button::search(Message::FindRoots)),
     );
@@ -131,11 +132,11 @@ pub fn manifest<'a>(
     };
 
     let mut content = Column::new()
-        .padding(5)
-        .spacing(5)
+        .padding(design::space::XS)
+        .spacing(design::space::XS)
         .push(
             Row::new()
-                .spacing(20)
+                .spacing(design::space::LG)
                 .align_y(Alignment::Center)
                 .push(Space::new().width(Length::Fill))
                 .push(Container::new(text(TRANSLATOR.checked_label())).width(label_width))
@@ -146,7 +147,7 @@ pub fn manifest<'a>(
         )
         .push(
             Row::new()
-                .spacing(20)
+                .spacing(design::space::LG)
                 .align_y(Alignment::Center)
                 .push(
                     checkbox(
@@ -173,7 +174,7 @@ pub fn manifest<'a>(
         .fold(content, |column, (i, _)| {
             column.push(
                 Row::new()
-                    .spacing(20)
+                    .spacing(design::space::LG)
                     .align_y(Alignment::Center)
                     .push(
                         checkbox(
@@ -224,16 +225,19 @@ pub fn redirect<'a>(config: &Config, histories: &TextHistories, modifiers: &keyb
     let redirects = config.get_redirects();
 
     let wrapper = Container::new({
-        let mut content = Column::new().padding(5).spacing(4).push(checkbox(
-            TRANSLATOR.reverse_redirects_when_restoring(),
-            config.restore.reverse_redirects,
-            Message::config(config::Event::ReverseRedirectsOnRestore),
-        ));
+        let mut content = Column::new()
+            .padding(design::space::XS)
+            .spacing(design::space::XS)
+            .push(checkbox(
+                TRANSLATOR.reverse_redirects_when_restoring(),
+                config.restore.reverse_redirects,
+                Message::config(config::Event::ReverseRedirectsOnRestore),
+            ));
 
         content = config.redirects.iter().enumerate().fold(content, |parent, (i, _)| {
             parent.push(
                 Row::new()
-                    .spacing(20)
+                    .spacing(design::space::LG)
                     .push(button::move_up(
                         Message::config(move |x| config::Event::Redirect(x, None)),
                         i,
@@ -285,94 +289,97 @@ pub fn custom_games<'a>(
         Column::new()
             .width(Length::Fill)
             .padding(padding::top(0).bottom(5).left(15).right(15))
-            .spacing(10),
+            .spacing(design::space::SM),
         |parent, (i, x)| {
             if !filter.qualifies(x) {
                 return parent;
             }
             parent.push({
-                let mut content = Column::new().padding(5).spacing(5).push(
-                    Row::new()
-                        .spacing(20)
-                        .align_y(iced::Alignment::Center)
-                        .push(button::expand(
-                            x.expanded,
-                            Message::ToggleCustomGameExpanded {
-                                index: i,
-                                expanded: !x.expanded,
-                            },
-                        ))
-                        .push(
-                            Row::new()
-                                .width(110)
-                                .spacing(20)
-                                .align_y(Alignment::Center)
-                                .push(
-                                    checkbox(
-                                        "",
-                                        config.is_custom_game_enabled(i),
-                                        Message::config(move |enabled| config::Event::CustomGameEnabled {
-                                            index: i,
-                                            enabled,
-                                        }),
+                let mut content = Column::new()
+                    .padding(design::space::XS)
+                    .spacing(design::space::XS)
+                    .push(
+                        Row::new()
+                            .spacing(design::space::LG)
+                            .align_y(iced::Alignment::Center)
+                            .push(button::expand(
+                                x.expanded,
+                                Message::ToggleCustomGameExpanded {
+                                    index: i,
+                                    expanded: !x.expanded,
+                                },
+                            ))
+                            .push(
+                                Row::new()
+                                    .width(110)
+                                    .spacing(design::space::LG)
+                                    .align_y(Alignment::Center)
+                                    .push(
+                                        checkbox(
+                                            "",
+                                            config.is_custom_game_enabled(i),
+                                            Message::config(move |enabled| config::Event::CustomGameEnabled {
+                                                index: i,
+                                                enabled,
+                                            }),
+                                        )
+                                        .spacing(0)
+                                        .class(style::Checkbox),
                                     )
-                                    .spacing(0)
-                                    .class(style::Checkbox),
-                                )
-                                .push(button::move_up_maybe(
-                                    Message::config(config::Event::CustomGame),
-                                    i,
-                                    !filter.enabled,
-                                ))
-                                .push(button::move_down_maybe(
-                                    Message::config(config::Event::CustomGame),
-                                    i,
-                                    config.custom_games.len(),
-                                    !filter.enabled,
-                                )),
-                        )
-                        .push(histories.input(UndoSubject::CustomGameName(i)))
-                        .push(if manifest.0.get(&x.name).is_some_and(|game| game.is_from_manifest()) {
-                            Some(match x.effective_integration() {
-                                Integration::Override => Badge::icon(Icon::CallSplit)
-                                    .tooltip(TRANSLATOR.custom_game_will_override())
-                                    .view(),
-                                Integration::Extend => Badge::icon(Icon::CallMerge)
-                                    .tooltip(TRANSLATOR.custom_game_will_extend())
-                                    .view(),
+                                    .push(button::move_up_maybe(
+                                        Message::config(config::Event::CustomGame),
+                                        i,
+                                        !filter.enabled,
+                                    ))
+                                    .push(button::move_down_maybe(
+                                        Message::config(config::Event::CustomGame),
+                                        i,
+                                        config.custom_games.len(),
+                                        !filter.enabled,
+                                    )),
+                            )
+                            .push(histories.input(UndoSubject::CustomGameName(i)))
+                            .push(if manifest.0.get(&x.name).is_some_and(|game| game.is_from_manifest()) {
+                                Some(match x.effective_integration() {
+                                    Integration::Override => Badge::icon(Icon::CallSplit)
+                                        .tooltip(TRANSLATOR.custom_game_will_override())
+                                        .view(),
+                                    Integration::Extend => Badge::icon(Icon::CallMerge)
+                                        .tooltip(TRANSLATOR.custom_game_will_extend())
+                                        .view(),
+                                })
+                            } else {
+                                None
                             })
-                        } else {
-                            None
-                        })
-                        .push(
-                            pick_list(
-                                CustomGameKind::ALL,
-                                Some(config.custom_games[i].kind()),
-                                Message::config(move |v| config::Event::CustomGameKind(i, v)),
+                            .push(
+                                pick_list(
+                                    CustomGameKind::ALL,
+                                    Some(config.custom_games[i].kind()),
+                                    Message::config(move |v| config::Event::CustomGameKind(i, v)),
+                                )
+                                .class(style::PickList::Primary)
+                                .width(100),
                             )
-                            .class(style::PickList::Primary)
-                            .width(100),
-                        )
-                        .push(
-                            Tooltip::new(
-                                button::refresh_custom_game(
-                                    Message::Backup(BackupPhase::Start {
-                                        games: Some(GameSelection::single(config.custom_games[i].name.clone())),
-                                        preview: true,
-                                        jump: true,
-                                        repair: false,
-                                    }),
-                                    operating,
-                                    config.is_custom_game_individually_scannable(i),
-                                ),
-                                text(TRANSLATOR.preview_button_in_custom_mode()).size(16),
-                                tooltip::Position::Top,
+                            .push(
+                                Tooltip::new(
+                                    button::refresh_custom_game(
+                                        Message::Backup(BackupPhase::Start {
+                                            games: Some(GameSelection::single(config.custom_games[i].name.clone())),
+                                            preview: true,
+                                            jump: true,
+                                            repair: false,
+                                        }),
+                                        operating,
+                                        config.is_custom_game_individually_scannable(i),
+                                    ),
+                                    text(TRANSLATOR.preview_button_in_custom_mode()).size(design::text::BODY),
+                                    tooltip::Position::Top,
+                                )
+                                .gap(5)
+                                .class(style::Container::Tooltip),
                             )
-                            .gap(5)
-                            .class(style::Container::Tooltip),
-                        )
-                        .push(button::delete(Message::config(config::Event::CustomGame), i)),
-                );
+                            .push(button::delete(Message::config(config::Event::CustomGame), i)),
+                    );
 
                 if x.expanded {
                     let top_side = 5;
@@ -381,7 +388,7 @@ pub fn custom_games<'a>(
                     content = content
                         .push_if(config.custom_games[i].kind() == CustomGameKind::Alias, move || {
                             Row::new()
-                                .spacing(10)
+                                .spacing(design::space::SM)
                                 .align_y(Alignment::Center)
                                 .push(
                                     Column::new()
@@ -393,7 +400,7 @@ pub fn custom_games<'a>(
                         })
                         .push_if(config.custom_games[i].kind() == CustomGameKind::Alias, || {
                             Row::new()
-                                .spacing(10)
+                                .spacing(design::space::SM)
                                 .push(
                                     Container::new(space::horizontal().width(left_side))
                                         .padding(padding::top(top_side)),
@@ -406,7 +413,7 @@ pub fn custom_games<'a>(
                         })
                         .push_if(config.custom_games[i].kind() == CustomGameKind::Game, || {
                             Row::new()
-                                .spacing(10)
+                                .spacing(design::space::SM)
                                 .push(
                                     Column::new()
                                         .width(left_side)
@@ -424,7 +431,7 @@ pub fn custom_games<'a>(
                         })
                         .push_if(config.custom_games[i].kind() == CustomGameKind::Game, || {
                             Row::new()
-                                .spacing(10)
+                                .spacing(design::space::SM)
                                 .push(
                                     Column::new()
                                         .width(left_side)
@@ -435,11 +442,11 @@ pub fn custom_games<'a>(
                                     x.files
                                         .iter()
                                         .enumerate()
-                                        .fold(Column::new().spacing(4), |column, (ii, _)| {
+                                        .fold(Column::new().spacing(design::space::XS), |column, (ii, _)| {
                                             column.push(
                                                 Row::new()
                                                     .align_y(Alignment::Center)
-                                                    .spacing(20)
+                                                    .spacing(design::space::LG)
                                                     .push(button::move_up_nested(
                                                         Message::config2(config::Event::CustomGameFile),
                                                         i,
@@ -468,7 +475,7 @@ pub fn custom_games<'a>(
                         })
                         .push_if(config.custom_games[i].kind() == CustomGameKind::Game, || {
                             Row::new()
-                                .spacing(10)
+                                .spacing(design::space::SM)
                                 .push(
                                     Column::new()
                                         .width(left_side)
@@ -479,10 +486,10 @@ pub fn custom_games<'a>(
                                     x.registry
                                         .iter()
                                         .enumerate()
-                                        .fold(Column::new().spacing(4), |column, (ii, _)| {
+                                        .fold(Column::new().spacing(design::space::XS), |column, (ii, _)| {
                                             column.push(
                                                 Row::new()
-                                                    .spacing(20)
+                                                    .spacing(design::space::LG)
                                                     .align_y(Alignment::Center)
                                                     .push(button::move_up_nested(
                                                         Message::config2(config::Event::CustomGameRegistry),
@@ -511,7 +518,7 @@ pub fn custom_games<'a>(
                         })
                         .push_if(config.custom_games[i].kind() == CustomGameKind::Game, || {
                             Row::new()
-                                .spacing(10)
+                                .spacing(design::space::SM)
                                 .push(
                                     Column::new()
                                         .width(left_side)
@@ -522,11 +529,11 @@ pub fn custom_games<'a>(
                                     x.install_dir
                                         .iter()
                                         .enumerate()
-                                        .fold(Column::new().spacing(4), |column, (ii, _)| {
+                                        .fold(Column::new().spacing(design::space::XS), |column, (ii, _)| {
                                             column.push(
                                                 Row::new()
                                                     .align_y(Alignment::Center)
-                                                    .spacing(20)
+                                                    .spacing(design::space::LG)
                                                     .push(button::move_up_nested(
                                                         Message::config2(config::Event::CustomGameInstallDir),
                                                         i,
@@ -554,7 +561,7 @@ pub fn custom_games<'a>(
                         })
                         .push_if(config.custom_games[i].kind() == CustomGameKind::Game, || {
                             Row::new()
-                                .spacing(10)
+                                .spacing(design::space::SM)
                                 .push(
                                     Column::new()
                                         .width(left_side)
@@ -565,11 +572,11 @@ pub fn custom_games<'a>(
                                     x.wine_prefix
                                         .iter()
                                         .enumerate()
-                                        .fold(Column::new().spacing(4), |column, (ii, _)| {
+                                        .fold(Column::new().spacing(design::space::XS), |column, (ii, _)| {
                                             column.push(
                                                 Row::new()
                                                     .align_y(Alignment::Center)
-                                                    .spacing(20)
+                                                    .spacing(design::space::LG)
                                                     .push(button::move_up_nested(
                                                         Message::config2(config::Event::CustomGameWinePrefix),
                                                         i,
@@ -609,11 +616,11 @@ pub fn custom_games<'a>(
 
 pub fn ignored_items<'a>(config: &Config, histories: &TextHistories, modifiers: &keyboard::Modifiers) -> Container<'a> {
     Container::new({
-        Column::new().spacing(10).push(
+        Column::new().spacing(design::space::SM).push(
             Container::new(
                 Column::new()
-                    .padding(5)
-                    .spacing(5)
+                    .padding(design::space::XS)
+                    .spacing(design::space::XS)
                     .push(
                         Row::new()
                             .push(Column::new().width(100).push(text(TRANSLATOR.custom_files_label())))
@@ -624,10 +631,10 @@ pub fn ignored_items<'a>(config: &Config, histories: &TextHistories, modifiers: 
                                     .ignored_paths
                                     .iter()
                                     .enumerate()
-                                    .fold(Column::new().spacing(4), |column, (ii, _)| {
+                                    .fold(Column::new().spacing(design::space::XS), |column, (ii, _)| {
                                         column.push(
                                             Row::new()
-                                                .spacing(20)
+                                                .spacing(design::space::LG)
                                                 .push(button::move_up(
                                                     Message::config(config::Event::BackupFilterIgnoredPath),
                                                     ii,
@@ -661,10 +668,10 @@ pub fn ignored_items<'a>(config: &Config, histories: &TextHistories, modifiers: 
                                     .ignored_registry
                                     .iter()
                                     .enumerate()
-                                    .fold(Column::new().spacing(4), |column, (ii, _)| {
+                                    .fold(Column::new().spacing(design::space::XS), |column, (ii, _)| {
                                         column.push(
                                             Row::new()
-                                                .spacing(20)
+                                                .spacing(design::space::LG)
                                                 .push(button::move_up(
                                                     Message::config(config::Event::BackupFilterIgnoredRegistry),
                                                     ii,

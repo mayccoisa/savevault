@@ -13,6 +13,7 @@ use crate::{
             BackupPhase, BrowseFileSubject, BrowseSubject, Flags, GameAction, GameSelection, Message, Operation,
             RestorePhase, Screen, ScrollSubject, UndoSubject, ValidatePhase,
         },
+        design, font,
         modal::{self, CloudModalState, Modal, ModalField, ModalInputKind},
         notification::Notification,
         screen,
@@ -1384,6 +1385,7 @@ impl App {
         let mut commands = vec![
             iced::font::load(std::borrow::Cow::Borrowed(crate::gui::font::TEXT_DATA)).map(|_| Message::Ignore),
             iced::font::load(std::borrow::Cow::Borrowed(crate::gui::font::ICONS_DATA)).map(|_| Message::Ignore),
+            iced::font::load(std::borrow::Cow::Borrowed(crate::gui::font::TEXT_STRONG_DATA)).map(|_| Message::Ignore),
             iced::window::oldest().and_then(iced::window::gain_focus),
         ];
 
@@ -3112,13 +3114,24 @@ impl App {
     pub fn view(&self) -> Element {
         let sidebar = Container::new(
             Column::new()
-                .padding([18, 14])
-                .spacing(4)
+                .padding([design::space::LG, design::space::MD])
+                .spacing(design::space::XS)
                 .push(
                     Column::new()
-                        .padding([6, 8])
-                        .push(text("Save Vault").size(15))
-                        .push(text(format!("v{}", *crate::prelude::VERSION)).size(11)),
+                        .padding([design::space::SM, design::space::SM])
+                        .spacing(design::space::XS)
+                        .push(
+                            text("Save Vault")
+                                .font(font::TEXT_STRONG)
+                                .size(design::text::SUBTITLE)
+                                .line_height(design::leading::TITLE),
+                        )
+                        .push(
+                            text(format!("v{}", *crate::prelude::VERSION))
+                                .size(design::text::CAPTION)
+                                .line_height(design::leading::TIGHT)
+                                .class(style::Text::Muted),
+                        ),
                 )
                 .push(button::side_nav(Screen::Backup, self.screen))
                 .push(button::side_nav(Screen::Restore, self.screen))
@@ -3130,17 +3143,22 @@ impl App {
                 .push(iced::widget::space().height(Length::Fill))
                 .push(button::check_for_update(&self.updating_app)),
         )
-        .width(236)
+        .width(design::SIDEBAR_WIDTH)
         .height(Length::Fill)
         .class(style::Container::Sidebar);
 
         let topbar = Container::new(
             Row::new()
-                .padding([0, 24])
-                .height(62)
-                .spacing(12)
+                .padding([0.0, design::space::XL])
+                .height(design::TOPBAR_HEIGHT)
+                .spacing(design::space::MD)
                 .align_y(Alignment::Center)
-                .push(text(self.screen.title()).size(16))
+                .push(
+                    text(self.screen.title())
+                        .font(font::TEXT_STRONG)
+                        .size(design::text::TITLE)
+                        .line_height(design::leading::TITLE),
+                )
                 .push(iced::widget::space().width(Length::Fill))
                 .push(match self.screen {
                     Screen::Backup => {
@@ -3183,10 +3201,9 @@ impl App {
                     &self.text_histories,
                     &self.modifiers,
                 ),
-                Screen::Emulators => {
-                    self.emulators_screen
-                        .view(&self.config, &self.text_histories, &self.modifiers)
-                }
+                Screen::Emulators => self
+                    .emulators_screen
+                    .view(&self.config, &self.text_histories, &self.modifiers),
                 Screen::Logs => self.logs.view(),
                 Screen::Other => screen::other(
                     self.updating_manifest,

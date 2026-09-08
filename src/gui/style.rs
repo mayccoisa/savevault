@@ -1,9 +1,9 @@
 use iced::{
-    Background, Border, Color, Shadow, Vector,
+    Background, Border, Color, Shadow,
     widget::{button, checkbox, container, pick_list, scrollable, text_editor, text_input},
 };
 
-use crate::{resource::config, scan::ScanChange};
+use crate::{gui::design, resource::config, scan::ScanChange};
 
 macro_rules! rgb8 {
     ($r:expr, $g:expr, $b:expr) => {
@@ -185,7 +185,7 @@ impl iced::widget::overlay::menu::Catalog for Theme {
             border: Border {
                 color: self.text.alpha(0.5),
                 width: 1.0,
-                radius: 5.0.into(),
+                radius: design::RADIUS.into(),
             },
             text_color: self.text,
             selected_background: self.positive.into(),
@@ -245,39 +245,31 @@ impl button::Catalog for Theme {
                     Button::NavButtonActive | Button::NavButtonInactive | Button::Secondary => 1.0,
                     _ => 0.0,
                 },
-                radius: match class {
-                    Button::GameActionPrimary
-                    | Button::GameListEntryTitle
-                    | Button::GameListEntryTitleFailed
-                    | Button::GameListEntryTitleDisabled
-                    | Button::GameListEntryTitleUnscanned
-                    | Button::NavButtonActive
-                    | Button::NavButtonInactive
-                    | Button::SideNavActive
-                    | Button::SideNavInactive => 9.0.into(),
-                    _ => 4.0.into(),
-                },
+                // One radius for every button. This block used to hand out 9px to the pill-shaped
+                // ones and 4px to the rest, which is how two kinds of corner ended up side by
+                // side in the same toolbar.
+                radius: design::RADIUS.into(),
             },
             text_color: match class {
                 Button::GameListEntryTitleDisabled => self.text_skipped.alpha(0.8),
                 Button::GameListEntryTitleUnscanned => self.text.alpha(0.8),
-                Button::NavButtonActive | Button::NavButtonInactive | Button::Bare | Button::SideNavActive => {
-                    self.text
-                }
+                Button::NavButtonActive | Button::NavButtonInactive | Button::Bare | Button::SideNavActive => self.text,
                 Button::Secondary => self.text,
                 Button::SideNavInactive => self.text_skipped,
                 Button::Primary | Button::GameActionPrimary => self.accent_ink,
                 _ => self.text_button.alpha(0.8),
             },
-            shadow: Shadow {
-                offset: match class {
-                    Button::NavButtonActive
-                    | Button::NavButtonInactive
-                    | Button::SideNavActive
-                    | Button::SideNavInactive => Vector::new(0.0, 0.0),
-                    _ => Vector::new(1.0, 1.0),
-                },
-                ..Default::default()
+            // A shadow with an offset and no blur is a hard black step, not a shadow. It is what
+            // made every button look pasted onto the screen.
+            shadow: match class {
+                Button::NavButtonActive
+                | Button::NavButtonInactive
+                | Button::SideNavActive
+                | Button::SideNavInactive
+                | Button::Secondary
+                | Button::Bare
+                | Button::Badge => design::elevation::FLAT,
+                _ => design::elevation::RESTING,
             },
             snap: true,
         };
@@ -300,10 +292,9 @@ impl button::Catalog for Theme {
                         Button::NavButtonActive | Button::NavButtonInactive => 1.0,
                         _ => active.border.width,
                     },
-                    radius: match class {
-                        Button::NavButtonActive | Button::NavButtonInactive => 10.0.into(),
-                        _ => active.border.radius,
-                    },
+                    // Hover does not change the shape of a control. It used to grow the nav button
+                    // from 9px to 10px, which reads as a wobble, not as feedback.
+                    radius: active.border.radius,
                 },
                 text_color: match class {
                     Button::GameListEntryTitleDisabled => self.text_skipped,
@@ -317,30 +308,25 @@ impl button::Catalog for Theme {
                     Button::Primary | Button::GameActionPrimary => self.accent_ink,
                     _ => self.text_button,
                 },
-                shadow: Shadow {
-                    offset: match class {
-                        Button::NavButtonActive
-                        | Button::NavButtonInactive
-                        | Button::SideNavActive
-                        | Button::SideNavInactive => Vector::new(0.0, 0.0),
-                        _ => Vector::new(1.0, 2.0),
-                    },
-                    ..Default::default()
+                shadow: match class {
+                    Button::NavButtonActive
+                    | Button::NavButtonInactive
+                    | Button::SideNavActive
+                    | Button::SideNavInactive
+                    | Button::Secondary
+                    | Button::Bare
+                    | Button::Badge => design::elevation::FLAT,
+                    _ => design::elevation::RAISED,
                 },
                 snap: true,
             },
+            // Pressed sits back down on the surface, which is the whole feedback.
             button::Status::Pressed => button::Style {
-                shadow: Shadow {
-                    offset: Vector::default(),
-                    ..active.shadow
-                },
+                shadow: design::elevation::FLAT,
                 ..active
             },
             button::Status::Disabled => button::Style {
-                shadow: Shadow {
-                    offset: Vector::default(),
-                    ..active.shadow
-                },
+                shadow: design::elevation::FLAT,
                 background: active.background.map(|background| match background {
                     Background::Color(color) => Background::Color(Color {
                         a: color.a * 0.5,
@@ -384,6 +370,20 @@ pub enum Container {
     DisabledBackup,
     Notification,
     Tooltip,
+    /// A card: a self-contained block of content with its own surface.
+    ///
+    /// It carries a surface **or** a border, never both, because a block that has a different
+    /// background and an outline around it reads as two nested boxes.
+    Card,
+    /// The square a logo or an avatar sits in.
+    ///
+    /// Artwork supplied by someone else arrives at whatever aspect ratio and whatever background
+    /// its author chose. A fixed tile with its own surface is what keeps a row of them aligned.
+    LogoTile,
+    /// A status chip: one short phrase naming the state of the thing beside it.
+    Chip {
+        positive: bool,
+    },
 }
 impl container::Catalog for Theme {
     type Class<'a> = Container;
@@ -396,7 +396,7 @@ impl container::Catalog for Theme {
         container::Style {
             background: Some(match class {
                 Container::Wrapper => Color::TRANSPARENT.into(),
-                Container::GameListEntry => self.field.alpha(0.15).into(),
+                Container::GameListEntry => self.field.alpha(design::alpha::HALF).into(),
                 Container::ModalBackground => self.field.alpha(0.75).into(),
                 Container::Notification => self.field.alpha(0.5).into(),
                 Container::TableHeader => self.field.into(),
@@ -406,6 +406,20 @@ impl container::Catalog for Theme {
                 Container::ModalForeground => self.panel.into(),
                 Container::Tooltip => self.field.into(),
                 Container::DisabledBackup => self.disabled.into(),
+                Container::Card => self.panel.into(),
+                Container::LogoTile => self.field.into(),
+                // The positive chip is filled with the accent and written in the accent's own ink.
+                // A tinted-background-plus-accent-text chip would have been quieter, but the accent
+                // is a light green: as text it lands near 1.7:1 on the light theme, well under the
+                // 4.5:1 that body-sized text has to reach. The ink pairing is the one this theme
+                // already guarantees on every accent.
+                Container::Chip { positive } => {
+                    if *positive {
+                        self.positive.into()
+                    } else {
+                        self.field.alpha(design::alpha::STRONG).into()
+                    }
+                }
                 Container::BadgeActivated => self.negative.into(),
                 _ => self.background.into(),
             }),
@@ -427,31 +441,40 @@ impl container::Catalog for Theme {
                         }
                     }
                     Container::BadgeActivated => self.negative,
+                    // The card is a surface, so it takes no border at all. Both would read as two
+                    // nested boxes.
+                    Container::Card | Container::LogoTile => Color::TRANSPARENT,
+                    Container::Chip { .. } => Color::TRANSPARENT,
                     Container::ModalForeground | Container::BadgeFaded => self.disabled,
                     _ => self.text,
                 },
+                // A block gets a surface or an outline, never both. The sidebar, the top bar and
+                // the list entry each used to carry a 1px border on top of a background that
+                // already set them apart, which is how the screen ended up looking
+                // compartmented into boxes inside boxes.
                 width: match class {
-                    Container::GameListEntry
-                    | Container::ModalForeground
+                    Container::ModalForeground
                     | Container::Badge
                     | Container::BadgeActivated
                     | Container::BadgeFaded
-                    | Container::ChangeBadge { .. }
-                    | Container::Notification
-                    | Container::Sidebar
-                    | Container::Topbar
-                    | Container::TableRow => 1.0,
+                    | Container::ChangeBadge { .. } => design::stroke::HAIRLINE,
                     _ => 0.0,
                 },
                 radius: match class {
-                    Container::ModalForeground
-                    | Container::GameListEntry
-                    | Container::Badge
+                    // A badge is a tag, so it is a pill. Everything else that has a corner at
+                    // all has the same one.
+                    Container::Badge
                     | Container::BadgeActivated
                     | Container::BadgeFaded
                     | Container::ChangeBadge { .. }
-                    | Container::DisabledBackup => 10.0.into(),
-                    Container::Notification | Container::Tooltip => 20.0.into(),
+                    | Container::Chip { .. } => design::RADIUS_PILL.into(),
+                    Container::ModalForeground
+                    | Container::GameListEntry
+                    | Container::DisabledBackup
+                    | Container::Notification
+                    | Container::Tooltip
+                    | Container::Card
+                    | Container::LogoTile => design::RADIUS.into(),
                     _ => 0.0.into(),
                 },
             },
@@ -472,13 +495,21 @@ impl container::Catalog for Theme {
                 }
                 Container::TableHeader => Some(self.text_skipped),
                 Container::BadgeActivated => Some(self.text_button),
+                Container::Chip { positive } => {
+                    if *positive {
+                        Some(self.accent_ink)
+                    } else {
+                        Some(self.text_skipped)
+                    }
+                }
+                Container::Card | Container::LogoTile => None,
                 Container::BadgeFaded => Some(self.disabled),
                 _ => Some(self.text),
             },
-            shadow: Shadow {
-                color: Color::TRANSPARENT,
-                offset: Vector::ZERO,
-                blur_radius: 0.0,
+            shadow: match class {
+                Container::ModalForeground => design::elevation::MODAL,
+                Container::Tooltip => design::elevation::OVERLAY,
+                _ => design::elevation::FLAT,
             },
             snap: true,
         }
@@ -508,14 +539,16 @@ impl scrollable::Catalog for Theme {
                 border: Border {
                     color: Color::TRANSPARENT,
                     width: 0.0,
-                    radius: 5.0.into(),
+                    radius: design::RADIUS_PILL.into(),
                 },
                 scroller: scrollable::Scroller {
-                    background: self.text.alpha(0.7).into(),
+                    // The thumb used to sit at 0.7, which on the dark theme is a near-white bar
+                    // running down the side of every screen, louder than the content beside it.
+                    background: self.text.alpha(design::alpha::HALF).into(),
                     border: Border {
                         color: Color::TRANSPARENT,
                         width: 0.0,
-                        radius: 5.0.into(),
+                        radius: design::RADIUS_PILL.into(),
                     },
                 },
             },
@@ -524,14 +557,16 @@ impl scrollable::Catalog for Theme {
                 border: Border {
                     color: Color::TRANSPARENT,
                     width: 0.0,
-                    radius: 5.0.into(),
+                    radius: design::RADIUS_PILL.into(),
                 },
                 scroller: scrollable::Scroller {
-                    background: self.text.alpha(0.7).into(),
+                    // The thumb used to sit at 0.7, which on the dark theme is a near-white bar
+                    // running down the side of every screen, louder than the content beside it.
+                    background: self.text.alpha(design::alpha::HALF).into(),
                     border: Border {
                         color: Color::TRANSPARENT,
                         width: 0.0,
-                        radius: 5.0.into(),
+                        radius: design::RADIUS_PILL.into(),
                     },
                 },
             },
@@ -602,8 +637,8 @@ impl pick_list::Catalog for Theme {
                 color: self.text.alpha(0.7),
                 width: 1.0,
                 radius: match class {
-                    PickList::Primary => 5.0.into(),
-                    PickList::Backup | PickList::Popup => 10.0.into(),
+                    PickList::Primary => design::RADIUS.into(),
+                    PickList::Backup | PickList::Popup => design::RADIUS.into(),
                 },
             },
             background: self.field.alpha(0.6).into(),
@@ -639,7 +674,7 @@ impl checkbox::Catalog for Theme {
             border: Border {
                 color: self.text.alpha(0.6),
                 width: 1.0,
-                radius: 5.0.into(),
+                radius: design::RADIUS.into(),
             },
             text_color: Some(self.text),
         };
@@ -679,7 +714,7 @@ impl text_input::Catalog for Theme {
             border: Border {
                 color: self.text.alpha(0.8),
                 width: 1.0,
-                radius: 5.0.into(),
+                radius: design::RADIUS.into(),
             },
             icon: self.negative,
             placeholder: self.text.alpha(0.5),
@@ -719,7 +754,7 @@ impl iced::widget::progress_bar::Catalog for Theme {
             background: self.disabled.into(),
             bar: self.added.into(),
             border: Border {
-                radius: 4.0.into(),
+                radius: design::RADIUS.into(),
                 ..Default::default()
             },
         }
@@ -739,7 +774,7 @@ impl text_editor::Catalog for Theme {
         let active = text_editor::Style {
             background: self.field.alpha(0.3).into(),
             border: Border {
-                radius: 2.0.into(),
+                radius: design::RADIUS.into(),
                 width: 1.0,
                 color: self.field,
             },
@@ -770,5 +805,24 @@ impl text_editor::Catalog for Theme {
                 ..active
             },
         }
+    }
+}
+
+/// The emulator logos are the only SVGs in the app, and they are other people's artwork.
+///
+/// So this catalog deliberately does nothing: `color: None` keeps every logo in the colours its
+/// project drew it in. Tinting them to the theme would turn seven recognisable marks into seven
+/// identical silhouettes, which is the opposite of what they are on the screen for.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct Svg;
+impl iced::widget::svg::Catalog for Theme {
+    type Class<'a> = Svg;
+
+    fn default<'a>() -> Self::Class<'a> {
+        Default::default()
+    }
+
+    fn style(&self, _class: &Self::Class<'_>, _status: iced::widget::svg::Status) -> iced::widget::svg::Style {
+        iced::widget::svg::Style { color: None }
     }
 }

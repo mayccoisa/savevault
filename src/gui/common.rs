@@ -825,6 +825,11 @@ impl ScrollSubject {
         content: impl Into<crate::gui::widget::Element<'a>>,
     ) -> crate::gui::widget::Scrollable<'a> {
         crate::gui::widget::Scrollable::new(content)
+            // The width is declared as well as the height. It did not have to be while every screen
+            // was a stack of blocks that sized themselves to their own text, but a grid of cards
+            // that split the row between them needs a container that knows how wide it is: left to
+            // shrink, the scrollable has no width to divide.
+            .width(Length::Fill)
             .height(Length::Fill)
             .class(crate::gui::style::Scrollable)
             .id(self.id())
