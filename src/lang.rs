@@ -827,12 +827,47 @@ impl Translator {
         translate("button-add-emulator-folder")
     }
 
+    pub fn recheck_emulators_button(&self) -> String {
+        translate("button-recheck-emulators")
+    }
+
     pub fn emulators_explanation(&self) -> String {
         translate("emulators-explanation")
     }
 
     pub fn emulator_coming_soon(&self) -> String {
         translate("emulator-coming-soon")
+    }
+
+    /// How many of the known emulators were actually found on this machine.
+    ///
+    /// It is the first thing worth knowing on that screen, and until now the only way to get it was
+    /// to read eight cards one at a time.
+    pub fn emulators_summary(&self, found: usize, total: usize) -> String {
+        let mut args = FluentArgs::new();
+        args.set("found", found.to_string());
+        args.set("total", total.to_string());
+        translate_args("emulators-summary", &args)
+    }
+
+    pub fn emulator_state_ready(&self) -> String {
+        translate("emulator-state-ready")
+    }
+
+    pub fn emulator_state_missing(&self) -> String {
+        translate("emulator-state-missing")
+    }
+
+    pub fn emulator_state_no_saves(&self) -> String {
+        translate("emulator-state-no-saves")
+    }
+
+    pub fn emulator_state_ambiguous(&self) -> String {
+        translate("emulator-state-ambiguous")
+    }
+
+    pub fn emulator_state_unchecked(&self) -> String {
+        translate("emulator-state-unchecked")
     }
 
     pub fn emulator_not_checked_yet(&self) -> String {

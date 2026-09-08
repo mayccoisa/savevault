@@ -334,12 +334,20 @@ operation-will-only-include-listed-games = This will only process the games that
 
 button-nav-emulators = Emulators
 button-add-emulator-folder = Add folder
+button-recheck-emulators = Check again
 button-check-for-update = Check for update
 emulators-explanation = Point at each emulator's data folder. Saves are backed up and restored from there, even if the folder moves.
+emulators-summary = { $found } of { $total } found on this system
 emulator-coming-soon = Coming soon
 emulator-not-checked-yet = Not checked yet.
 emulator-not-found = { $name } was not found on this system.
 emulator-using-folder = Using { $path } ({ $games } save file(s)).
+# The one-word state on an emulator card. The sentence with the detail sits below it.
+emulator-state-ready = Found
+emulator-state-missing = Not found
+emulator-state-no-saves = No saves
+emulator-state-ambiguous = Ambiguous
+emulator-state-unchecked = Not checked
 updating-app = Downloading the update...
 app-is-up-to-date = You already have the latest version.
 app-updated = Updated to version { $version }. Close and reopen the program to use it.

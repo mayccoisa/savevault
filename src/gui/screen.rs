@@ -8,7 +8,7 @@ use crate::{
         badge::Badge,
         button,
         common::{BrowseFileSubject, BrowseSubject, Message, Operation, ScrollSubject, UndoSubject},
-        editor,
+        design, editor, emulator_art, font,
         game_list::GameList,
         icon::Icon,
         search::CustomGamesFilter,
@@ -26,17 +26,29 @@ use crate::{
     scan::{DuplicateDetector, Duplication, OperationStatus, ScanKind, game_filter},
 };
 
+/// A largura em que a linha de explicação para de crescer.
+///
+/// ~72 caracteres no corpo de 14px, que é o topo da faixa em que o olho ainda encontra o começo
+/// da linha seguinte sem se perder. Sem isto a frase acompanha a janela: num monitor de 1920 ela
+/// vira uma linha de quase 120 caracteres.
+const EXPLANATION_WIDTH: f32 = 560.0;
+
 const RCLONE_URL: &str = "https://rclone.org/downloads";
 const RELEASE_URL: &str = "https://github.com/mtkennerly/ludusavi/releases";
 
 fn template(content: Column) -> Element {
     // A coluna precisa declarar a largura: sem isto ela fica com a largura natural do que
     // ha dentro, e o que e Fill la dentro passa por cima da borda direita da janela.
-    Container::new(content.width(Length::Fill).spacing(15).align_x(Alignment::Center))
-        .height(Length::Fill)
-        .center_x(Length::Fill)
-        .padding(padding::all(5))
-        .into()
+    Container::new(
+        content
+            .width(Length::Fill)
+            .spacing(design::space::MD)
+            .align_x(Alignment::Center),
+    )
+    .height(Length::Fill)
+    .center_x(Length::Fill)
+    .padding(padding::all(5))
+    .into()
 }
 
 /// A faixa de contexto: o resumo da varredura à esquerda, o destino recolhido à direita.
@@ -51,10 +63,10 @@ fn context_strip<'a>(
 ) -> Element<'a> {
     Row::new()
         .height(38)
-        .padding([0, 24])
-        .spacing(10)
+        .padding([0.0, design::space::XL])
+        .spacing(design::space::SM)
         .align_y(Alignment::Center)
-        .push(text(summary).size(12).class(style::Text::Muted))
+        .push(text(summary).size(design::text::CAPTION).class(style::Text::Muted))
         .push_if(status.changed_games.new > 0, || {
             Badge::new_entry_with_count(status.changed_games.new).view()
         })
@@ -94,12 +106,7 @@ fn scan_summary(log: &GameList, operation: &Operation, status: &OperationStatus)
 }
 
 /// O destino recolhido: prefixo, nome da última pasta, e o caminho inteiro na dica.
-fn target_chip<'a>(
-    label: String,
-    path: &StrictPath,
-    scan_kind: ScanKind,
-    operation: &Operation,
-) -> Element<'a> {
+fn target_chip<'a>(label: String, path: &StrictPath, scan_kind: ScanKind, operation: &Operation) -> Element<'a> {
     let rendered = path.render();
     let leaf = rendered
         .replace('\\', "/")
@@ -110,9 +117,7 @@ fn target_chip<'a>(
 
     button::secondary(
         format!("{label} {leaf}"),
-        operation
-            .idle()
-            .then_some(Message::ToggleTargetEditor { scan_kind }),
+        operation.idle().then_some(Message::ToggleTargetEditor { scan_kind }),
         Some(rendered),
     )
 }
@@ -125,8 +130,8 @@ fn target_drawer<'a>(field: Element<'a>, browse: Element<'a>, scan_kind: ScanKin
     Container::new(
         Row::new()
             .height(52)
-            .padding([0, 24])
-            .spacing(10)
+            .padding([0.0, design::space::XL])
+            .spacing(design::space::SM)
             .align_y(Alignment::Center)
             .push(field)
             .push(browse)
@@ -177,7 +182,7 @@ impl Backup {
         let has_changes = status.changed_games.new + status.changed_games.different > 0;
 
         Row::new()
-            .spacing(8)
+            .spacing(design::space::SM)
             .align_y(Alignment::Center)
             .push(button::scan(operation, Self::SCAN_KIND, scanned))
             // Sem lista varrida não há sobre o que filtrar, e um filtro que não filtra nada é
@@ -215,7 +220,6 @@ impl Backup {
         histories: &TextHistories,
         modifiers: &keyboard::Modifiers,
     ) -> Element {
-
         let duplicatees = self.log.duplicatees(&self.duplicate_detector);
 
         let status = self.log.compute_operation_status(
@@ -286,7 +290,7 @@ impl Restore {
         let scanned = !self.log.entries.is_empty();
 
         Row::new()
-            .spacing(8)
+            .spacing(design::space::SM)
             .align_y(Alignment::Center)
             .push(button::scan(operation, Self::SCAN_KIND, scanned))
             // Sem lista varrida não há sobre o que filtrar, e um filtro que não filtra nada é
@@ -319,7 +323,6 @@ impl Restore {
         histories: &TextHistories,
         modifiers: &keyboard::Modifiers,
     ) -> Element {
-
         let duplicatees = self.log.duplicatees(&self.duplicate_detector);
 
         let status = self.log.compute_operation_status(
@@ -377,6 +380,57 @@ impl Emulators {
         self.diagnosis = Some(crate::scan::emulator::diagnose(&config.roots));
     }
 
+    /// O estado de um emulador, em uma palavra.
+    ///
+    /// Existe para a frase inteira deixar de ser a única informação do card. Oito frases de uma
+    /// linha, todas no mesmo corpo e no mesmo cinza, é o que fazia a tela não ter onde o olho
+    /// pousar: para saber quantos emuladores o computador tem, era preciso ler as oito.
+    fn state_of(&self, app: crate::scan::emulator::App) -> EmulatorState {
+        let Some(found) = self
+            .diagnosis
+            .as_ref()
+            .and_then(|d| d.emulators.iter().find(|x| x.name == app.name()))
+        else {
+            return EmulatorState::Unchecked;
+        };
+
+        match &found.data_root {
+            // "Usando <pasta> (0 arquivos de save)" é a frase que enganou na prática: ela soa como
+            // sucesso. Pasta encontrada e vazia é caso próprio, com instrução.
+            Some(_) if found.games.is_empty() => EmulatorState::NoSaves,
+            Some(_) => EmulatorState::Ready,
+            None => {
+                let matching = found.candidates.iter().filter(|x| x.matches_signature).count();
+                if matching > 1 {
+                    EmulatorState::Ambiguous
+                } else {
+                    EmulatorState::Missing
+                }
+            }
+        }
+    }
+
+    /// A frase que explica o estado, quando ela diz mais do que a palavra do chip já disse.
+    ///
+    /// `None` não é omissão: "DuckStation não foi encontrado neste computador" ao lado de um chip
+    /// escrito "Não encontrado" é a mesma informação duas vezes, e era ela que ocupava metade da
+    /// tela. Some quando o chip basta, fica quando carrega a pasta, a contagem ou a instrução.
+    fn detail_of(&self, app: crate::scan::emulator::App) -> Option<String> {
+        let found = self
+            .diagnosis
+            .as_ref()
+            .and_then(|d| d.emulators.iter().find(|x| x.name == app.name()))?;
+
+        match &found.data_root {
+            Some(root) if found.games.is_empty() => Some(TRANSLATOR.emulator_using_folder_without_saves(root)),
+            Some(root) => Some(TRANSLATOR.emulator_using_folder(root, found.games.len())),
+            None => {
+                let matching = found.candidates.iter().filter(|x| x.matches_signature).count();
+                (matching > 1).then(|| TRANSLATOR.emulator_ambiguous(app.name(), matching))
+            }
+        }
+    }
+
     /// Traduz o veredito do motor sobre uma pasta. O motor devolve fato; o texto é daqui.
     fn verdict_for<'a>(&self, app: crate::scan::emulator::App, path: &crate::prelude::StrictPath) -> Element<'a> {
         use crate::scan::emulator::FolderVerdict;
@@ -384,23 +438,100 @@ impl Emulators {
         let (label, ok) = match app.inspect_folder(path) {
             FolderVerdict::Empty => (TRANSLATOR.emulator_folder_empty(), false),
             FolderVerdict::Missing => (TRANSLATOR.emulator_folder_missing(), false),
-            FolderVerdict::NotThisEmulator { missing } => (
-                TRANSLATOR.emulator_folder_wrong(app.name(), &missing.join(", ")),
-                false,
-            ),
-            FolderVerdict::NoSaves { areas } => {
-                (TRANSLATOR.emulator_folder_without_saves(&areas.join(", ")), false)
+            FolderVerdict::NotThisEmulator { missing } => {
+                (TRANSLATOR.emulator_folder_wrong(app.name(), &missing.join(", ")), false)
             }
+            FolderVerdict::NoSaves { areas } => (TRANSLATOR.emulator_folder_without_saves(&areas.join(", ")), false),
             FolderVerdict::Ready { saves } => (TRANSLATOR.emulator_folder_ready(saves), true),
         };
 
-        Container::new(text(label).size(14))
-            .padding([0, 5])
-            .class(if ok {
-                style::Container::Notification
-            } else {
-                style::Container::Badge
-            })
+        text(label)
+            .size(design::text::CAPTION)
+            .line_height(design::leading::BODY)
+            .class(if ok { style::Text::Default } else { style::Text::Muted })
+            .into()
+    }
+
+    /// Um card de emulador.
+    ///
+    /// A hierarquia é nome (16 semibold) → estado (chip) → console (12 apagado) → detalhe, e é
+    /// deliberado que o tamanho não faça o trabalho sozinho: antes o nome era corpo 20, o mesmo do
+    /// título da tela, e por isso oito cards gritavam no mesmo tom que o cabeçalho.
+    fn card<'a>(
+        &'a self,
+        app: crate::scan::emulator::App,
+        config: &'a Config,
+        histories: &'a TextHistories,
+        modifiers: &keyboard::Modifiers,
+    ) -> Element<'a> {
+        let state = self.state_of(app);
+
+        let mut body = Column::new().spacing(design::space::MD).push(
+            Row::new()
+                .spacing(design::space::MD)
+                .align_y(Alignment::Center)
+                .push(emulator_art::tile(app))
+                .push(
+                    Column::new()
+                        .spacing(design::space::XS)
+                        .width(Length::Fill)
+                        .push(
+                            text(app.name())
+                                .font(font::TEXT_STRONG)
+                                .size(design::text::SUBTITLE)
+                                .line_height(design::leading::TITLE),
+                        )
+                        // O console é o que faz a lista ser legível: quem procura o save sabe que
+                        // jogou um jogo de PS2, não que o PCSX2 é o que roda PS2.
+                        .push(
+                            text(emulator_art::console(app))
+                                .size(design::text::CAPTION)
+                                .class(style::Text::Muted),
+                        ),
+                )
+                .push(chip(state.label(), state.is_good())),
+        );
+
+        if let Some(detail) = self.detail_of(app) {
+            body = body.push(
+                text(detail)
+                    .size(design::text::BODY)
+                    .line_height(design::leading::BODY)
+                    .class(style::Text::Muted),
+            );
+        }
+
+        // As raízes deste emulador especificamente. É isto que faz "todas as configurações ficarem
+        // dentro do emulador": o usuário não escolhe loja num menu solto.
+        for (index, root) in config.roots.iter().enumerate().filter(
+            |(_, root)| matches!(root, crate::resource::config::Root::Emulator(emulator) if emulator.app == Some(app)),
+        ) {
+            body = body.push(
+                Column::new()
+                    .spacing(design::space::XS)
+                    .push(
+                        Row::new()
+                            .spacing(design::space::SM)
+                            .align_y(Alignment::Center)
+                            .push(histories.input(UndoSubject::RootPath(index)))
+                            .push(button::choose_folder(BrowseSubject::Root(index), modifiers))
+                            .push(button::remove(
+                                Message::config(crate::resource::config::Event::Root),
+                                index,
+                            )),
+                    )
+                    // O veredito da pasta que o usuário escolheu, e não só o status do emulador.
+                    // Sem isto, uma pasta reconhecida porém vazia (a pasta padrão do sistema,
+                    // enquanto a instalação de verdade está noutro disco) parecia estar certa, e o
+                    // backup vinha vazio sem explicação.
+                    .push(self.verdict_for(app, root.path())),
+            );
+        }
+
+        Container::new(body.push(button::add_emulator_root(app)))
+            .padding(design::space::LG)
+            .width(Length::Fill)
+            .class(style::Container::Card)
             .into()
     }
 
@@ -412,102 +543,133 @@ impl Emulators {
     ) -> Element<'a> {
         use crate::scan::emulator::App;
 
-        let mut content = Column::new()
-            .spacing(15)
-            .padding([0, 20])
+        let found = App::ALL.iter().filter(|app| self.state_of(**app).is_good()).count();
+
+        let header = Row::new()
+            // Fill, and explicitly: the screen template centres its column, so a row that does not
+            // declare a width shrinks to its content and the action on the right lands in the
+            // middle of the screen instead of at the edge.
+            .width(Length::Fill)
+            .spacing(design::space::XL)
+            .align_y(Alignment::Center)
             .push(
-                Row::new()
-                    .spacing(20)
-                    .align_y(Alignment::Center)
-                    .push(text(TRANSLATOR.emulators_explanation()).width(Length::Fill))
-                    .push(button::refresh_emulators()),
-            );
-
-        for app in App::ALL {
-            let diagnosis = self
-                .diagnosis
-                .as_ref()
-                .and_then(|d| d.emulators.iter().find(|x| x.name == app.name()));
-
-            // O texto vem daqui, e não do `problem` do motor, porque aquele é mensagem de
-            // diagnóstico de linha de comando, escrita em inglês. Na interface o usuário lê no
-            // idioma dele.
-            let status = match diagnosis {
-                Some(found) => match &found.data_root {
-                    // "Usando <pasta> (0 arquivos de save)" é a frase que enganou na prática: ela
-                    // soa como sucesso. Pasta encontrada e vazia é caso próprio, com instrução.
-                    Some(root) if found.games.is_empty() => {
-                        text(TRANSLATOR.emulator_using_folder_without_saves(root))
-                    }
-                    Some(root) => text(TRANSLATOR.emulator_using_folder(root, found.games.len())),
-                    None => {
-                        let matching = found.candidates.iter().filter(|x| x.matches_signature).count();
-                        if matching > 1 {
-                            text(TRANSLATOR.emulator_ambiguous(app.name(), matching))
-                        } else {
-                            text(TRANSLATOR.emulator_not_found(app.name()))
-                        }
-                    }
-                },
-                None => text(TRANSLATOR.emulator_not_checked_yet()),
-            };
-
-            // As raízes deste emulador especificamente. É isto que faz "todas as configurações
-            // ficarem dentro do emulador": o usuário não escolhe loja num menu solto.
-            let mut block = Column::new()
-                .spacing(10)
-                .padding(10)
-                .push(
-                    Row::new()
-                        .spacing(15)
-                        .align_y(Alignment::Center)
-                        .push(text(app.name()).size(20)),
-                )
-                .push(status);
-
-            for (index, root) in config.roots.iter().enumerate().filter(|(_, root)| {
-                matches!(root, crate::resource::config::Root::Emulator(emulator) if emulator.app == Some(*app))
-            }) {
-                block = block
+                Column::new()
+                    .spacing(design::space::XS)
+                    .width(Length::Fill)
                     .push(
-                        Row::new()
-                            .spacing(20)
-                            .align_y(Alignment::Center)
-                            .push(histories.input(UndoSubject::RootPath(index)))
-                            .push(button::choose_folder(BrowseSubject::Root(index), modifiers))
-                            .push(button::remove(
-                                Message::config(crate::resource::config::Event::Root),
-                                index,
-                            )),
+                        text(TRANSLATOR.emulators_summary(found, App::ALL.len()))
+                            .font(font::TEXT_STRONG)
+                            .size(design::text::SUBTITLE)
+                            .line_height(design::leading::TITLE),
                     )
-                    // O veredito da pasta que o usuário escolheu, e não só o status do emulador.
-                    // Sem isto, uma pasta reconhecida porém vazia (a pasta padrão do sistema,
-                    // enquanto a instalação de verdade está noutro disco) parecia estar certa, e
-                    // o backup vinha vazio sem explicação.
-                    .push(self.verdict_for(*app, root.path()));
+                    // Largura travada: a linha ocupava a janela inteira, o que num monitor de 1920
+                    // dá quase 120 caracteres, muito acima dos 75 em que o olho ainda acha o
+                    // começo da linha seguinte.
+                    .push(
+                        text(TRANSLATOR.emulators_explanation())
+                            .size(design::text::BODY)
+                            .line_height(design::leading::BODY)
+                            .class(style::Text::Muted)
+                            .width(Length::Fixed(EXPLANATION_WIDTH)),
+                    ),
+            )
+            .push(button::refresh_emulators());
+
+        // Duas colunas, fixas. A janela mínima do app tem 1036 de largura, e a máxima que cabe num
+        // monitor comum passa pouco de 1600: entre as duas, dois cards é sempre o que a largura
+        // comporta, então medir a janela em tempo de layout não decidiria nada e custaria um
+        // widget a mais para dar errado.
+        //
+        // O que os oito cards NÃO podem voltar a ser é uma coluna só, que era o desenho anterior:
+        // desperdiçava dois terços de um monitor, e como cada bloco tinha a largura do próprio
+        // texto, nenhum deles alinhava com o de cima.
+        const COLUMNS: usize = 2;
+
+        let mut content = Column::new()
+            .width(Length::Fill)
+            .spacing(design::space::LG)
+            .push(header);
+
+        for chunk in App::ALL.chunks(COLUMNS) {
+            let mut row = Row::new()
+                .width(Length::Fill)
+                .spacing(design::space::LG)
+                .align_y(Alignment::Start);
+            for app in chunk {
+                row = row.push(self.card(*app, config, histories, modifiers));
             }
-
-            block = block.push(button::add_emulator_root(*app));
-
-            content = content.push(Container::new(block).class(style::Container::GameListEntry));
+            // A fileira incompleta ganha vãos vazios, senão os cards dela esticam para ocupar a
+            // linha e param de ter a mesma largura dos de cima.
+            for _ in chunk.len()..COLUMNS {
+                row = row.push(iced::widget::space().width(Length::Fill));
+            }
+            content = content.push(row);
         }
 
         for planned in App::PLANNED {
             content = content.push(
                 Container::new(
                     Row::new()
-                        .spacing(15)
-                        .padding(10)
+                        .spacing(design::space::MD)
                         .align_y(Alignment::Center)
-                        .push(text(*planned).size(20))
+                        .push(text(*planned).font(font::TEXT_STRONG).size(design::text::SUBTITLE))
                         .push(Badge::new(&TRANSLATOR.emulator_coming_soon()).view()),
                 )
-                .class(style::Container::GameListEntry),
+                .padding(design::space::LG)
+                .width(Length::Fill)
+                .class(style::Container::Card),
             );
         }
 
-        template(Column::new().push(ScrollSubject::Emulators.into_widget(content)))
+        template(Column::new().push(ScrollSubject::Emulators.into_widget(content.padding([0.0, design::space::XL]))))
     }
+}
+
+/// O estado de um emulador nesta máquina, resumido em uma palavra para o chip do card.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum EmulatorState {
+    /// Pasta de dados encontrada, com save dentro.
+    Ready,
+    /// Pasta encontrada, e vazia. Não é sucesso: o backup sairia sem nada.
+    NoSaves,
+    /// Mais de uma pasta de dados casou, então o destino da restauração fica indefinido.
+    Ambiguous,
+    /// Nenhuma pasta de dados deste emulador neste computador.
+    Missing,
+    /// Ainda não foi olhado o disco.
+    Unchecked,
+}
+
+impl EmulatorState {
+    fn label(self) -> String {
+        match self {
+            Self::Ready => TRANSLATOR.emulator_state_ready(),
+            Self::NoSaves => TRANSLATOR.emulator_state_no_saves(),
+            Self::Ambiguous => TRANSLATOR.emulator_state_ambiguous(),
+            Self::Missing => TRANSLATOR.emulator_state_missing(),
+            Self::Unchecked => TRANSLATOR.emulator_state_unchecked(),
+        }
+    }
+
+    /// Só `Ready` conta como bom, e é o que a contagem do cabeçalho usa.
+    ///
+    /// `NoSaves` fica de fora de propósito: pasta reconhecida e vazia é exatamente o caso que
+    /// parecia sucesso e produzia backup vazio sem explicação.
+    fn is_good(self) -> bool {
+        self == Self::Ready
+    }
+}
+
+/// Uma etiqueta de estado: uma palavra, e a cor como reforço, nunca como o único sinal.
+fn chip<'a>(label: String, positive: bool) -> Element<'a> {
+    Container::new(
+        text(label)
+            .size(design::text::CAPTION)
+            .line_height(design::leading::TIGHT),
+    )
+    .padding([design::space::XS, design::space::SM])
+    .class(style::Container::Chip { positive })
+    .into()
 }
 
 #[derive(Default)]
@@ -527,8 +689,8 @@ impl CustomGames {
         let content = Column::new()
             .push(
                 Row::new()
-                    .padding([0, 20])
-                    .spacing(20)
+                    .padding([0.0, design::space::XL])
+                    .spacing(design::space::LG)
                     .align_y(Alignment::Center)
                     .push(button::add_game())
                     .push(button::toggle_all_custom_games(
@@ -588,26 +750,26 @@ pub fn other<'a>(
     let content = Column::new()
         .push_if(*STEAM_DECK, || {
             Row::new()
-                .padding([0, 20])
-                .spacing(20)
+                .padding([0.0, design::space::XL])
+                .spacing(design::space::LG)
                 .align_y(iced::Alignment::Center)
                 .push(
                     Button::new(text(TRANSLATOR.exit_button()).align_x(iced::alignment::Horizontal::Center))
                         .on_press(Message::Exit { user: true })
                         .width(125)
                         .class(style::Button::Negative)
-                        .padding(5),
+                        .padding(design::space::XS),
                 )
         })
         .push({
             let content = Column::new()
-                .spacing(20)
+                .spacing(design::space::LG)
                 .padding(padding::top(0).bottom(5).left(15).right(15))
                 .width(Length::Fill)
                 .push(
                     Row::new()
                         .align_y(iced::Alignment::Center)
-                        .spacing(20)
+                        .spacing(design::space::LG)
                         .push(text(TRANSLATOR.field_language()))
                         .push(
                             pick_list(
@@ -621,7 +783,7 @@ pub fn other<'a>(
                 .push(
                     Row::new()
                         .align_y(iced::Alignment::Center)
-                        .spacing(20)
+                        .spacing(design::space::LG)
                         .push(text(TRANSLATOR.field_theme()))
                         .push(
                             pick_list(Theme::ALL, Some(config.theme), Message::config(config::Event::Theme))
@@ -631,7 +793,7 @@ pub fn other<'a>(
                 .push(
                     Row::new()
                         .align_y(iced::Alignment::Center)
-                        .spacing(20)
+                        .spacing(design::space::LG)
                         .push(text(TRANSLATOR.field_accent()))
                         .push(
                             pick_list(Accent::ALL, Some(config.accent), Message::config(config::Event::Accent))
@@ -641,7 +803,7 @@ pub fn other<'a>(
                 .push(
                     Row::new()
                         .align_y(iced::Alignment::Center)
-                        .spacing(20)
+                        .spacing(design::space::LG)
                         .push(checkbox(
                             TRANSLATOR.new_version_check(),
                             config.release.check,
@@ -650,226 +812,234 @@ pub fn other<'a>(
                         .push(button::open_url_icon(RELEASE_URL.to_string())),
                 )
                 .push(
-                    Column::new().spacing(5).push(text(TRANSLATOR.scan_field())).push(
-                        Container::new(
-                            Column::new()
-                                .padding(5)
-                                .spacing(10)
-                                .push({
-                                    AVAILABLE_PARALELLISM.map(|max_threads| {
-                                        Column::new()
-                                            .spacing(5)
-                                            .push(checkbox(
-                                                TRANSLATOR.override_max_threads(),
-                                                config.runtime.threads.is_some(),
-                                                Message::config(config::Event::OverrideMaxThreads),
-                                            ))
-                                            .push({
-                                                config.runtime.threads.map(|threads| {
-                                                    Container::new(number_input(
-                                                        threads.get() as i32,
-                                                        TRANSLATOR.threads_label(),
-                                                        1..=(max_threads.get() as i32),
-                                                        Message::config(|x| config::Event::MaxThreads(x as usize)),
-                                                    ))
-                                                    .padding(padding::left(35))
+                    Column::new()
+                        .spacing(design::space::XS)
+                        .push(text(TRANSLATOR.scan_field()))
+                        .push(
+                            Container::new(
+                                Column::new()
+                                    .padding(design::space::XS)
+                                    .spacing(design::space::SM)
+                                    .push({
+                                        AVAILABLE_PARALELLISM.map(|max_threads| {
+                                            Column::new()
+                                                .spacing(design::space::XS)
+                                                .push(checkbox(
+                                                    TRANSLATOR.override_max_threads(),
+                                                    config.runtime.threads.is_some(),
+                                                    Message::config(config::Event::OverrideMaxThreads),
+                                                ))
+                                                .push({
+                                                    config.runtime.threads.map(|threads| {
+                                                        Container::new(number_input(
+                                                            threads.get() as i32,
+                                                            TRANSLATOR.threads_label(),
+                                                            1..=(max_threads.get() as i32),
+                                                            Message::config(|x| config::Event::MaxThreads(x as usize)),
+                                                        ))
+                                                        .padding(padding::left(35))
+                                                    })
                                                 })
-                                            })
+                                        })
                                     })
-                                })
-                                .push(
-                                    checkbox(
-                                        TRANSLATOR.explanation_for_exclude_store_screenshots(),
-                                        config.backup.filter.exclude_store_screenshots,
-                                        Message::config(config::Event::ExcludeStoreScreenshots),
+                                    .push(
+                                        checkbox(
+                                            TRANSLATOR.explanation_for_exclude_store_screenshots(),
+                                            config.backup.filter.exclude_store_screenshots,
+                                            Message::config(config::Event::ExcludeStoreScreenshots),
+                                        )
+                                        .class(style::Checkbox),
                                     )
-                                    .class(style::Checkbox),
-                                )
-                                .push(checkbox(
-                                    TRANSLATOR.show_disabled_games(),
-                                    config.scan.show_deselected_games,
-                                    Message::config(config::Event::ShowDeselectedGames),
-                                ))
-                                .push(checkbox(
-                                    TRANSLATOR.show_unchanged_games(),
-                                    config.scan.show_unchanged_games,
-                                    Message::config(config::Event::ShowUnchangedGames),
-                                ))
-                                .push(checkbox(
-                                    TRANSLATOR.show_unscanned_games(),
-                                    config.scan.show_unscanned_games,
-                                    Message::config(config::Event::ShowUnscannedGames),
-                                ))
-                                .push(checkbox(
-                                    TRANSLATOR.field(&TRANSLATOR.explanation_for_exclude_cloud_games()),
-                                    config.backup.filter.cloud.exclude,
-                                    Message::config(move |exclude| {
-                                        config::Event::CloudFilter(CloudFilter {
-                                            exclude,
-                                            ..config.backup.filter.cloud
-                                        })
-                                    }),
-                                ))
-                                .push(
-                                    Row::new()
-                                        .padding(padding::left(35))
-                                        .spacing(10)
-                                        .push(
-                                            checkbox(
-                                                TRANSLATOR.store(&Store::Epic),
-                                                config.backup.filter.cloud.epic,
-                                                Message::config(move |epic| {
-                                                    config::Event::CloudFilter(CloudFilter {
-                                                        epic,
-                                                        ..config.backup.filter.cloud
-                                                    })
-                                                }),
-                                            )
-                                            .class(style::Checkbox),
-                                        )
-                                        .push(
-                                            checkbox(
-                                                TRANSLATOR.store(&Store::Gog),
-                                                config.backup.filter.cloud.gog,
-                                                Message::config(move |gog| {
-                                                    config::Event::CloudFilter(CloudFilter {
-                                                        gog,
-                                                        ..config.backup.filter.cloud
-                                                    })
-                                                }),
-                                            )
-                                            .class(style::Checkbox),
-                                        )
-                                        .push(
-                                            checkbox(
-                                                format!(
-                                                    "{} / {}",
-                                                    TRANSLATOR.store(&Store::Origin),
-                                                    TRANSLATOR.store(&Store::Ea)
-                                                ),
-                                                config.backup.filter.cloud.origin,
-                                                Message::config(move |origin| {
-                                                    config::Event::CloudFilter(CloudFilter {
-                                                        origin,
-                                                        ..config.backup.filter.cloud
-                                                    })
-                                                }),
-                                            )
-                                            .class(style::Checkbox),
-                                        )
-                                        .push(
-                                            checkbox(
-                                                TRANSLATOR.store(&Store::Steam),
-                                                config.backup.filter.cloud.steam,
-                                                Message::config(move |steam| {
-                                                    config::Event::CloudFilter(CloudFilter {
-                                                        steam,
-                                                        ..config.backup.filter.cloud
-                                                    })
-                                                }),
-                                            )
-                                            .class(style::Checkbox),
-                                        )
-                                        .push(
-                                            checkbox(
-                                                TRANSLATOR.store(&Store::Uplay),
-                                                config.backup.filter.cloud.uplay,
-                                                Message::config(move |uplay| {
-                                                    config::Event::CloudFilter(CloudFilter {
-                                                        uplay,
-                                                        ..config.backup.filter.cloud
-                                                    })
-                                                }),
-                                            )
-                                            .class(style::Checkbox),
-                                        ),
-                                ),
-                        )
-                        .class(style::Container::GameListEntry),
-                    ),
-                )
-                .push(
-                    Column::new().spacing(5).push(text(TRANSLATOR.backup_field())).push(
-                        Container::new(
-                            Column::new()
-                                .padding(5)
-                                .spacing(10)
-                                .push(
-                                    Row::new()
-                                        .spacing(20)
-                                        .height(30)
-                                        .align_y(Alignment::Center)
-                                        .push({
-                                            number_input(
-                                                config.backup.retention.full as i32,
-                                                TRANSLATOR.full_retention(),
-                                                1..=255,
-                                                Message::config(|x| config::Event::FullRetention(x as u8)),
-                                            )
-                                        })
-                                        .push({
-                                            number_input(
-                                                config.backup.retention.differential as i32,
-                                                TRANSLATOR.differential_retention(),
-                                                0..=255,
-                                                Message::config(|x| config::Event::DiffRetention(x as u8)),
-                                            )
+                                    .push(checkbox(
+                                        TRANSLATOR.show_disabled_games(),
+                                        config.scan.show_deselected_games,
+                                        Message::config(config::Event::ShowDeselectedGames),
+                                    ))
+                                    .push(checkbox(
+                                        TRANSLATOR.show_unchanged_games(),
+                                        config.scan.show_unchanged_games,
+                                        Message::config(config::Event::ShowUnchangedGames),
+                                    ))
+                                    .push(checkbox(
+                                        TRANSLATOR.show_unscanned_games(),
+                                        config.scan.show_unscanned_games,
+                                        Message::config(config::Event::ShowUnscannedGames),
+                                    ))
+                                    .push(checkbox(
+                                        TRANSLATOR.field(&TRANSLATOR.explanation_for_exclude_cloud_games()),
+                                        config.backup.filter.cloud.exclude,
+                                        Message::config(move |exclude| {
+                                            config::Event::CloudFilter(CloudFilter {
+                                                exclude,
+                                                ..config.backup.filter.cloud
+                                            })
                                         }),
-                                )
-                                .push(
-                                    Row::new()
-                                        .spacing(20)
-                                        .align_y(Alignment::Center)
-                                        .push(
-                                            Row::new()
-                                                .spacing(5)
-                                                .align_y(Alignment::Center)
-                                                .push(text(TRANSLATOR.backup_format_field()))
-                                                .push(
-                                                    pick_list(
-                                                        BackupFormat::ALL,
-                                                        Some(config.backup.format.chosen),
-                                                        Message::config(config::Event::BackupFormat),
-                                                    )
-                                                    .class(style::PickList::Primary),
-                                                ),
-                                        )
-                                        .push_if(config.backup.format.chosen == BackupFormat::Zip, || {
-                                            Row::new()
-                                                .spacing(5)
-                                                .align_y(Alignment::Center)
-                                                .push(text(TRANSLATOR.backup_compression_field()))
-                                                .push(
-                                                    pick_list(
-                                                        ZipCompression::ALL,
-                                                        Some(config.backup.format.zip.compression),
-                                                        Message::config(config::Event::BackupCompression),
-                                                    )
-                                                    .class(style::PickList::Primary),
+                                    ))
+                                    .push(
+                                        Row::new()
+                                            .padding(padding::left(35))
+                                            .spacing(design::space::SM)
+                                            .push(
+                                                checkbox(
+                                                    TRANSLATOR.store(&Store::Epic),
+                                                    config.backup.filter.cloud.epic,
+                                                    Message::config(move |epic| {
+                                                        config::Event::CloudFilter(CloudFilter {
+                                                            epic,
+                                                            ..config.backup.filter.cloud
+                                                        })
+                                                    }),
                                                 )
-                                        })
-                                        .push(match (config.backup.format.level(), config.backup.format.range()) {
-                                            (Some(level), Some(range)) => Some(number_input(
-                                                level,
-                                                TRANSLATOR.backup_compression_level_field(),
-                                                range,
-                                                Message::config(config::Event::CompressionLevel),
-                                            )),
-                                            _ => None,
-                                        }),
-                                )
-                                .push(Row::new().spacing(5).align_y(Alignment::Center).push(checkbox(
-                                    TRANSLATOR.skip_unconstructive_backups(),
-                                    config.backup.only_constructive,
-                                    Message::config(config::Event::OnlyConstructiveBackups),
-                                ))),
-                        )
-                        .class(style::Container::GameListEntry),
-                    ),
+                                                .class(style::Checkbox),
+                                            )
+                                            .push(
+                                                checkbox(
+                                                    TRANSLATOR.store(&Store::Gog),
+                                                    config.backup.filter.cloud.gog,
+                                                    Message::config(move |gog| {
+                                                        config::Event::CloudFilter(CloudFilter {
+                                                            gog,
+                                                            ..config.backup.filter.cloud
+                                                        })
+                                                    }),
+                                                )
+                                                .class(style::Checkbox),
+                                            )
+                                            .push(
+                                                checkbox(
+                                                    format!(
+                                                        "{} / {}",
+                                                        TRANSLATOR.store(&Store::Origin),
+                                                        TRANSLATOR.store(&Store::Ea)
+                                                    ),
+                                                    config.backup.filter.cloud.origin,
+                                                    Message::config(move |origin| {
+                                                        config::Event::CloudFilter(CloudFilter {
+                                                            origin,
+                                                            ..config.backup.filter.cloud
+                                                        })
+                                                    }),
+                                                )
+                                                .class(style::Checkbox),
+                                            )
+                                            .push(
+                                                checkbox(
+                                                    TRANSLATOR.store(&Store::Steam),
+                                                    config.backup.filter.cloud.steam,
+                                                    Message::config(move |steam| {
+                                                        config::Event::CloudFilter(CloudFilter {
+                                                            steam,
+                                                            ..config.backup.filter.cloud
+                                                        })
+                                                    }),
+                                                )
+                                                .class(style::Checkbox),
+                                            )
+                                            .push(
+                                                checkbox(
+                                                    TRANSLATOR.store(&Store::Uplay),
+                                                    config.backup.filter.cloud.uplay,
+                                                    Message::config(move |uplay| {
+                                                        config::Event::CloudFilter(CloudFilter {
+                                                            uplay,
+                                                            ..config.backup.filter.cloud
+                                                        })
+                                                    }),
+                                                )
+                                                .class(style::Checkbox),
+                                            ),
+                                    ),
+                            )
+                            .class(style::Container::GameListEntry),
+                        ),
                 )
                 .push(
                     Column::new()
-                        .spacing(5)
+                        .spacing(design::space::XS)
+                        .push(text(TRANSLATOR.backup_field()))
+                        .push(
+                            Container::new(
+                                Column::new()
+                                    .padding(design::space::XS)
+                                    .spacing(design::space::SM)
+                                    .push(
+                                        Row::new()
+                                            .spacing(design::space::LG)
+                                            .height(30)
+                                            .align_y(Alignment::Center)
+                                            .push({
+                                                number_input(
+                                                    config.backup.retention.full as i32,
+                                                    TRANSLATOR.full_retention(),
+                                                    1..=255,
+                                                    Message::config(|x| config::Event::FullRetention(x as u8)),
+                                                )
+                                            })
+                                            .push({
+                                                number_input(
+                                                    config.backup.retention.differential as i32,
+                                                    TRANSLATOR.differential_retention(),
+                                                    0..=255,
+                                                    Message::config(|x| config::Event::DiffRetention(x as u8)),
+                                                )
+                                            }),
+                                    )
+                                    .push(
+                                        Row::new()
+                                            .spacing(design::space::LG)
+                                            .align_y(Alignment::Center)
+                                            .push(
+                                                Row::new()
+                                                    .spacing(design::space::XS)
+                                                    .align_y(Alignment::Center)
+                                                    .push(text(TRANSLATOR.backup_format_field()))
+                                                    .push(
+                                                        pick_list(
+                                                            BackupFormat::ALL,
+                                                            Some(config.backup.format.chosen),
+                                                            Message::config(config::Event::BackupFormat),
+                                                        )
+                                                        .class(style::PickList::Primary),
+                                                    ),
+                                            )
+                                            .push_if(config.backup.format.chosen == BackupFormat::Zip, || {
+                                                Row::new()
+                                                    .spacing(design::space::XS)
+                                                    .align_y(Alignment::Center)
+                                                    .push(text(TRANSLATOR.backup_compression_field()))
+                                                    .push(
+                                                        pick_list(
+                                                            ZipCompression::ALL,
+                                                            Some(config.backup.format.zip.compression),
+                                                            Message::config(config::Event::BackupCompression),
+                                                        )
+                                                        .class(style::PickList::Primary),
+                                                    )
+                                            })
+                                            .push(match (config.backup.format.level(), config.backup.format.range()) {
+                                                (Some(level), Some(range)) => Some(number_input(
+                                                    level,
+                                                    TRANSLATOR.backup_compression_level_field(),
+                                                    range,
+                                                    Message::config(config::Event::CompressionLevel),
+                                                )),
+                                                _ => None,
+                                            }),
+                                    )
+                                    .push(Row::new().spacing(design::space::XS).align_y(Alignment::Center).push(
+                                        checkbox(
+                                            TRANSLATOR.skip_unconstructive_backups(),
+                                            config.backup.only_constructive,
+                                            Message::config(config::Event::OnlyConstructiveBackups),
+                                        ),
+                                    )),
+                            )
+                            .class(style::Container::GameListEntry),
+                        ),
+                )
+                .push(
+                    Column::new()
+                        .spacing(design::space::XS)
                         .push(
                             Row::new()
                                 .align_y(iced::Alignment::Center)
@@ -883,7 +1053,7 @@ pub fn other<'a>(
                 )
                 .push(
                     Column::new()
-                        .spacing(5)
+                        .spacing(design::space::XS)
                         .push(
                             Row::new()
                                 .align_y(iced::Alignment::Center)
@@ -891,9 +1061,9 @@ pub fn other<'a>(
                         )
                         .push(
                             Container::new({
-                                let mut column = Column::new().spacing(5).push(
+                                let mut column = Column::new().spacing(design::space::XS).push(
                                     Row::new()
-                                        .spacing(20)
+                                        .spacing(design::space::LG)
                                         .align_y(Alignment::Center)
                                         .push(text(TRANSLATOR.rclone_label()).width(70))
                                         .push(histories.input(UndoSubject::RcloneExecutable))
@@ -909,7 +1079,7 @@ pub fn other<'a>(
                                     column = column
                                         .push({
                                             let mut row = Row::new()
-                                                .spacing(20)
+                                                .spacing(design::space::LG)
                                                 .align_y(Alignment::Center)
                                                 .push(text(TRANSLATOR.remote_label()).width(70))
                                                 .push_if(!operation.idle(), || {
@@ -941,7 +1111,7 @@ pub fn other<'a>(
                                         })
                                         .push_if(choice != RemoteChoice::None, || {
                                             Row::new()
-                                                .spacing(20)
+                                                .spacing(design::space::LG)
                                                 .align_y(Alignment::Center)
                                                 .push(text(TRANSLATOR.folder_label()).width(70))
                                                 .push(histories.input(UndoSubject::CloudPath))
@@ -951,7 +1121,7 @@ pub fn other<'a>(
                                         })
                                         .push_if(is_cloud_configured && is_cloud_path_valid, || {
                                             Row::new()
-                                                .spacing(20)
+                                                .spacing(design::space::LG)
                                                 .align_y(Alignment::Center)
                                                 .push(button::upload(operation))
                                                 .push(button::download(operation))
@@ -977,20 +1147,23 @@ pub fn other<'a>(
 
                                 column
                             })
-                            .padding(5)
+                            .padding(design::space::XS)
                             .class(style::Container::GameListEntry),
                         ),
                 )
                 .push(
-                    Column::new().spacing(5).push(text(TRANSLATOR.roots_label())).push(
-                        Container::new(
-                            Column::new()
-                                .padding(5)
-                                .spacing(4)
-                                .push(editor::root(config, histories, modifiers)),
-                        )
-                        .class(style::Container::GameListEntry),
-                    ),
+                    Column::new()
+                        .spacing(design::space::XS)
+                        .push(text(TRANSLATOR.roots_label()))
+                        .push(
+                            Container::new(
+                                Column::new()
+                                    .padding(design::space::XS)
+                                    .spacing(design::space::XS)
+                                    .push(editor::root(config, histories, modifiers)),
+                            )
+                            .class(style::Container::GameListEntry),
+                        ),
                 )
                 .push(
                     Column::new()
