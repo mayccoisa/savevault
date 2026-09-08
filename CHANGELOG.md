@@ -3,6 +3,18 @@
 SaveVault is a fork of [Ludusavi](https://github.com/mtkennerly/ludusavi) by Michael Kennerly.
 Everything under "Inherited from Ludusavi" is the upstream history, with its own version numbers.
 
+## SaveVault v0.12.1 (2026-09-08)
+
+* Fixed:
+  * **When your config file cannot be read, the app now tells you where it kept the old one.**
+    It has always set the unreadable file aside before falling back to defaults, but it never
+    said so, and a message that only says "the config file is invalid" reads as though your
+    settings are gone. They are not: the message now carries the path and how to put the file
+    back.
+  * That rescued copy is no longer overwritten. It used to be saved under one fixed name, so a
+    second failure replaced the first rescue — and the first is the one that still holds the
+    settings you configured. Each one is now kept under its own name.
+
 ## SaveVault v0.12.0 (2026-09-08)
 
 * Changed:
