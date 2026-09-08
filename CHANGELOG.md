@@ -3,6 +3,25 @@
 SaveVault is a fork of [Ludusavi](https://github.com/mtkennerly/ludusavi) by Michael Kennerly.
 Everything under "Inherited from Ludusavi" is the upstream history, with its own version numbers.
 
+## SaveVault v0.10.0 (2026-09-08)
+
+* Changed:
+  * **Logs lists backup runs, and you open one to see what it did.** It used to be one flat row
+    per game per backup, which answers "what happened to this game" — the second question. The
+    first one is "what did that run do", and it had no answer. A row now says when the run
+    happened, how many games it covered, what changed in total, and how much it holds; opening
+    it shows every game in that run.
+
+* Fixed:
+  * **Every game of one backup now shares one timestamp.** The clock was read separately inside
+    each game's task, so the games of a single backup came out stamped milliseconds to seconds
+    apart, in whatever order they happened to finish. Nothing on disk said that they were one
+    execution. This is what makes the Logs screen able to group them exactly.
+  * Backups you already have were written before that, so their runs cannot be recovered
+    exactly. They are gathered by the time between them: while each backup starts within 90
+    seconds of the one before it, it counts as the same run. Backups made from this version on
+    are grouped exactly, with no guessing.
+
 ## SaveVault v0.9.0 (2026-09-08)
 
 * Changed:
