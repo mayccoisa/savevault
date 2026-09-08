@@ -3,6 +3,31 @@
 SaveVault is a fork of [Ludusavi](https://github.com/mtkennerly/ludusavi) by Michael Kennerly.
 Everything under "Inherited from Ludusavi" is the upstream history, with its own version numbers.
 
+## SaveVault v0.9.0 (2026-09-08)
+
+* Changed:
+  * **"Other" is now called "Settings."** It always was the settings screen.
+  * **Settings looks like a settings screen.** It opened with a dozen filled accent buttons —
+    every icon, every "+", every folder picker. When everything is the primary action, nothing
+    is. They are all quiet now, and the eye lands on the content.
+  * **Custom games moved its four actions into the title bar**, where Backup and Restore
+    already keep theirs, and the strip they used to occupy is gone. One of them leads the
+    screen ("Add game") and looks like it; the other three do not.
+  * The Emulators screen moved "Check again" into the title bar for the same reason, leaving
+    the header to the summary alone.
+  * Removing a row is quiet until you point at it, and turns red under the pointer. A filled
+    red button on every row of a list says that deleting one of eight roots is the most
+    important thing on the page.
+  * The retention stepper was a red minus and a green plus. Lowering how many backups to keep
+    is not destruction, and raising it is not the main action of the screen: they are two
+    halves of one control now.
+  * Clearing a filter is no longer styled as a destructive action, because it does not destroy
+    anything.
+
+* Fixed:
+  * "Accent color" and the five colour names were missing from the Brazilian Portuguese
+    translation, so that line showed up in English in the middle of a translated screen.
+
 ## SaveVault v0.8.1 (2026-09-07)
 
 * Fixed:
