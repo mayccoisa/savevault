@@ -29,11 +29,11 @@ button-nav-custom-games = Jogos personalizados
 button-nav-other = Outros
 button-nav-logs = Registros
 
-button-scan = Varrer
-button-rescan = Varrer de novo
+button-scan = Escanear
+button-rescan = Escanear de novo
 button-done = Pronto
-label-not-scanned-yet = Ainda não varrido
-label-scanning = Varrendo…
+label-not-scanned-yet = Ainda não escaneado
+label-scanning = Escaneando…
 label-nothing-changed = nada mudou
 tooltip-nothing-to-back-up = Nada mudou desde o último backup
 
