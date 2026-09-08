@@ -3,6 +3,20 @@
 SaveVault is a fork of [Ludusavi](https://github.com/mtkennerly/ludusavi) by Michael Kennerly.
 Everything under "Inherited from Ludusavi" is the upstream history, with its own version numbers.
 
+## SaveVault v0.13.0 (2026-09-08)
+
+* Added:
+  * **Restore now opens with what is actually in your vault, oldest backup first.** Nothing in
+    the app answered "what do I have stored and how old is it". Logs lists backup *runs*, so a
+    game that has not changed produces no new run and vanishes from it; Restore listed the games
+    from the last scan, out of the cache, which is names with nothing behind them.
+  * The order is the point. Sorted by name, a list answers "is X in there". Sorted by age, it
+    answers "what have I not backed up in a long time" — the question a backup tool exists to
+    keep you from having to ask yourself.
+  * Each row shows the game, when its last backup was, and how many files and how much space it
+    holds now. A save from an emulator carries that emulator's logo; everything else carries its
+    initial for the moment, which is where a cover will go.
+
 ## SaveVault v0.12.1 (2026-09-08)
 
 * Fixed:
