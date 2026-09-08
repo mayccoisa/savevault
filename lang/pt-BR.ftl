@@ -27,6 +27,8 @@ button-nav-backup = Backup
 button-nav-restore = Restauração
 button-nav-custom-games = Jogos personalizados
 button-nav-settings = Configurações
+settings-appearance = Aparência
+settings-updates = Atualizações
 button-nav-logs = Registros
 
 button-scan = Escanear
@@ -111,7 +113,7 @@ field-redirect-source =
     .placeholder = Fonte (local original)
 field-redirect-target =
     .placeholder = Alvo (novo local)
-field-roots = Raiz:
+field-roots = Raízes:
 field-backup-excluded-items = Exclusões do backup:
 field-redirects = Redirecionar:
 # This appears next to the number of full backups that you'd like to keep.

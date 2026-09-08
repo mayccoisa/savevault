@@ -33,6 +33,9 @@ button-nav-backup = Backup
 button-nav-restore = Restore
 button-nav-custom-games = Custom games
 button-nav-settings = Settings
+# Section headings on the Settings screen.
+settings-appearance = Appearance
+settings-updates = Updates
 button-nav-logs = Logs
 
 button-scan = Scan

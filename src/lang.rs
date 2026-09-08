@@ -738,6 +738,34 @@ impl Translator {
         translate("button-nav-settings")
     }
 
+    pub fn settings_appearance(&self) -> String {
+        translate("settings-appearance")
+    }
+
+    pub fn settings_updates(&self) -> String {
+        translate("settings-updates")
+    }
+
+    /// The bare label, without the colon `field` adds.
+    ///
+    /// In a form whose labels sit in a column of their own, the colon is doing nothing: the
+    /// alignment already says which control the label belongs to.
+    pub fn language_label(&self) -> String {
+        translate("language")
+    }
+
+    pub fn theme_label(&self) -> String {
+        translate("theme")
+    }
+
+    pub fn accent_label(&self) -> String {
+        translate("accent")
+    }
+
+    pub fn manifest_label_bare(&self) -> String {
+        translate("label-manifest")
+    }
+
     pub fn nav_logs_button(&self) -> String {
         translate("button-nav-logs")
     }

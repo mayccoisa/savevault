@@ -218,7 +218,9 @@ pub fn manifest<'a>(
 
     content = content.push(button::add(Message::config(config::Event::SecondaryManifest)));
 
-    Container::new(content).class(style::Container::GameListEntry)
+    // Sem superfície própria: este editor é desenhado dentro de uma seção de Configurações, e o
+    // card da seção já é a superfície. Os dois juntos leem como caixa dentro de caixa.
+    Container::new(content)
 }
 
 pub fn redirect<'a>(config: &Config, histories: &TextHistories, modifiers: &keyboard::Modifiers) -> Container<'a> {
@@ -267,8 +269,7 @@ pub fn redirect<'a>(config: &Config, histories: &TextHistories, modifiers: &keyb
         });
 
         content.push(button::add(Message::config(move |x| config::Event::Redirect(x, None))))
-    })
-    .class(style::Container::GameListEntry);
+    });
 
     Container::new(wrapper)
 }
@@ -616,83 +617,80 @@ pub fn custom_games<'a>(
 
 pub fn ignored_items<'a>(config: &Config, histories: &TextHistories, modifiers: &keyboard::Modifiers) -> Container<'a> {
     Container::new({
-        Column::new().spacing(design::space::SM).push(
-            Container::new(
-                Column::new()
-                    .padding(design::space::XS)
-                    .spacing(design::space::XS)
-                    .push(
-                        Row::new()
-                            .push(Column::new().width(100).push(text(TRANSLATOR.custom_files_label())))
-                            .push(
-                                config
-                                    .backup
-                                    .filter
-                                    .ignored_paths
-                                    .iter()
-                                    .enumerate()
-                                    .fold(Column::new().spacing(design::space::XS), |column, (ii, _)| {
-                                        column.push(
-                                            Row::new()
-                                                .spacing(design::space::LG)
-                                                .push(button::move_up(
-                                                    Message::config(config::Event::BackupFilterIgnoredPath),
-                                                    ii,
-                                                ))
-                                                .push(button::move_down(
-                                                    Message::config(config::Event::BackupFilterIgnoredPath),
-                                                    ii,
-                                                    config.backup.filter.ignored_paths.len(),
-                                                ))
-                                                .push(histories.input(UndoSubject::BackupFilterIgnoredPath(ii)))
-                                                .push(button::choose_folder(
-                                                    BrowseSubject::BackupFilterIgnoredPath(ii),
-                                                    modifiers,
-                                                ))
-                                                .push(button::remove(
-                                                    Message::config(config::Event::BackupFilterIgnoredPath),
-                                                    ii,
-                                                )),
-                                        )
-                                    })
-                                    .push(button::add(Message::config(config::Event::BackupFilterIgnoredPath))),
-                            ),
-                    )
-                    .push(
-                        Row::new()
-                            .push(Column::new().width(100).push(text(TRANSLATOR.custom_registry_label())))
-                            .push(
-                                config
-                                    .backup
-                                    .filter
-                                    .ignored_registry
-                                    .iter()
-                                    .enumerate()
-                                    .fold(Column::new().spacing(design::space::XS), |column, (ii, _)| {
-                                        column.push(
-                                            Row::new()
-                                                .spacing(design::space::LG)
-                                                .push(button::move_up(
-                                                    Message::config(config::Event::BackupFilterIgnoredRegistry),
-                                                    ii,
-                                                ))
-                                                .push(button::move_down(
-                                                    Message::config(config::Event::BackupFilterIgnoredRegistry),
-                                                    ii,
-                                                    config.backup.filter.ignored_registry.len(),
-                                                ))
-                                                .push(histories.input(UndoSubject::BackupFilterIgnoredRegistry(ii)))
-                                                .push(button::remove(
-                                                    Message::config(config::Event::BackupFilterIgnoredRegistry),
-                                                    ii,
-                                                )),
-                                        )
-                                    })
-                                    .push(button::add(Message::config(config::Event::BackupFilterIgnoredRegistry))),
-                            ),
-                    ),
-            )
-            .class(style::Container::GameListEntry),
-        )
+        Column::new().spacing(design::space::SM).push(Container::new(
+            Column::new()
+                .padding(design::space::XS)
+                .spacing(design::space::XS)
+                .push(
+                    Row::new()
+                        .push(Column::new().width(100).push(text(TRANSLATOR.custom_files_label())))
+                        .push(
+                            config
+                                .backup
+                                .filter
+                                .ignored_paths
+                                .iter()
+                                .enumerate()
+                                .fold(Column::new().spacing(design::space::XS), |column, (ii, _)| {
+                                    column.push(
+                                        Row::new()
+                                            .spacing(design::space::LG)
+                                            .push(button::move_up(
+                                                Message::config(config::Event::BackupFilterIgnoredPath),
+                                                ii,
+                                            ))
+                                            .push(button::move_down(
+                                                Message::config(config::Event::BackupFilterIgnoredPath),
+                                                ii,
+                                                config.backup.filter.ignored_paths.len(),
+                                            ))
+                                            .push(histories.input(UndoSubject::BackupFilterIgnoredPath(ii)))
+                                            .push(button::choose_folder(
+                                                BrowseSubject::BackupFilterIgnoredPath(ii),
+                                                modifiers,
+                                            ))
+                                            .push(button::remove(
+                                                Message::config(config::Event::BackupFilterIgnoredPath),
+                                                ii,
+                                            )),
+                                    )
+                                })
+                                .push(button::add(Message::config(config::Event::BackupFilterIgnoredPath))),
+                        ),
+                )
+                .push(
+                    Row::new()
+                        .push(Column::new().width(100).push(text(TRANSLATOR.custom_registry_label())))
+                        .push(
+                            config
+                                .backup
+                                .filter
+                                .ignored_registry
+                                .iter()
+                                .enumerate()
+                                .fold(Column::new().spacing(design::space::XS), |column, (ii, _)| {
+                                    column.push(
+                                        Row::new()
+                                            .spacing(design::space::LG)
+                                            .push(button::move_up(
+                                                Message::config(config::Event::BackupFilterIgnoredRegistry),
+                                                ii,
+                                            ))
+                                            .push(button::move_down(
+                                                Message::config(config::Event::BackupFilterIgnoredRegistry),
+                                                ii,
+                                                config.backup.filter.ignored_registry.len(),
+                                            ))
+                                            .push(histories.input(UndoSubject::BackupFilterIgnoredRegistry(ii)))
+                                            .push(button::remove(
+                                                Message::config(config::Event::BackupFilterIgnoredRegistry),
+                                                ii,
+                                            )),
+                                    )
+                                })
+                                .push(button::add(Message::config(config::Event::BackupFilterIgnoredRegistry))),
+                        ),
+                ),
+        ))
     })
 }

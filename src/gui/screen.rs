@@ -14,7 +14,7 @@ use crate::{
         search::CustomGamesFilter,
         shortcuts::TextHistories,
         style,
-        widget::{Button, Column, Container, Element, IcedParentExt, Row, checkbox, number_input, pick_list, text},
+        widget::{Column, Container, Element, IcedParentExt, Row, checkbox, number_input, pick_list, text},
     },
     lang::{Language, TRANSLATOR},
     prelude::{AVAILABLE_PARALELLISM, STEAM_DECK, StrictPath},
@@ -740,11 +740,91 @@ impl CustomGames {
     }
 }
 
+/// The width the settings form stops growing at.
+///
+/// A form is read down a single column, and a control that starts 900px away from its label has
+/// stopped being labelled. The old screen had no limit at all, so on a wide monitor the picker for
+/// the language sat alone in the top-left corner of a very large empty area.
+const FORM_WIDTH: f32 = 760.0;
+
+/// The width a picker gets in the settings form.
+///
+/// Common to all of them, so the column of controls has a straight right edge. Left to size
+/// themselves, "Escuro" and "Português brasileiro (100%)" end in very different places and the
+/// form looks ragged.
+const FIELD_CONTROL_WIDTH: f32 = 280.0;
+
+/// The label column of a settings row.
+///
+/// Fixed, so every control in the form starts at the same x. Ragged labels each pushing their own
+/// control to a different place is what makes a form read as a dump of fields rather than a list of
+/// choices.
+const FIELD_LABEL_WIDTH: f32 = 176.0;
+
+/// One block of settings: a card, its heading, and the rows inside it.
+///
+/// This replaces the old shape, which was a line of body text ending in a colon followed by a
+/// bordered box. The heading was the same size and weight as the labels underneath it, so the
+/// screen had no levels: nine groups and nine headings that did not look like headings.
+fn settings_section<'a>(title: String, body: Column<'a>) -> Element<'a> {
+    // Same reason as in `settings_field`: several of these titles come from strings that carry a
+    // trailing colon because they are also used inline. A heading does not point at anything.
+    let title = title.trim_end().trim_end_matches(':').trim_end().to_string();
+
+    Container::new(
+        Column::new()
+            .spacing(design::space::LG)
+            .push(
+                text(title)
+                    .font(font::TEXT_STRONG)
+                    .size(design::text::SUBTITLE)
+                    .line_height(design::leading::TITLE),
+            )
+            .push(body.spacing(design::space::MD).width(Length::Fill)),
+    )
+    .padding(design::space::LG)
+    .width(Length::Fill)
+    .class(style::Container::Card)
+    .into()
+}
+
+/// A labelled row inside a section.
+fn settings_field<'a>(label: String, control: impl Into<Element<'a>>) -> Row<'a> {
+    // The trailing colon is trimmed here rather than in the translations. Most of these labels come
+    // from `Translator::field`, which appends it (and appends " :" in French) because the same
+    // string is used in places where the label runs inline with its value. In a column of its own
+    // the colon is punctuation pointing at nothing: the alignment already says what the label
+    // belongs to. Doing it here keeps twenty-four language files out of a layout decision.
+    let label = label.trim_end().trim_end_matches(':').trim_end().to_string();
+
+    Row::new()
+        .spacing(design::space::LG)
+        .align_y(Alignment::Center)
+        .push(Container::new(text(label)).width(Length::Fixed(FIELD_LABEL_WIDTH)))
+        .push(control)
+}
+
+/// A row of settings that is a sentence with a checkbox, not a label and a control.
+fn settings_toggle<'a>(control: impl Into<Element<'a>>) -> Row<'a> {
+    Row::new()
+        .spacing(design::space::SM)
+        .align_y(Alignment::Center)
+        .push(control)
+}
+
+/// Options that only apply while the checkbox above them is on.
+///
+/// Indented, because the relationship is the whole point: without it, "Epic / GOG / Steam" reads as
+/// five more settings rather than as the detail of the one above.
+fn settings_nested<'a>(content: impl Into<Element<'a>>) -> Container<'a> {
+    Container::new(content).padding(padding::left(design::space::XL))
+}
+
 pub fn other<'a>(
     updating_manifest: bool,
     config: &'a Config,
     cache: &'a Cache,
-    operation: &Operation,
+    operation: &'a Operation,
     histories: &'a TextHistories,
     modifiers: &keyboard::Modifiers,
 ) -> Element<'a> {
@@ -752,436 +832,375 @@ pub fn other<'a>(
     let is_cloud_configured = config.cloud.remote.is_some();
     let is_cloud_path_valid = crate::cloud::validate_cloud_path(&config.cloud.path).is_ok();
 
-    let content = Column::new()
+    let appearance = settings_section(
+        TRANSLATOR.settings_appearance(),
+        Column::new()
+            .push(settings_field(
+                TRANSLATOR.language_label(),
+                pick_list(
+                    Language::ALL,
+                    Some(config.language),
+                    Message::config(config::Event::Language),
+                )
+                .width(Length::Fixed(FIELD_CONTROL_WIDTH))
+                .class(style::PickList::Primary),
+            ))
+            .push(settings_field(
+                TRANSLATOR.theme_label(),
+                pick_list(Theme::ALL, Some(config.theme), Message::config(config::Event::Theme))
+                    .width(Length::Fixed(FIELD_CONTROL_WIDTH))
+                    .class(style::PickList::Primary),
+            ))
+            .push(settings_field(
+                TRANSLATOR.accent_label(),
+                pick_list(Accent::ALL, Some(config.accent), Message::config(config::Event::Accent))
+                    .width(Length::Fixed(FIELD_CONTROL_WIDTH))
+                    .class(style::PickList::Primary),
+            )),
+    );
+
+    let updates = settings_section(
+        TRANSLATOR.settings_updates(),
+        Column::new().push(
+            settings_toggle(checkbox(
+                TRANSLATOR.new_version_check(),
+                config.release.check,
+                Message::config(config::Event::CheckRelease),
+            ))
+            .push(iced::widget::space().width(Length::Fill))
+            .push(button::open_url_icon(RELEASE_URL.to_string())),
+        ),
+    );
+
+    let scanning = settings_section(
+        TRANSLATOR.scan_label(),
+        Column::new()
+            .push_if(AVAILABLE_PARALELLISM.is_some(), || {
+                Column::new()
+                    .spacing(design::space::SM)
+                    .push(settings_toggle(checkbox(
+                        TRANSLATOR.override_max_threads(),
+                        config.runtime.threads.is_some(),
+                        Message::config(config::Event::OverrideMaxThreads),
+                    )))
+                    .push(
+                        config
+                            .runtime
+                            .threads
+                            .zip(*AVAILABLE_PARALELLISM)
+                            .map(|(threads, max_threads)| {
+                                settings_nested(number_input(
+                                    threads.get() as i32,
+                                    TRANSLATOR.threads_label(),
+                                    1..=(max_threads.get() as i32),
+                                    Message::config(|x| config::Event::MaxThreads(x as usize)),
+                                ))
+                            }),
+                    )
+            })
+            .push(settings_toggle(
+                checkbox(
+                    TRANSLATOR.explanation_for_exclude_store_screenshots(),
+                    config.backup.filter.exclude_store_screenshots,
+                    Message::config(config::Event::ExcludeStoreScreenshots),
+                )
+                .class(style::Checkbox),
+            ))
+            .push(settings_toggle(checkbox(
+                TRANSLATOR.show_disabled_games(),
+                config.scan.show_deselected_games,
+                Message::config(config::Event::ShowDeselectedGames),
+            )))
+            .push(settings_toggle(checkbox(
+                TRANSLATOR.show_unchanged_games(),
+                config.scan.show_unchanged_games,
+                Message::config(config::Event::ShowUnchangedGames),
+            )))
+            .push(settings_toggle(checkbox(
+                TRANSLATOR.show_unscanned_games(),
+                config.scan.show_unscanned_games,
+                Message::config(config::Event::ShowUnscannedGames),
+            )))
+            .push(settings_toggle(checkbox(
+                TRANSLATOR.field(&TRANSLATOR.explanation_for_exclude_cloud_games()),
+                config.backup.filter.cloud.exclude,
+                Message::config(move |exclude| {
+                    config::Event::CloudFilter(CloudFilter {
+                        exclude,
+                        ..config.backup.filter.cloud
+                    })
+                }),
+            )))
+            .push(settings_nested(
+                Row::new()
+                    .spacing(design::space::MD)
+                    .push(
+                        checkbox(
+                            TRANSLATOR.store(&Store::Epic),
+                            config.backup.filter.cloud.epic,
+                            Message::config(move |epic| {
+                                config::Event::CloudFilter(CloudFilter {
+                                    epic,
+                                    ..config.backup.filter.cloud
+                                })
+                            }),
+                        )
+                        .class(style::Checkbox),
+                    )
+                    .push(
+                        checkbox(
+                            TRANSLATOR.store(&Store::Gog),
+                            config.backup.filter.cloud.gog,
+                            Message::config(move |gog| {
+                                config::Event::CloudFilter(CloudFilter {
+                                    gog,
+                                    ..config.backup.filter.cloud
+                                })
+                            }),
+                        )
+                        .class(style::Checkbox),
+                    )
+                    .push(
+                        checkbox(
+                            format!(
+                                "{} / {}",
+                                TRANSLATOR.store(&Store::Origin),
+                                TRANSLATOR.store(&Store::Ea)
+                            ),
+                            config.backup.filter.cloud.origin,
+                            Message::config(move |origin| {
+                                config::Event::CloudFilter(CloudFilter {
+                                    origin,
+                                    ..config.backup.filter.cloud
+                                })
+                            }),
+                        )
+                        .class(style::Checkbox),
+                    )
+                    .push(
+                        checkbox(
+                            TRANSLATOR.store(&Store::Steam),
+                            config.backup.filter.cloud.steam,
+                            Message::config(move |steam| {
+                                config::Event::CloudFilter(CloudFilter {
+                                    steam,
+                                    ..config.backup.filter.cloud
+                                })
+                            }),
+                        )
+                        .class(style::Checkbox),
+                    )
+                    .push(
+                        checkbox(
+                            TRANSLATOR.store(&Store::Uplay),
+                            config.backup.filter.cloud.uplay,
+                            Message::config(move |uplay| {
+                                config::Event::CloudFilter(CloudFilter {
+                                    uplay,
+                                    ..config.backup.filter.cloud
+                                })
+                            }),
+                        )
+                        .class(style::Checkbox),
+                    ),
+            )),
+    );
+
+    let backup = settings_section(
+        TRANSLATOR.backup_label(),
+        Column::new()
+            .push(settings_field(
+                TRANSLATOR.full_retention(),
+                number_input(
+                    config.backup.retention.full as i32,
+                    String::new(),
+                    1..=255,
+                    Message::config(|x| config::Event::FullRetention(x as u8)),
+                ),
+            ))
+            .push(settings_field(
+                TRANSLATOR.differential_retention(),
+                number_input(
+                    config.backup.retention.differential as i32,
+                    String::new(),
+                    0..=255,
+                    Message::config(|x| config::Event::DiffRetention(x as u8)),
+                ),
+            ))
+            .push(settings_field(
+                TRANSLATOR.backup_format_field(),
+                pick_list(
+                    BackupFormat::ALL,
+                    Some(config.backup.format.chosen),
+                    Message::config(config::Event::BackupFormat),
+                )
+                .class(style::PickList::Primary),
+            ))
+            .push_if(config.backup.format.chosen == BackupFormat::Zip, || {
+                settings_field(
+                    TRANSLATOR.backup_compression_field(),
+                    pick_list(
+                        ZipCompression::ALL,
+                        Some(config.backup.format.zip.compression),
+                        Message::config(config::Event::BackupCompression),
+                    )
+                    .class(style::PickList::Primary),
+                )
+            })
+            .push(match (config.backup.format.level(), config.backup.format.range()) {
+                (Some(level), Some(range)) => Some(settings_field(
+                    TRANSLATOR.backup_compression_level_field(),
+                    number_input(
+                        level,
+                        String::new(),
+                        range,
+                        Message::config(config::Event::CompressionLevel),
+                    ),
+                )),
+                _ => None,
+            })
+            .push(settings_toggle(checkbox(
+                TRANSLATOR.skip_unconstructive_backups(),
+                config.backup.only_constructive,
+                Message::config(config::Event::OnlyConstructiveBackups),
+            ))),
+    );
+
+    let manifest = settings_section(
+        TRANSLATOR.manifest_label_bare(),
+        Column::new()
+            .push(
+                Row::new()
+                    .align_y(Alignment::Center)
+                    .push(iced::widget::space().width(Length::Fill))
+                    .push(button::refresh(
+                        Message::UpdateManifest { force: true },
+                        updating_manifest,
+                    )),
+            )
+            .push(editor::manifest(config, cache, histories, modifiers)),
+    );
+
+    let cloud = settings_section(TRANSLATOR.cloud_label(), {
+        // The executable and its arguments are two rows, not one. Together they were a label, a
+        // path field, an error icon, a browse button and a second field on a single line, and the
+        // last one ran off the edge of the card.
+        let mut column = Column::new()
+            .push(
+                settings_field(
+                    TRANSLATOR.rclone_label(),
+                    histories.input(UndoSubject::RcloneExecutable),
+                )
+                .push_if(!is_rclone_valid, || {
+                    Icon::Error.text().width(Length::Shrink).class(style::Text::Failure)
+                })
+                .push(button::choose_file(BrowseFileSubject::RcloneExecutable, modifiers)),
+            )
+            .push(settings_field(
+                TRANSLATOR.arguments_label(),
+                histories.input(UndoSubject::RcloneArguments),
+            ));
+
+        if is_rclone_valid {
+            let choice: RemoteChoice = config.cloud.remote.as_ref().into();
+            column = column
+                .push({
+                    let mut row = settings_field(
+                        TRANSLATOR.remote_label(),
+                        Container::new(
+                            Row::new()
+                                .align_y(Alignment::Center)
+                                .push_if(!operation.idle(), || text(choice.to_string()))
+                                .push_if(operation.idle(), || {
+                                    pick_list(RemoteChoice::ALL, Some(choice), Message::EditedCloudRemote)
+                                }),
+                        )
+                        .height(design::control::HEIGHT)
+                        .center_y(design::control::HEIGHT),
+                    );
+
+                    if let Some(Remote::Custom { .. }) = &config.cloud.remote {
+                        row = row
+                            .push(text(TRANSLATOR.remote_name_label()))
+                            .push(histories.input(UndoSubject::CloudRemoteId));
+                    }
+
+                    if let Some(description) = config.cloud.remote.as_ref().and_then(|x| x.description()) {
+                        row = row.push(text(description).class(style::Text::Muted));
+                    }
+
+                    row
+                })
+                .push_if(choice != RemoteChoice::None, || {
+                    settings_field(TRANSLATOR.folder_label(), histories.input(UndoSubject::CloudPath))
+                        .push_if(!is_cloud_path_valid, || {
+                            Icon::Error.text().width(Length::Shrink).class(style::Text::Failure)
+                        })
+                })
+                .push_if(is_cloud_configured && is_cloud_path_valid, || {
+                    Row::new()
+                        .spacing(design::space::SM)
+                        .align_y(Alignment::Center)
+                        .push(button::upload(operation))
+                        .push(button::download(operation))
+                        .push(checkbox(
+                            TRANSLATOR.synchronize_automatically(),
+                            config.cloud.synchronize,
+                            Message::config(|_| config::Event::ToggleCloudSynchronize),
+                        ))
+                })
+                .push_if(!is_cloud_configured, || {
+                    text(TRANSLATOR.cloud_not_configured()).class(style::Text::Muted)
+                })
+                .push_if(!is_cloud_path_valid, || {
+                    text(TRANSLATOR.prefix_warning(&TRANSLATOR.cloud_path_invalid())).class(style::Text::Failure)
+                });
+        } else {
+            column = column
+                .push(text(TRANSLATOR.prefix_warning(&TRANSLATOR.rclone_unavailable())).class(style::Text::Failure))
+                .push(Row::new().push(button::open_url(TRANSLATOR.get_rclone_button(), RCLONE_URL.to_string())));
+        }
+
+        column
+    });
+
+    let roots = settings_section(
+        TRANSLATOR.roots_label(),
+        Column::new().push(editor::root(config, histories, modifiers)),
+    );
+
+    let exclusions = settings_section(
+        TRANSLATOR.ignored_items_label(),
+        Column::new().push(editor::ignored_items(config, histories, modifiers)),
+    );
+
+    let redirects = settings_section(
+        TRANSLATOR.redirects_label(),
+        Column::new().push(editor::redirect(config, histories, modifiers)),
+    );
+
+    let form = Column::new()
+        .width(Length::Fixed(FORM_WIDTH))
+        .spacing(design::space::LG)
+        .padding([0.0, design::space::XL])
         .push_if(*STEAM_DECK, || {
             Row::new()
-                .padding([0.0, design::space::XL])
-                .spacing(design::space::LG)
-                .align_y(iced::Alignment::Center)
-                .push(
-                    Button::new(text(TRANSLATOR.exit_button()).align_x(iced::alignment::Horizontal::Center))
-                        .on_press(Message::Exit { user: true })
-                        .width(125)
-                        .class(style::Button::Negative)
-                        .padding(design::space::XS),
-                )
-        })
-        .push({
-            let content = Column::new()
-                .spacing(design::space::LG)
-                .padding(padding::top(0).bottom(5).left(15).right(15))
                 .width(Length::Fill)
-                .push(
-                    Row::new()
-                        .align_y(iced::Alignment::Center)
-                        .spacing(design::space::LG)
-                        .push(text(TRANSLATOR.field_language()))
-                        .push(
-                            pick_list(
-                                Language::ALL,
-                                Some(config.language),
-                                Message::config(config::Event::Language),
-                            )
-                            .class(style::PickList::Primary),
-                        ),
-                )
-                .push(
-                    Row::new()
-                        .align_y(iced::Alignment::Center)
-                        .spacing(design::space::LG)
-                        .push(text(TRANSLATOR.field_theme()))
-                        .push(
-                            pick_list(Theme::ALL, Some(config.theme), Message::config(config::Event::Theme))
-                                .class(style::PickList::Primary),
-                        ),
-                )
-                .push(
-                    Row::new()
-                        .align_y(iced::Alignment::Center)
-                        .spacing(design::space::LG)
-                        .push(text(TRANSLATOR.field_accent()))
-                        .push(
-                            pick_list(Accent::ALL, Some(config.accent), Message::config(config::Event::Accent))
-                                .class(style::PickList::Primary),
-                        ),
-                )
-                .push(
-                    Row::new()
-                        .align_y(iced::Alignment::Center)
-                        .spacing(design::space::LG)
-                        .push(checkbox(
-                            TRANSLATOR.new_version_check(),
-                            config.release.check,
-                            Message::config(config::Event::CheckRelease),
-                        ))
-                        .push(button::open_url_icon(RELEASE_URL.to_string())),
-                )
-                .push(
-                    Column::new()
-                        .spacing(design::space::XS)
-                        .push(text(TRANSLATOR.scan_field()))
-                        .push(
-                            Container::new(
-                                Column::new()
-                                    .padding(design::space::XS)
-                                    .spacing(design::space::SM)
-                                    .push({
-                                        AVAILABLE_PARALELLISM.map(|max_threads| {
-                                            Column::new()
-                                                .spacing(design::space::XS)
-                                                .push(checkbox(
-                                                    TRANSLATOR.override_max_threads(),
-                                                    config.runtime.threads.is_some(),
-                                                    Message::config(config::Event::OverrideMaxThreads),
-                                                ))
-                                                .push({
-                                                    config.runtime.threads.map(|threads| {
-                                                        Container::new(number_input(
-                                                            threads.get() as i32,
-                                                            TRANSLATOR.threads_label(),
-                                                            1..=(max_threads.get() as i32),
-                                                            Message::config(|x| config::Event::MaxThreads(x as usize)),
-                                                        ))
-                                                        .padding(padding::left(35))
-                                                    })
-                                                })
-                                        })
-                                    })
-                                    .push(
-                                        checkbox(
-                                            TRANSLATOR.explanation_for_exclude_store_screenshots(),
-                                            config.backup.filter.exclude_store_screenshots,
-                                            Message::config(config::Event::ExcludeStoreScreenshots),
-                                        )
-                                        .class(style::Checkbox),
-                                    )
-                                    .push(checkbox(
-                                        TRANSLATOR.show_disabled_games(),
-                                        config.scan.show_deselected_games,
-                                        Message::config(config::Event::ShowDeselectedGames),
-                                    ))
-                                    .push(checkbox(
-                                        TRANSLATOR.show_unchanged_games(),
-                                        config.scan.show_unchanged_games,
-                                        Message::config(config::Event::ShowUnchangedGames),
-                                    ))
-                                    .push(checkbox(
-                                        TRANSLATOR.show_unscanned_games(),
-                                        config.scan.show_unscanned_games,
-                                        Message::config(config::Event::ShowUnscannedGames),
-                                    ))
-                                    .push(checkbox(
-                                        TRANSLATOR.field(&TRANSLATOR.explanation_for_exclude_cloud_games()),
-                                        config.backup.filter.cloud.exclude,
-                                        Message::config(move |exclude| {
-                                            config::Event::CloudFilter(CloudFilter {
-                                                exclude,
-                                                ..config.backup.filter.cloud
-                                            })
-                                        }),
-                                    ))
-                                    .push(
-                                        Row::new()
-                                            .padding(padding::left(35))
-                                            .spacing(design::space::SM)
-                                            .push(
-                                                checkbox(
-                                                    TRANSLATOR.store(&Store::Epic),
-                                                    config.backup.filter.cloud.epic,
-                                                    Message::config(move |epic| {
-                                                        config::Event::CloudFilter(CloudFilter {
-                                                            epic,
-                                                            ..config.backup.filter.cloud
-                                                        })
-                                                    }),
-                                                )
-                                                .class(style::Checkbox),
-                                            )
-                                            .push(
-                                                checkbox(
-                                                    TRANSLATOR.store(&Store::Gog),
-                                                    config.backup.filter.cloud.gog,
-                                                    Message::config(move |gog| {
-                                                        config::Event::CloudFilter(CloudFilter {
-                                                            gog,
-                                                            ..config.backup.filter.cloud
-                                                        })
-                                                    }),
-                                                )
-                                                .class(style::Checkbox),
-                                            )
-                                            .push(
-                                                checkbox(
-                                                    format!(
-                                                        "{} / {}",
-                                                        TRANSLATOR.store(&Store::Origin),
-                                                        TRANSLATOR.store(&Store::Ea)
-                                                    ),
-                                                    config.backup.filter.cloud.origin,
-                                                    Message::config(move |origin| {
-                                                        config::Event::CloudFilter(CloudFilter {
-                                                            origin,
-                                                            ..config.backup.filter.cloud
-                                                        })
-                                                    }),
-                                                )
-                                                .class(style::Checkbox),
-                                            )
-                                            .push(
-                                                checkbox(
-                                                    TRANSLATOR.store(&Store::Steam),
-                                                    config.backup.filter.cloud.steam,
-                                                    Message::config(move |steam| {
-                                                        config::Event::CloudFilter(CloudFilter {
-                                                            steam,
-                                                            ..config.backup.filter.cloud
-                                                        })
-                                                    }),
-                                                )
-                                                .class(style::Checkbox),
-                                            )
-                                            .push(
-                                                checkbox(
-                                                    TRANSLATOR.store(&Store::Uplay),
-                                                    config.backup.filter.cloud.uplay,
-                                                    Message::config(move |uplay| {
-                                                        config::Event::CloudFilter(CloudFilter {
-                                                            uplay,
-                                                            ..config.backup.filter.cloud
-                                                        })
-                                                    }),
-                                                )
-                                                .class(style::Checkbox),
-                                            ),
-                                    ),
-                            )
-                            .class(style::Container::GameListEntry),
-                        ),
-                )
-                .push(
-                    Column::new()
-                        .spacing(design::space::XS)
-                        .push(text(TRANSLATOR.backup_field()))
-                        .push(
-                            Container::new(
-                                Column::new()
-                                    .padding(design::space::XS)
-                                    .spacing(design::space::SM)
-                                    .push(
-                                        Row::new()
-                                            .spacing(design::space::LG)
-                                            .height(30)
-                                            .align_y(Alignment::Center)
-                                            .push({
-                                                number_input(
-                                                    config.backup.retention.full as i32,
-                                                    TRANSLATOR.full_retention(),
-                                                    1..=255,
-                                                    Message::config(|x| config::Event::FullRetention(x as u8)),
-                                                )
-                                            })
-                                            .push({
-                                                number_input(
-                                                    config.backup.retention.differential as i32,
-                                                    TRANSLATOR.differential_retention(),
-                                                    0..=255,
-                                                    Message::config(|x| config::Event::DiffRetention(x as u8)),
-                                                )
-                                            }),
-                                    )
-                                    .push(
-                                        Row::new()
-                                            .spacing(design::space::LG)
-                                            .align_y(Alignment::Center)
-                                            .push(
-                                                Row::new()
-                                                    .spacing(design::space::XS)
-                                                    .align_y(Alignment::Center)
-                                                    .push(text(TRANSLATOR.backup_format_field()))
-                                                    .push(
-                                                        pick_list(
-                                                            BackupFormat::ALL,
-                                                            Some(config.backup.format.chosen),
-                                                            Message::config(config::Event::BackupFormat),
-                                                        )
-                                                        .class(style::PickList::Primary),
-                                                    ),
-                                            )
-                                            .push_if(config.backup.format.chosen == BackupFormat::Zip, || {
-                                                Row::new()
-                                                    .spacing(design::space::XS)
-                                                    .align_y(Alignment::Center)
-                                                    .push(text(TRANSLATOR.backup_compression_field()))
-                                                    .push(
-                                                        pick_list(
-                                                            ZipCompression::ALL,
-                                                            Some(config.backup.format.zip.compression),
-                                                            Message::config(config::Event::BackupCompression),
-                                                        )
-                                                        .class(style::PickList::Primary),
-                                                    )
-                                            })
-                                            .push(match (config.backup.format.level(), config.backup.format.range()) {
-                                                (Some(level), Some(range)) => Some(number_input(
-                                                    level,
-                                                    TRANSLATOR.backup_compression_level_field(),
-                                                    range,
-                                                    Message::config(config::Event::CompressionLevel),
-                                                )),
-                                                _ => None,
-                                            }),
-                                    )
-                                    .push(Row::new().spacing(design::space::XS).align_y(Alignment::Center).push(
-                                        checkbox(
-                                            TRANSLATOR.skip_unconstructive_backups(),
-                                            config.backup.only_constructive,
-                                            Message::config(config::Event::OnlyConstructiveBackups),
-                                        ),
-                                    )),
-                            )
-                            .class(style::Container::GameListEntry),
-                        ),
-                )
-                .push(
-                    Column::new()
-                        .spacing(design::space::XS)
-                        .push(
-                            Row::new()
-                                .align_y(iced::Alignment::Center)
-                                .push(text(TRANSLATOR.manifest_label()).width(100))
-                                .push(button::refresh(
-                                    Message::UpdateManifest { force: true },
-                                    updating_manifest,
-                                )),
-                        )
-                        .push(editor::manifest(config, cache, histories, modifiers).padding(padding::top(10))),
-                )
-                .push(
-                    Column::new()
-                        .spacing(design::space::XS)
-                        .push(
-                            Row::new()
-                                .align_y(iced::Alignment::Center)
-                                .push(text(TRANSLATOR.cloud_field()).width(100)),
-                        )
-                        .push(
-                            Container::new({
-                                let mut column = Column::new().spacing(design::space::XS).push(
-                                    Row::new()
-                                        .spacing(design::space::LG)
-                                        .align_y(Alignment::Center)
-                                        .push(text(TRANSLATOR.rclone_label()).width(70))
-                                        .push(histories.input(UndoSubject::RcloneExecutable))
-                                        .push_if(!is_rclone_valid, || {
-                                            Icon::Error.text().width(Length::Shrink).class(style::Text::Failure)
-                                        })
-                                        .push(button::choose_file(BrowseFileSubject::RcloneExecutable, modifiers))
-                                        .push(histories.input(UndoSubject::RcloneArguments)),
-                                );
+                .push(iced::widget::space().width(Length::Fill))
+                .push(button::negative(
+                    TRANSLATOR.exit_button(),
+                    Some(Message::Exit { user: true }),
+                ))
+        })
+        .push(appearance)
+        .push(updates)
+        .push(scanning)
+        .push(backup)
+        .push(manifest)
+        .push(cloud)
+        .push(roots)
+        .push(exclusions)
+        .push(redirects);
 
-                                if is_rclone_valid {
-                                    let choice: RemoteChoice = config.cloud.remote.as_ref().into();
-                                    column = column
-                                        .push({
-                                            let mut row = Row::new()
-                                                .spacing(design::space::LG)
-                                                .align_y(Alignment::Center)
-                                                .push(text(TRANSLATOR.remote_label()).width(70))
-                                                .push_if(!operation.idle(), || {
-                                                    text(choice.to_string())
-                                                        .height(30)
-                                                        .align_y(iced::alignment::Vertical::Center)
-                                                })
-                                                .push_if(operation.idle(), || {
-                                                    pick_list(
-                                                        RemoteChoice::ALL,
-                                                        Some(choice),
-                                                        Message::EditedCloudRemote,
-                                                    )
-                                                });
-
-                                            if let Some(Remote::Custom { .. }) = &config.cloud.remote {
-                                                row = row
-                                                    .push(text(TRANSLATOR.remote_name_label()))
-                                                    .push(histories.input(UndoSubject::CloudRemoteId));
-                                            }
-
-                                            if let Some(description) =
-                                                config.cloud.remote.as_ref().and_then(|x| x.description())
-                                            {
-                                                row = row.push(text(description));
-                                            }
-
-                                            row
-                                        })
-                                        .push_if(choice != RemoteChoice::None, || {
-                                            Row::new()
-                                                .spacing(design::space::LG)
-                                                .align_y(Alignment::Center)
-                                                .push(text(TRANSLATOR.folder_label()).width(70))
-                                                .push(histories.input(UndoSubject::CloudPath))
-                                                .push_if(!is_cloud_path_valid, || {
-                                                    Icon::Error.text().width(Length::Shrink).class(style::Text::Failure)
-                                                })
-                                        })
-                                        .push_if(is_cloud_configured && is_cloud_path_valid, || {
-                                            Row::new()
-                                                .spacing(design::space::LG)
-                                                .align_y(Alignment::Center)
-                                                .push(button::upload(operation))
-                                                .push(button::download(operation))
-                                                .push(checkbox(
-                                                    TRANSLATOR.synchronize_automatically(),
-                                                    config.cloud.synchronize,
-                                                    Message::config(|_| config::Event::ToggleCloudSynchronize),
-                                                ))
-                                        })
-                                        .push_if(!is_cloud_configured, || text(TRANSLATOR.cloud_not_configured()))
-                                        .push_if(!is_cloud_path_valid, || {
-                                            text(TRANSLATOR.prefix_warning(&TRANSLATOR.cloud_path_invalid()))
-                                                .class(style::Text::Failure)
-                                        });
-                                } else {
-                                    column = column
-                                        .push(
-                                            text(TRANSLATOR.prefix_warning(&TRANSLATOR.rclone_unavailable()))
-                                                .class(style::Text::Failure),
-                                        )
-                                        .push(button::open_url(TRANSLATOR.get_rclone_button(), RCLONE_URL.to_string()));
-                                }
-
-                                column
-                            })
-                            .padding(design::space::XS)
-                            .class(style::Container::GameListEntry),
-                        ),
-                )
-                .push(
-                    Column::new()
-                        .spacing(design::space::XS)
-                        .push(text(TRANSLATOR.roots_label()))
-                        .push(
-                            Container::new(
-                                Column::new()
-                                    .padding(design::space::XS)
-                                    .spacing(design::space::XS)
-                                    .push(editor::root(config, histories, modifiers)),
-                            )
-                            .class(style::Container::GameListEntry),
-                        ),
-                )
-                .push(
-                    Column::new()
-                        .push(text(TRANSLATOR.ignored_items_label()))
-                        .push(editor::ignored_items(config, histories, modifiers).padding(padding::top(10))),
-                )
-                .push(
-                    Column::new()
-                        .push(text(TRANSLATOR.redirects_label()))
-                        .push(editor::redirect(config, histories, modifiers).padding(padding::top(10))),
-                );
-            ScrollSubject::Other.into_widget(content)
-        });
-
-    template(content)
+    template(Column::new().push(ScrollSubject::Other.into_widget(form)))
 }

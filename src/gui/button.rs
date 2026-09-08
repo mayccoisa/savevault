@@ -115,7 +115,7 @@ pub fn negative<'a>(content: String, action: Option<Message>) -> Element<'a> {
 /// accent-coloured, these were a dozen primary actions on one page, and the eye had nowhere to land.
 pub fn add<'a>(action: impl Fn(EditAction) -> Message) -> Element<'a> {
     template(
-        Icon::AddCircle.text(),
+        Icon::AddCircle.text_narrow(),
         Some(action(EditAction::Add)),
         Some(style::Button::Secondary),
     )
@@ -123,7 +123,7 @@ pub fn add<'a>(action: impl Fn(EditAction) -> Message) -> Element<'a> {
 
 pub fn add_nested<'a>(action: impl Fn(usize, EditAction) -> Message, parent: usize) -> Element<'a> {
     template(
-        Icon::AddCircle.text(),
+        Icon::AddCircle.text_narrow(),
         Some(action(parent, EditAction::Add)),
         Some(style::Button::Secondary),
     )
@@ -131,7 +131,7 @@ pub fn add_nested<'a>(action: impl Fn(usize, EditAction) -> Message, parent: usi
 
 pub fn remove<'a>(action: impl Fn(EditAction) -> Message, index: usize) -> Element<'a> {
     template(
-        Icon::RemoveCircle.text(),
+        Icon::RemoveCircle.text_narrow(),
         Some(action(EditAction::Remove(index))),
         Some(style::Button::Danger),
     )
@@ -139,7 +139,7 @@ pub fn remove<'a>(action: impl Fn(EditAction) -> Message, index: usize) -> Eleme
 
 pub fn remove_nested<'a>(action: impl Fn(usize, EditAction) -> Message, parent: usize, index: usize) -> Element<'a> {
     template(
-        Icon::RemoveCircle.text(),
+        Icon::RemoveCircle.text_narrow(),
         Some(action(parent, EditAction::Remove(index))),
         Some(style::Button::Danger),
     )
@@ -147,7 +147,7 @@ pub fn remove_nested<'a>(action: impl Fn(usize, EditAction) -> Message, parent: 
 
 pub fn delete<'a>(action: impl Fn(EditAction) -> Message, index: usize) -> Element<'a> {
     template(
-        Icon::Delete.text(),
+        Icon::Delete.text_narrow(),
         Some(action(EditAction::Remove(index))),
         Some(style::Button::Danger),
     )
@@ -391,23 +391,31 @@ pub fn restore_main<'a>(ongoing: &Operation, filtered: bool) -> Element<'a> {
 
 pub fn choose_folder<'a>(subject: BrowseSubject, modifiers: &keyboard::Modifiers) -> Element<'a> {
     if modifiers.shift() {
-        template(Icon::OpenInNew.text(), Some(Message::OpenDirSubject(subject)), None)
+        template(
+            Icon::OpenInNew.text_narrow(),
+            Some(Message::OpenDirSubject(subject)),
+            None,
+        )
     } else {
-        template(Icon::FolderOpen.text(), Some(Message::BrowseDir(subject)), None)
+        template(Icon::FolderOpen.text_narrow(), Some(Message::BrowseDir(subject)), None)
     }
 }
 
 pub fn choose_file<'a>(subject: BrowseFileSubject, modifiers: &keyboard::Modifiers) -> Element<'a> {
     if modifiers.shift() {
-        template(Icon::OpenInNew.text(), Some(Message::OpenFileSubject(subject)), None)
+        template(
+            Icon::OpenInNew.text_narrow(),
+            Some(Message::OpenFileSubject(subject)),
+            None,
+        )
     } else {
-        template(Icon::FolderOpen.text(), Some(Message::BrowseFile(subject)), None)
+        template(Icon::FolderOpen.text_narrow(), Some(Message::BrowseFile(subject)), None)
     }
 }
 
 pub fn filter<'a>(open: bool) -> Element<'a> {
     template(
-        Icon::Filter.text(),
+        Icon::Filter.text_narrow(),
         Some(Message::Filter {
             event: game_filter::Event::Toggled,
         }),
@@ -419,7 +427,7 @@ pub fn reset_filter<'a>(dirty: bool) -> Element<'a> {
     // Clearing a filter is not destructive, so it is not styled as destruction. It used to be a
     // solid red button, which is what "style by semantics" looks like when the semantics are wrong.
     template(
-        Icon::RemoveCircle.text(),
+        Icon::RemoveCircle.text_narrow(),
         dirty.then_some(Message::Filter {
             event: game_filter::Event::Reset,
         }),
@@ -432,15 +440,19 @@ pub fn sort<'a>(message: impl Into<Message>) -> Element<'a> {
 }
 
 pub fn refresh<'a>(action: Message, ongoing: bool) -> Element<'a> {
-    template(Icon::Refresh.text(), (!ongoing).then_some(action), None)
+    template(Icon::Refresh.text_narrow(), (!ongoing).then_some(action), None)
 }
 
 pub fn refresh_custom_game<'a>(action: Message, ongoing: bool, enabled: bool) -> Element<'a> {
-    template(Icon::Refresh.text(), (!ongoing && enabled).then_some(action), None)
+    template(
+        Icon::Refresh.text_narrow(),
+        (!ongoing && enabled).then_some(action),
+        None,
+    )
 }
 
 pub fn search<'a>(action: Message) -> Element<'a> {
-    template(Icon::Search.text(), Some(action), None)
+    template(Icon::Search.text_narrow(), Some(action), None)
 }
 
 pub fn move_up<'a>(action: impl Fn(EditAction) -> Message, index: usize) -> Element<'a> {
@@ -503,14 +515,18 @@ pub fn move_down_nested<'a>(
 
 pub fn next_page<'a>(action: impl Fn(usize) -> Message, page: usize, pages: usize) -> Element<'a> {
     template(
-        Icon::ArrowForward.text(),
+        Icon::ArrowForward.text_narrow(),
         (page < pages).then(|| action(page + 1)),
         None,
     )
 }
 
 pub fn previous_page<'a>(action: impl Fn(usize) -> Message, page: usize) -> Element<'a> {
-    template(Icon::ArrowBack.text(), (page > 0).then(|| action(page - 1)), None)
+    template(
+        Icon::ArrowBack.text_narrow(),
+        (page > 0).then(|| action(page - 1)),
+        None,
+    )
 }
 
 pub fn toggle_all_custom_games<'a>(all_enabled: bool, filtered: bool) -> Element<'a> {
@@ -588,10 +604,10 @@ pub fn open_url<'a>(label: String, url: String) -> Element<'a> {
 
 /// Back out of a detail view, to whatever list it was opened from.
 pub fn back<'a>(action: Message) -> Element<'a> {
-    template(Icon::ArrowBack.text(), Some(action), None)
+    template(Icon::ArrowBack.text_narrow(), Some(action), None)
 }
 pub fn open_url_icon<'a>(url: String) -> Element<'a> {
-    template(Icon::OpenInBrowser.text(), Some(Message::OpenUrl(url)), None)
+    template(Icon::OpenInBrowser.text_narrow(), Some(Message::OpenUrl(url)), None)
 }
 
 pub fn side_nav<'a>(screen: Screen, current_screen: Screen) -> Button<'a> {
@@ -618,7 +634,7 @@ pub fn side_nav<'a>(screen: Screen, current_screen: Screen) -> Button<'a> {
 
 pub fn upload<'a>(operation: &Operation) -> Element<'a> {
     template(
-        Icon::Upload.text(),
+        Icon::Upload.text_narrow(),
         match operation {
             Operation::Idle => Some(Message::ConfirmSynchronizeCloud {
                 direction: SyncDirection::Upload,
@@ -642,7 +658,7 @@ pub fn upload<'a>(operation: &Operation) -> Element<'a> {
 
 pub fn download<'a>(operation: &Operation) -> Element<'a> {
     template(
-        Icon::Download.text(),
+        Icon::Download.text_narrow(),
         match operation {
             Operation::Idle => Some(Message::ConfirmSynchronizeCloud {
                 direction: SyncDirection::Download,
