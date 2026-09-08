@@ -32,7 +32,7 @@ button-restore = Restore
 button-nav-backup = Backup
 button-nav-restore = Restore
 button-nav-custom-games = Custom games
-button-nav-other = Other
+button-nav-settings = Settings
 button-nav-logs = Logs
 
 button-scan = Scan

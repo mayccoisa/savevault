@@ -729,8 +729,13 @@ impl Translator {
         translate("button-nav-emulators")
     }
 
-    pub fn nav_other_button(&self) -> String {
-        translate("button-nav-other")
+    /// The settings screen.
+    ///
+    /// The key is new rather than a retranslation of `button-nav-other`, so that the fifteen
+    /// languages that still carry their own word for "Other" fall back to the English "Settings"
+    /// instead of naming the screen something it is not.
+    pub fn nav_settings_button(&self) -> String {
+        translate("button-nav-settings")
     }
 
     pub fn nav_logs_button(&self) -> String {

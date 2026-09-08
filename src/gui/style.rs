@@ -211,6 +211,13 @@ pub enum Button {
     SideNavInactive,
     /// Outlined button, for what shares a bar with the primary action without competing with it.
     Secondary,
+    /// A destructive action: remove a row, delete an entry.
+    ///
+    /// Quiet at rest, loud only under the pointer. A solid red button per row styles by
+    /// **semantics** instead of by hierarchy: deleting one of eight roots is not the most important
+    /// thing on a settings screen, and eight filled red circles down the side of a list say that it
+    /// is. The solid red belongs to the confirmation dialog, where the action really is primary.
+    Danger,
     Badge,
     Bare,
 }
@@ -231,7 +238,7 @@ impl button::Catalog for Theme {
                 Button::GameListEntryTitleUnscanned => None,
                 Button::Negative => Some(self.negative.into()),
                 Button::NavButtonActive | Button::SideNavActive => Some(self.navigation.alpha(0.9).into()),
-                Button::NavButtonInactive | Button::SideNavInactive | Button::Secondary => None,
+                Button::NavButtonInactive | Button::SideNavInactive | Button::Secondary | Button::Danger => None,
                 Button::Badge => None,
                 Button::Bare => None,
             },
@@ -239,10 +246,13 @@ impl button::Catalog for Theme {
                 color: match class {
                     Button::NavButtonActive | Button::NavButtonInactive => self.navigation,
                     Button::Secondary => self.field,
+                    Button::Danger => self.negative.alpha(design::alpha::HALF),
                     _ => Color::TRANSPARENT,
                 },
                 width: match class {
-                    Button::NavButtonActive | Button::NavButtonInactive | Button::Secondary => 1.0,
+                    Button::NavButtonActive | Button::NavButtonInactive | Button::Secondary | Button::Danger => {
+                        design::stroke::HAIRLINE
+                    }
                     _ => 0.0,
                 },
                 // One radius for every button. This block used to hand out 9px to the pill-shaped
@@ -255,6 +265,7 @@ impl button::Catalog for Theme {
                 Button::GameListEntryTitleUnscanned => self.text.alpha(0.8),
                 Button::NavButtonActive | Button::NavButtonInactive | Button::Bare | Button::SideNavActive => self.text,
                 Button::Secondary => self.text,
+                Button::Danger => self.negative,
                 Button::SideNavInactive => self.text_skipped,
                 Button::Primary | Button::GameActionPrimary => self.accent_ink,
                 _ => self.text_button.alpha(0.8),
@@ -268,7 +279,8 @@ impl button::Catalog for Theme {
                 | Button::SideNavInactive
                 | Button::Secondary
                 | Button::Bare
-                | Button::Badge => design::elevation::FLAT,
+                | Button::Badge
+                | Button::Danger => design::elevation::FLAT,
                 _ => design::elevation::RESTING,
             },
             snap: true,
@@ -281,6 +293,8 @@ impl button::Catalog for Theme {
                     Button::NavButtonActive | Button::SideNavActive => Some(self.navigation.alpha(0.95).into()),
                     Button::NavButtonInactive | Button::SideNavInactive => Some(self.navigation.alpha(0.5).into()),
                     Button::Secondary => Some(self.field.into()),
+                    // Under the pointer it becomes what it does. Anywhere else it stays quiet.
+                    Button::Danger => Some(self.negative.into()),
                     _ => active.background,
                 },
                 border: Border {
@@ -305,6 +319,7 @@ impl button::Catalog for Theme {
                     | Button::SideNavInactive => self.text,
                     Button::Bare => self.text.alpha(0.9),
                     Button::Secondary => self.text,
+                    Button::Danger => self.text_button,
                     Button::Primary | Button::GameActionPrimary => self.accent_ink,
                     _ => self.text_button,
                 },
@@ -315,7 +330,8 @@ impl button::Catalog for Theme {
                     | Button::SideNavInactive
                     | Button::Secondary
                     | Button::Bare
-                    | Button::Badge => design::elevation::FLAT,
+                    | Button::Badge
+                    | Button::Danger => design::elevation::FLAT,
                     _ => design::elevation::RAISED,
                 },
                 snap: true,

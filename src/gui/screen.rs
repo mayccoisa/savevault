@@ -535,6 +535,14 @@ impl Emulators {
             .into()
     }
 
+    /// The command of the screen, mounted in the title bar with the others.
+    pub fn commands<'a>(&'a self) -> Row<'a> {
+        Row::new()
+            .spacing(design::space::SM)
+            .align_y(Alignment::Center)
+            .push(button::refresh_emulators())
+    }
+
     pub fn view<'a>(
         &'a self,
         config: &'a Config,
@@ -545,35 +553,26 @@ impl Emulators {
 
         let found = App::ALL.iter().filter(|app| self.state_of(**app).is_good()).count();
 
-        let header = Row::new()
-            // Fill, and explicitly: the screen template centres its column, so a row that does not
-            // declare a width shrinks to its content and the action on the right lands in the
-            // middle of the screen instead of at the edge.
+        // A ação foi para a barra de título, junto com as das outras telas. Só o resumo fica aqui.
+        let header = Column::new()
             .width(Length::Fill)
-            .spacing(design::space::XL)
-            .align_y(Alignment::Center)
+            .spacing(design::space::XS)
             .push(
-                Column::new()
-                    .spacing(design::space::XS)
-                    .width(Length::Fill)
-                    .push(
-                        text(TRANSLATOR.emulators_summary(found, App::ALL.len()))
-                            .font(font::TEXT_STRONG)
-                            .size(design::text::SUBTITLE)
-                            .line_height(design::leading::TITLE),
-                    )
-                    // Largura travada: a linha ocupava a janela inteira, o que num monitor de 1920
-                    // dá quase 120 caracteres, muito acima dos 75 em que o olho ainda acha o
-                    // começo da linha seguinte.
-                    .push(
-                        text(TRANSLATOR.emulators_explanation())
-                            .size(design::text::BODY)
-                            .line_height(design::leading::BODY)
-                            .class(style::Text::Muted)
-                            .width(Length::Fixed(EXPLANATION_WIDTH)),
-                    ),
+                text(TRANSLATOR.emulators_summary(found, App::ALL.len()))
+                    .font(font::TEXT_STRONG)
+                    .size(design::text::SUBTITLE)
+                    .line_height(design::leading::TITLE),
             )
-            .push(button::refresh_emulators());
+            // Largura travada: a linha ocupava a janela inteira, o que num monitor de 1920 dá quase
+            // 120 caracteres, muito acima dos 75 em que o olho ainda acha o começo da linha
+            // seguinte.
+            .push(
+                text(TRANSLATOR.emulators_explanation())
+                    .size(design::text::BODY)
+                    .line_height(design::leading::BODY)
+                    .class(style::Text::Muted)
+                    .width(Length::Fixed(EXPLANATION_WIDTH)),
+            );
 
         // Duas colunas, fixas. A janela mínima do app tem 1036 de largura, e a máxima que cabe num
         // monitor comum passa pouco de 1600: entre as duas, dois cards é sempre o que a largura
@@ -678,6 +677,25 @@ pub struct CustomGames {
 }
 
 impl CustomGames {
+    /// The commands of the screen, mounted in the title bar.
+    ///
+    /// They lived in a strip of their own below the title, as four filled accent buttons side by
+    /// side — four primary actions, when only one of them (adding a game) leads the screen. The bar
+    /// above already reserved the space and was carrying a single word, which is the same reason
+    /// Backup and Restore put theirs there.
+    pub fn commands<'a>(&'a self, config: &Config) -> Row<'a> {
+        Row::new()
+            .spacing(design::space::SM)
+            .align_y(Alignment::Center)
+            .push(button::add_game())
+            .push(button::toggle_all_custom_games(
+                self.all_visible_game_selected(config),
+                self.is_filtered(),
+            ))
+            .push(button::sort(config::Event::SortCustomGames))
+            .push(button::filter(self.filter.enabled))
+    }
+
     pub fn view<'a>(
         &'a self,
         config: &Config,
@@ -687,19 +705,6 @@ impl CustomGames {
         modifiers: &keyboard::Modifiers,
     ) -> Element<'a> {
         let content = Column::new()
-            .push(
-                Row::new()
-                    .padding([0.0, design::space::XL])
-                    .spacing(design::space::LG)
-                    .align_y(Alignment::Center)
-                    .push(button::add_game())
-                    .push(button::toggle_all_custom_games(
-                        self.all_visible_game_selected(config),
-                        self.is_filtered(),
-                    ))
-                    .push(button::sort(config::Event::SortCustomGames))
-                    .push(button::filter(self.filter.enabled)),
-            )
             .push(self.filter.view(histories))
             .push(editor::custom_games(
                 config,

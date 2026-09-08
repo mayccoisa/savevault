@@ -146,6 +146,11 @@ pub mod elevation {
 }
 
 /// Fixed opacities, decided once, so no screen invents a fourth "slightly transparent".
+///
+/// The whole ladder stays declared even while only some rungs are in use. That is the point of
+/// fixing them: the next screen that needs a translucent surface picks a rung, instead of typing
+/// 0.15 because it looked about right that afternoon.
+#[allow(unused)]
 pub mod alpha {
     pub const FAINT: f32 = 0.05;
     pub const SUBTLE: f32 = 0.1;
@@ -206,10 +211,4 @@ pub mod emulator_card {
     /// The logo inside the tile. Smaller than the tile, so every logo gets the same optical weight
     /// no matter how much padding its own artwork already carries.
     pub const LOGO: f32 = 28.0;
-
-    /// The width below which the grid drops to a single column.
-    ///
-    /// Cards used to size themselves to their content, which is why no two of them had the same
-    /// width and the screen read as broken.
-    pub const MIN_WIDTH: f32 = 420.0;
 }

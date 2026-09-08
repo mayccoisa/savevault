@@ -702,7 +702,7 @@ impl Screen {
             Self::CustomGames => TRANSLATOR.nav_custom_games_button(),
             Self::Emulators => TRANSLATOR.nav_emulators_button(),
             Self::Logs => TRANSLATOR.nav_logs_button(),
-            Self::Other => TRANSLATOR.nav_other_button(),
+            Self::Other => TRANSLATOR.nav_settings_button(),
         }
     }
 }

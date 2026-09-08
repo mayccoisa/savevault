@@ -3169,7 +3169,11 @@ impl App {
                         self.restore_screen
                             .commands(&self.config, &self.manifest.extended, &self.operation)
                     }
-                    _ => Row::new(),
+                    Screen::CustomGames => self.custom_games_screen.commands(&self.config),
+                    Screen::Emulators => self.emulators_screen.commands(),
+                    // Listed, not caught by a wildcard: Logs has nothing to act on and Settings is
+                    // a form, and a screen added later should have to say which of the two it is.
+                    Screen::Logs | Screen::Other => Row::new(),
                 }),
         )
         .width(Length::Fill)

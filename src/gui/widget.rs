@@ -134,17 +134,22 @@ pub fn number_input<'a>(
             .align_y(Alignment::Center)
             .push(text(label))
             .push(text(value.to_string()))
+            // One stepper, two halves, one treatment. They used to be a red minus and a green plus:
+            // styling by semantics, and by the wrong semantics at that — lowering how many backups
+            // to keep is not destruction, and raising it is not the primary action of the screen.
             .push({
                 Button::new(Icon::Remove.text().width(Length::Shrink))
                     .on_press_if(&value > range.start(), || (change)(value - 1))
-                    .class(style::Button::Negative)
-                    .padding(design::space::XS)
+                    .class(style::Button::Secondary)
+                    .height(design::control::HEIGHT)
+                    .padding([0.0, design::control::PAD_X_ICON])
             })
             .push({
                 Button::new(Icon::Add.text().width(Length::Shrink))
                     .on_press_if(&value < range.end(), || (change)(value + 1))
-                    .class(style::Button::Primary)
-                    .padding(design::space::XS)
+                    .class(style::Button::Secondary)
+                    .height(design::control::HEIGHT)
+                    .padding([0.0, design::control::PAD_X_ICON])
             }),
     )
     .into()

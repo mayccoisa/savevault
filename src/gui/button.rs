@@ -25,7 +25,7 @@ fn template(content: Text, action: Option<Message>, style: Option<style::Button>
 fn template_bare(content: Text, action: Option<Message>, style: Option<style::Button>) -> Element {
     Button::new(content.align_x(alignment::Horizontal::Center))
         .on_press_maybe(action)
-        .class(style.unwrap_or(style::Button::Primary))
+        .class(style.unwrap_or(style::Button::Secondary))
         .padding(0)
         .into()
 }
@@ -60,6 +60,12 @@ fn template_extended(
     }
 }
 
+/// The default class is **Secondary**, and asking for Primary is deliberate.
+///
+/// It used to default to Primary, which is how a screen ended up with a dozen filled accent
+/// buttons that nobody chose: every icon button, every "+", every folder picker came out looking
+/// like the most important thing on the page. There is one primary action per screen, so it has to
+/// be named at the call site.
 fn template_complex<'a>(
     content: impl Into<Element<'a>>,
     action: Option<Message>,
@@ -67,7 +73,7 @@ fn template_complex<'a>(
 ) -> Element<'a> {
     Button::new(centered(content))
         .on_press_maybe(action)
-        .class(style.unwrap_or(style::Button::Primary))
+        .class(style.unwrap_or(style::Button::Secondary))
         .height(design::control::HEIGHT)
         .padding([0.0, design::control::PAD_X_ICON])
         .into()
@@ -103,19 +109,31 @@ pub fn negative<'a>(content: String, action: Option<Message>) -> Element<'a> {
         .into()
 }
 
+/// Adding a row to a list inside a form. Secondary, not primary.
+///
+/// A settings screen has no primary action: everything on it is a supporting control. Filled and
+/// accent-coloured, these were a dozen primary actions on one page, and the eye had nowhere to land.
 pub fn add<'a>(action: impl Fn(EditAction) -> Message) -> Element<'a> {
-    template(Icon::AddCircle.text(), Some(action(EditAction::Add)), None)
+    template(
+        Icon::AddCircle.text(),
+        Some(action(EditAction::Add)),
+        Some(style::Button::Secondary),
+    )
 }
 
 pub fn add_nested<'a>(action: impl Fn(usize, EditAction) -> Message, parent: usize) -> Element<'a> {
-    template(Icon::AddCircle.text(), Some(action(parent, EditAction::Add)), None)
+    template(
+        Icon::AddCircle.text(),
+        Some(action(parent, EditAction::Add)),
+        Some(style::Button::Secondary),
+    )
 }
 
 pub fn remove<'a>(action: impl Fn(EditAction) -> Message, index: usize) -> Element<'a> {
     template(
         Icon::RemoveCircle.text(),
         Some(action(EditAction::Remove(index))),
-        Some(style::Button::Negative),
+        Some(style::Button::Danger),
     )
 }
 
@@ -123,7 +141,7 @@ pub fn remove_nested<'a>(action: impl Fn(usize, EditAction) -> Message, parent: 
     template(
         Icon::RemoveCircle.text(),
         Some(action(parent, EditAction::Remove(index))),
-        Some(style::Button::Negative),
+        Some(style::Button::Danger),
     )
 }
 
@@ -131,7 +149,7 @@ pub fn delete<'a>(action: impl Fn(EditAction) -> Message, index: usize) -> Eleme
     template(
         Icon::Delete.text(),
         Some(action(EditAction::Remove(index))),
-        Some(style::Button::Negative),
+        Some(style::Button::Danger),
     )
 }
 
@@ -398,12 +416,14 @@ pub fn filter<'a>(open: bool) -> Element<'a> {
 }
 
 pub fn reset_filter<'a>(dirty: bool) -> Element<'a> {
+    // Clearing a filter is not destructive, so it is not styled as destruction. It used to be a
+    // solid red button, which is what "style by semantics" looks like when the semantics are wrong.
     template(
         Icon::RemoveCircle.text(),
         dirty.then_some(Message::Filter {
             event: game_filter::Event::Reset,
         }),
-        Some(style::Button::Negative),
+        None,
     )
 }
 
@@ -513,11 +533,12 @@ pub fn toggle_all_custom_games<'a>(all_enabled: bool, filtered: bool) -> Element
     }
 }
 
+/// The one action that leads the Custom games screen, so it is the one filled button on it.
 pub fn add_game<'a>() -> Element<'a> {
     template(
-        text(TRANSLATOR.add_game_button()).width(WIDTH),
+        text(TRANSLATOR.add_game_button()),
         Some(config::Event::CustomGame(EditAction::Add).into()),
-        None,
+        Some(style::Button::Primary),
     )
 }
 
@@ -557,7 +578,7 @@ pub fn refresh_emulators<'a>() -> Element<'a> {
             .push(Icon::Refresh.text_narrow().size(design::icon::SM))
             .push(text(TRANSLATOR.recheck_emulators_button()).width(Length::Shrink)),
         Some(Message::RefreshEmulators),
-        None,
+        Some(style::Button::Primary),
     )
 }
 
@@ -576,7 +597,7 @@ pub fn side_nav<'a>(screen: Screen, current_screen: Screen) -> Button<'a> {
         Screen::CustomGames => TRANSLATOR.nav_custom_games_button(),
         Screen::Emulators => TRANSLATOR.nav_emulators_button(),
         Screen::Logs => TRANSLATOR.nav_logs_button(),
-        Screen::Other => TRANSLATOR.nav_other_button(),
+        Screen::Other => TRANSLATOR.nav_settings_button(),
     };
 
     Button::new(centered(text(label).align_x(alignment::Horizontal::Left)))
@@ -675,7 +696,7 @@ pub fn expand<'a>(expanded: bool, on_press: Message) -> Element<'a> {
         .text_small(),
     )
     .on_press(on_press)
-    .class(style::Button::Primary)
+    .class(style::Button::Bare)
     .padding(design::space::XS)
     .height(25)
     .width(25)
