@@ -111,3 +111,36 @@ pub fn tile<'a>(app: App) -> Element<'a> {
         .class(style::Container::LogoTile)
         .into()
 }
+
+/// The tile for one game in the vault inventory.
+///
+/// An emulator game gets the emulator's own logo, which is already bundled and needs no network.
+/// Everything else gets its initial, which is a placeholder and says so: it is the shape a cover
+/// will take once there is a cover to put there.
+pub fn game_tile<'a>(game: &crate::gui::vault::Game) -> Element<'a> {
+    let app = game
+        .emulator
+        .as_ref()
+        .and_then(|name| App::ALL.iter().copied().find(|app| app.name() == name));
+
+    match app {
+        Some(app) => tile(app),
+        None => Container::new(
+            text(
+                game.name
+                    .chars()
+                    .find(|c| c.is_alphanumeric())
+                    .map(|c| c.to_uppercase().to_string())
+                    .unwrap_or_else(|| "?".to_string()),
+            )
+            .font(font::TEXT_STRONG)
+            .size(design::text::TITLE)
+            .line_height(design::leading::TIGHT)
+            .class(style::Text::Muted),
+        )
+        .center_x(Length::Fixed(design::emulator_card::TILE))
+        .center_y(Length::Fixed(design::emulator_card::TILE))
+        .class(style::Container::LogoTile)
+        .into(),
+    }
+}

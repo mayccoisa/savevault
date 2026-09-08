@@ -13,7 +13,7 @@ use crate::{
         icon::Icon,
         search::CustomGamesFilter,
         shortcuts::TextHistories,
-        style,
+        style, vault,
         widget::{
             Column, Container, Element, IcedParentExt, Row, checkbox, field_label, number_input, pick_list, text,
         },
@@ -272,14 +272,29 @@ pub struct Restore {
     pub duplicate_detector: DuplicateDetector,
     /// Ver o campo irmão em [`Backup`].
     pub target_editor_open: bool,
+    /// O que está guardado no cofre, do backup mais antigo para o mais novo.
+    ///
+    /// Lido do próprio cofre ao entrar na tela, e não do cache da última varredura. É o que faz a
+    /// Restauração abrir respondendo "o que eu tenho e de quando é" em vez de uma lista de nomes
+    /// sem dado nenhum esperando alguém apertar Escanear.
+    pub inventory: Vec<vault::Game>,
 }
 
 impl Restore {
     const SCAN_KIND: ScanKind = ScanKind::Restore;
 
-    pub fn new(config: &Config, cache: &Cache) -> Self {
+    /// A lista NÃO é mais semeada com o cache da última varredura.
+    ///
+    /// Aquilo punha nomes na tela sem dado nenhum atrás deles, e de quebra fazia a tela parecer
+    /// varrida quando não estava. Ela nasce vazia agora, e quem ocupa o lugar é o acervo lido do
+    /// cofre — que é a resposta certa para quem abre a Restauração.
+    ///
+    /// O acervo é lido AQUI e também ao entrar na tela. Só ao entrar não basta: quem abre o app
+    /// direto na Restauração nunca passa pela troca de tela, e veria "nenhum jogo tem backup" com
+    /// o cofre cheio — uma resposta errada, não uma tela vazia.
+    pub fn new(config: &Config, _cache: &Cache) -> Self {
         Self {
-            log: GameList::with_recent_games(Self::SCAN_KIND, config, cache),
+            inventory: vault::games(config),
             ..Default::default()
         }
     }
@@ -354,18 +369,85 @@ impl Restore {
                     Self::SCAN_KIND,
                 )
             })
-            .push(self.log.view(
-                Self::SCAN_KIND,
-                config,
-                manifest,
-                &self.duplicate_detector,
-                duplicatees.as_ref(),
-                operation,
-                histories,
-                modifiers,
-            ));
+            // Antes de varrer, a tela mostra o ACERVO. Varrer troca para a lista operacional, que é
+            // a que sabe restaurar; o acervo só responde o que existe guardado, e é ele que faz a
+            // tela abrir com conteúdo em vez de esperar alguém apertar Escanear.
+            .push_if(self.log.entries.is_empty(), || self.view_inventory())
+            .push_if(!self.log.entries.is_empty(), || {
+                self.log.view(
+                    Self::SCAN_KIND,
+                    config,
+                    manifest,
+                    &self.duplicate_detector,
+                    duplicatees.as_ref(),
+                    operation,
+                    histories,
+                    modifiers,
+                )
+            });
 
         template(content)
+    }
+
+    /// O acervo: um card por jogo guardado, do backup mais antigo para o mais novo.
+    fn view_inventory(&self) -> Element<'_> {
+        if self.inventory.is_empty() {
+            return Container::new(text(TRANSLATOR.vault_empty()).size(design::text::BODY))
+                .padding(design::space::XXL)
+                .width(Length::Fill)
+                .into();
+        }
+
+        let mut content = Column::new()
+            .width(Length::Fill)
+            .spacing(design::space::MD)
+            .padding([0.0, design::space::XL])
+            .push(
+                text(TRANSLATOR.vault_stored_games(self.inventory.len()))
+                    .size(design::text::CAPTION)
+                    .class(style::Text::Muted),
+            );
+
+        for game in &self.inventory {
+            content = content.push(
+                Container::new(
+                    Row::new()
+                        .spacing(design::space::MD)
+                        .align_y(Alignment::Center)
+                        .push(emulator_art::game_tile(game))
+                        .push(
+                            Column::new()
+                                .spacing(design::space::XS)
+                                .width(Length::Fill)
+                                .push(
+                                    text(game.name.clone())
+                                        .font(font::TEXT_STRONG)
+                                        .size(design::text::SUBTITLE)
+                                        .line_height(design::leading::TITLE),
+                                )
+                                .push(game.emulator.clone().map(|emulator| {
+                                    text(emulator).size(design::text::CAPTION).class(style::Text::Muted)
+                                })),
+                        )
+                        .push(
+                            Column::new()
+                                .spacing(design::space::XS)
+                                .align_x(Alignment::End)
+                                .push(text(game.last_backup.format("%Y-%m-%d %H:%M").to_string()))
+                                .push(
+                                    text(format!("{} · {}", game.files, TRANSLATOR.adjusted_size(game.bytes)))
+                                        .size(design::text::CAPTION)
+                                        .class(style::Text::Muted),
+                                ),
+                        ),
+                )
+                .padding(design::space::MD)
+                .width(Length::Fill)
+                .class(style::Container::Card),
+            );
+        }
+
+        ScrollSubject::Restore.into_widget(content).into()
     }
 }
 

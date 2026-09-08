@@ -1,33 +1,14 @@
-//! The system log: every backup a game has, and what each one changed.
+//! The system log: what each backup RUN did.
 //!
-//! This reads what is already written in each game's `mapping.yaml`. Nothing here is recorded
-//! separately, on purpose: a second record of the same fact drifts from the first, and the
-//! backup itself is the one that has to be right.
-
-use std::collections::BTreeMap;
+//! The walk over the backup folder lives in [`crate::gui::vault`], because the same read answers
+//! two different questions: this screen groups it by execution, and the Restore screen groups it
+//! by game. Two walks would be two chances to disagree about what is on disk.
 
 use crate::{
-    gui::design,
+    gui::{design, vault::Entry},
     lang::TRANSLATOR,
     resource::config::Config,
-    scan::layout::{Backup, BackupLayout, IndividualMappingFile},
 };
-
-/// What one backup did to a game's saves, measured against the backup before it.
-#[derive(Clone, Debug)]
-pub struct Entry {
-    pub when: chrono::DateTime<chrono::Local>,
-    pub game: String,
-    /// A full backup stands on its own; a differential one only carries what moved.
-    pub full: bool,
-    pub added: usize,
-    pub changed: usize,
-    pub removed: usize,
-    /// Files the game has after this backup, not files this backup wrote.
-    pub files: usize,
-    pub bytes: u64,
-    pub comment: Option<String>,
-}
 
 /// One execution: everything a single press of "Back up" wrote.
 ///
@@ -98,73 +79,8 @@ pub struct Logs {
 impl Logs {
     /// Walks the backup folder and rebuilds the log from the backups themselves.
     pub fn load(config: &Config) -> Self {
-        let layout = BackupLayout::new(config.restore.path.clone());
-        let mut entries = vec![];
-
-        for name in BackupLayout::load(&config.restore.path).keys() {
-            let Some(game) = layout.try_game_layout(name) else {
-                continue;
-            };
-
-            // The effective set of files the game has, carried forward from one backup to the
-            // next. A differential backup only names what moved, so the rest has to be inherited.
-            let mut state: BTreeMap<String, IndividualMappingFile> = BTreeMap::new();
-
-            for backup in game.restorable_backups_flattened() {
-                let (mut added, mut changed, mut removed) = (0, 0, 0);
-
-                match &backup {
-                    Backup::Full(full) => {
-                        for (path, file) in &full.files {
-                            match state.get(path) {
-                                None => added += 1,
-                                Some(previous) if previous.hash != file.hash => changed += 1,
-                                Some(_) => {}
-                            }
-                        }
-                        removed = state.keys().filter(|path| !full.files.contains_key(*path)).count();
-                        state = full.files.clone();
-                    }
-                    Backup::Differential(diff) => {
-                        for (path, file) in &diff.files {
-                            match file {
-                                Some(file) => {
-                                    match state.get(path) {
-                                        None => added += 1,
-                                        Some(previous) if previous.hash != file.hash => changed += 1,
-                                        Some(_) => {}
-                                    }
-                                    state.insert(path.clone(), file.clone());
-                                }
-                                None => {
-                                    if state.remove(path).is_some() {
-                                        removed += 1;
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-
-                entries.push(Entry {
-                    when: backup.when_local(),
-                    game: name.clone(),
-                    full: matches!(backup, Backup::Full(_)),
-                    added,
-                    changed,
-                    removed,
-                    files: state.len(),
-                    bytes: state.values().map(|file| file.size).sum(),
-                    comment: backup.comment().cloned(),
-                });
-            }
-        }
-
-        // Newest first: the log is read to find out what just happened.
-        entries.sort_by(|a, b| b.when.cmp(&a.when).then_with(|| a.game.cmp(&b.game)));
-
         Self {
-            runs: Self::group_into_runs(entries),
+            runs: Self::group_into_runs(crate::gui::vault::entries(config)),
             loaded: true,
             opened: None,
         }
@@ -453,6 +369,7 @@ mod tests {
             files: 3,
             bytes: 100,
             comment: None,
+            emulator: None,
         }
     }
 

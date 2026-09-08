@@ -1337,6 +1337,12 @@ impl App {
             self.logs = crate::gui::logs::Logs::load(&self.config);
         }
 
+        // Mesma razão: o acervo é lido do cofre ao entrar na tela. Ele responde o que está
+        // guardado, que é diferente do que a última varredura encontrou.
+        if screen == Screen::Restore {
+            self.restore_screen.inventory = crate::gui::vault::games(&self.config);
+        }
+
         self.refresh_scroll_position()
     }
 

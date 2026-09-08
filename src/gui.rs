@@ -18,6 +18,7 @@ mod search;
 mod shortcuts;
 mod style;
 mod undoable;
+mod vault;
 mod widget;
 
 use iced::Size;

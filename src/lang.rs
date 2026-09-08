@@ -857,6 +857,16 @@ impl Translator {
         translate("logs-empty")
     }
 
+    pub fn vault_empty(&self) -> String {
+        translate("vault-empty")
+    }
+
+    pub fn vault_stored_games(&self, count: usize) -> String {
+        let mut args = FluentArgs::new();
+        args.set("count", count.to_string());
+        translate_args("vault-stored-games", &args)
+    }
+
     pub fn logs_back_to_runs(&self) -> String {
         translate("logs-back-to-runs")
     }
