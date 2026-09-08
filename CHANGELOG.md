@@ -3,6 +3,27 @@
 SaveVault is a fork of [Ludusavi](https://github.com/mtkennerly/ludusavi) by Michael Kennerly.
 Everything under "Inherited from Ludusavi" is the upstream history, with its own version numbers.
 
+## SaveVault v0.11.0 (2026-09-08)
+
+* Changed:
+  * **Settings was redesigned.** It was a dump of fields: a plain label ending in a colon,
+    followed by a bordered box, nine times over. The headings were the same size and weight as
+    the labels under them, so the screen had no levels at all. Every group is now a card with a
+    real heading, and two new ones — Appearance and Updates — hold what used to sit loose at
+    the top.
+  * The labels sit in a column of their own, so every control starts in the same place. The
+    colons are gone: the alignment already says what a label belongs to.
+  * The form stops growing at 760px. It had no limit, so on a wide monitor the language picker
+    sat alone in a large empty area, far from its own label.
+  * The three pickers share one width, instead of each ending wherever its longest option did.
+  * No more boxes inside boxes: the manifest, redirect and exclusion editors drew a frame of
+    their own on top of the frame around them.
+  * Icon-only buttons are square. Every "+" came out in a 76px-wide rectangle because the icon
+    itself carried a fixed width.
+  * Rclone's executable and its arguments are two rows. On one row the arguments field ran off
+    the edge.
+  * In Brazilian Portuguese, "Raiz" became "Raízes" — the section lists several.
+
 ## SaveVault v0.10.0 (2026-09-08)
 
 * Changed:
