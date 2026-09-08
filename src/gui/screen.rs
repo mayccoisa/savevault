@@ -14,7 +14,9 @@ use crate::{
         search::CustomGamesFilter,
         shortcuts::TextHistories,
         style,
-        widget::{Column, Container, Element, IcedParentExt, Row, checkbox, number_input, pick_list, text},
+        widget::{
+            Column, Container, Element, IcedParentExt, Row, checkbox, field_label, number_input, pick_list, text,
+        },
     },
     lang::{Language, TRANSLATOR},
     prelude::{AVAILABLE_PARALELLISM, STEAM_DECK, StrictPath},
@@ -767,9 +769,9 @@ const FIELD_LABEL_WIDTH: f32 = 176.0;
 /// bordered box. The heading was the same size and weight as the labels underneath it, so the
 /// screen had no levels: nine groups and nine headings that did not look like headings.
 fn settings_section<'a>(title: String, body: Column<'a>) -> Element<'a> {
-    // Same reason as in `settings_field`: several of these titles come from strings that carry a
-    // trailing colon because they are also used inline. A heading does not point at anything.
-    let title = title.trim_end().trim_end_matches(':').trim_end().to_string();
+    // A heading does not point at anything either, and several of these titles come from the same
+    // colon-bearing strings the fields use.
+    let title = field_label(title);
 
     Container::new(
         Column::new()
@@ -790,12 +792,7 @@ fn settings_section<'a>(title: String, body: Column<'a>) -> Element<'a> {
 
 /// A labelled row inside a section.
 fn settings_field<'a>(label: String, control: impl Into<Element<'a>>) -> Row<'a> {
-    // The trailing colon is trimmed here rather than in the translations. Most of these labels come
-    // from `Translator::field`, which appends it (and appends " :" in French) because the same
-    // string is used in places where the label runs inline with its value. In a column of its own
-    // the colon is punctuation pointing at nothing: the alignment already says what the label
-    // belongs to. Doing it here keeps twenty-four language files out of a layout decision.
-    let label = label.trim_end().trim_end_matches(':').trim_end().to_string();
+    let label = field_label(label);
 
     Row::new()
         .spacing(design::space::LG)

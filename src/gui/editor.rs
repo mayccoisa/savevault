@@ -13,7 +13,7 @@ use crate::{
         search::CustomGamesFilter,
         shortcuts::TextHistories,
         style,
-        widget::{Column, Container, IcedParentExt, Row, Tooltip, checkbox, pick_list, text},
+        widget::{Column, Container, IcedParentExt, Row, Tooltip, checkbox, field_label, pick_list, text},
     },
     lang::TRANSLATOR,
     resource::{
@@ -139,8 +139,8 @@ pub fn manifest<'a>(
                 .spacing(design::space::LG)
                 .align_y(Alignment::Center)
                 .push(Space::new().width(Length::Fill))
-                .push(Container::new(text(TRANSLATOR.checked_label())).width(label_width))
-                .push(Container::new(text(TRANSLATOR.updated_label())).width(label_width))
+                .push(Container::new(text(field_label(TRANSLATOR.checked_label()))).width(label_width))
+                .push(Container::new(text(field_label(TRANSLATOR.updated_label()))).width(label_width))
                 .push_if(!config.manifest.secondary.is_empty(), || {
                     Space::new().width(right_offset)
                 }),
@@ -395,7 +395,7 @@ pub fn custom_games<'a>(
                                     Column::new()
                                         .width(left_side)
                                         .padding(padding::top(top_side))
-                                        .push(text(TRANSLATOR.original_name_field())),
+                                        .push(text(field_label(TRANSLATOR.original_name_field()))),
                                 )
                                 .push(histories.input(UndoSubject::CustomGameAlias(i)))
                         })
@@ -437,7 +437,7 @@ pub fn custom_games<'a>(
                                     Column::new()
                                         .width(left_side)
                                         .padding(padding::top(top_side))
-                                        .push(text(TRANSLATOR.custom_files_label())),
+                                        .push(text(field_label(TRANSLATOR.custom_files_label()))),
                                 )
                                 .push(
                                     x.files
@@ -481,7 +481,7 @@ pub fn custom_games<'a>(
                                     Column::new()
                                         .width(left_side)
                                         .padding(padding::top(top_side))
-                                        .push(text(TRANSLATOR.custom_registry_label())),
+                                        .push(text(field_label(TRANSLATOR.custom_registry_label()))),
                                 )
                                 .push(
                                     x.registry
@@ -623,7 +623,11 @@ pub fn ignored_items<'a>(config: &Config, histories: &TextHistories, modifiers: 
                 .spacing(design::space::XS)
                 .push(
                     Row::new()
-                        .push(Column::new().width(100).push(text(TRANSLATOR.custom_files_label())))
+                        .push(
+                            Column::new()
+                                .width(100)
+                                .push(text(field_label(TRANSLATOR.custom_files_label()))),
+                        )
                         .push(
                             config
                                 .backup
@@ -660,7 +664,11 @@ pub fn ignored_items<'a>(config: &Config, histories: &TextHistories, modifiers: 
                 )
                 .push(
                     Row::new()
-                        .push(Column::new().width(100).push(text(TRANSLATOR.custom_registry_label())))
+                        .push(
+                            Column::new()
+                                .width(100)
+                                .push(text(field_label(TRANSLATOR.custom_registry_label()))),
+                        )
                         .push(
                             config
                                 .backup

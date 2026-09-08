@@ -421,3 +421,17 @@ pub mod operation {
         })
     }
 }
+
+/// A label that sits in a column of its own, without the trailing colon.
+///
+/// Most of these strings come from [`Translator::field`](crate::lang::Translator::field), which
+/// appends the colon (and " :" in French) because the same string is also used where the label runs
+/// inline with its value. When the label has a column to itself, the colon is punctuation pointing
+/// at nothing: the alignment already says what it belongs to.
+///
+/// Trimming here and not in the translations is deliberate. Whether a label is followed by its
+/// value or sits above a column is a layout decision, and it should not be settled twenty-four
+/// times in twenty-four language files.
+pub fn field_label(label: String) -> String {
+    label.trim_end().trim_end_matches(':').trim_end().to_string()
+}
