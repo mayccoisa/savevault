@@ -19,17 +19,7 @@ pub mod text;
 
 /// Um emulador conhecido.
 #[derive(
-    Clone,
-    Copy,
-    Debug,
-    Eq,
-    PartialEq,
-    Ord,
-    PartialOrd,
-    Hash,
-    serde::Serialize,
-    serde::Deserialize,
-    schemars::JsonSchema,
+    Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, serde::Serialize, serde::Deserialize, schemars::JsonSchema,
 )]
 #[serde(rename_all = "camelCase")]
 pub enum App {
@@ -49,17 +39,7 @@ pub enum App {
 /// diferentes, e porque o usuário pode relocar uma área sozinha na configuração do emulador. É o
 /// que vai permitir ao RPCS3 separar `savedata` de `trophy` sem redesenho.
 #[derive(
-    Clone,
-    Copy,
-    Debug,
-    Eq,
-    PartialEq,
-    Ord,
-    PartialOrd,
-    Hash,
-    serde::Serialize,
-    serde::Deserialize,
-    schemars::JsonSchema,
+    Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, serde::Serialize, serde::Deserialize, schemars::JsonSchema,
 )]
 #[serde(rename_all = "camelCase")]
 pub enum Area {
@@ -995,9 +975,8 @@ fn discover_in_game_folders(
     // O filtro vale só um nível: o código do tipo de conteúdo do Xenia (`00000001`) tem OITO
     // hexadecimais, exatamente como o Title ID, então sem parar aqui ele casaria a forma, roubaria
     // a identidade do jogo e filtraria o próprio save. É a mesma armadilha do índice do Switch.
-    let restrict_to_subdirs = !settled
-        && !spec.only_subdirs.is_empty()
-        && current.leaf().is_some_and(|name| matcher(&name).is_some());
+    let restrict_to_subdirs =
+        !settled && !spec.only_subdirs.is_empty() && current.leaf().is_some_and(|name| matcher(&name).is_some());
 
     for (is_dir, name, path) in children {
         if is_dir {
@@ -1156,7 +1135,10 @@ fn attribute(app: App, spec: &AreaSpec, area_root: &StrictPath, file: &StrictPat
 }
 
 /// Lê uma imagem de cartão e devolve os jogos que ela contém, como pares de serial e título.
-fn read_card(file: &StrictPath, parse: impl Fn(&[u8]) -> Vec<(String, Option<String>)>) -> Vec<(String, Option<String>)> {
+fn read_card(
+    file: &StrictPath,
+    parse: impl Fn(&[u8]) -> Vec<(String, Option<String>)>,
+) -> Vec<(String, Option<String>)> {
     file.as_std_path_buf()
         .ok()
         .and_then(|path| std::fs::read(path).ok())
@@ -1534,7 +1516,10 @@ mod tests {
 
         /// Uma instalação de PCSX2: `memcards` e a pasta de configuração `inis`.
         fn pcsx2() -> Self {
-            Self::new().dir("memcards").dir("inis").file("inis/PCSX2.ini", b"[UI]\n")
+            Self::new()
+                .dir("memcards")
+                .dir("inis")
+                .file("inis/PCSX2.ini", b"[UI]\n")
         }
 
         /// Uma instalação portátil de PCSX2, que compartilha o `portable.txt` com o DuckStation.
@@ -1640,10 +1625,7 @@ mod tests {
     fn a_card_with_several_games_becomes_one_shared_entry() {
         let install = FakeInstall::installed().file(
             "memcards/shared_card_1.mcd",
-            &card_with(&[
-                ("BASLUS-00067SOTN", "CASTLEVANIA SOTN"),
-                ("BASLUS-00594FF7", "FF7-01"),
-            ]),
+            &card_with(&[("BASLUS-00067SOTN", "CASTLEVANIA SOTN"), ("BASLUS-00594FF7", "FF7-01")]),
         );
 
         let found = discover_saves(App::DuckStation, &install.root);
@@ -1681,7 +1663,10 @@ mod tests {
             .file("memcards/readme.txt", b"nao e save")
             .file("settings.ini", b"[Main]\n");
 
-        assert_eq!(Vec::<DiscoveredSave>::new(), discover_saves(App::DuckStation, &install.root));
+        assert_eq!(
+            Vec::<DiscoveredSave>::new(),
+            discover_saves(App::DuckStation, &install.root)
+        );
     }
 
     #[test]
@@ -1831,10 +1816,8 @@ mod tests {
     /// Anexá-lo a cada jogo faria o mesmo arquivo ser gravado uma vez por jogo.
     #[test]
     fn a_pcsx2_memory_card_with_several_games_becomes_one_shared_entry() {
-        let card = ps2_card::tests::card_with(&[
-            ("BASLUS-21004MAYC", "DEF JAM"),
-            ("BASCUS-97399GodOfWar", "GOD OF WAR"),
-        ]);
+        let card =
+            ps2_card::tests::card_with(&[("BASLUS-21004MAYC", "DEF JAM"), ("BASCUS-97399GodOfWar", "GOD OF WAR")]);
         let install = FakeInstall::pcsx2().file("memcards/Mcd001.ps2", &card);
 
         let found = discover_saves(App::Pcsx2, &install.root);
@@ -1877,7 +1860,9 @@ mod tests {
         assert_eq!(None, App::detect(&anonima.root));
 
         for (nome, esperado) in [("eden", App::Eden), ("Sudachi", App::Sudachi)] {
-            let install = FakeInstall::new().dir(&format!("{nome}/nand")).dir(&format!("{nome}/config"));
+            let install = FakeInstall::new()
+                .dir(&format!("{nome}/nand"))
+                .dir(&format!("{nome}/config"));
             assert_eq!(Some(esperado), App::detect(&install.root.joined(nome)));
         }
     }
@@ -1902,11 +1887,13 @@ mod tests {
             assert_eq!(GameId::Media("0100000000010000".to_string()), save.game);
             // A âncora é a pasta do PERFIL, e não `nand/user/save`: é o perfil que muda de
             // máquina para máquina, então é ele que a restauração precisa poder trocar.
-            assert!(save.area_root.equivalent(
-                &install
-                    .root
-                    .joined("nand/user/save/0000000000000000/ABCDEF0123456789ABCDEF0123456789")
-            ));
+            assert!(
+                save.area_root.equivalent(
+                    &install
+                        .root
+                        .joined("nand/user/save/0000000000000000/ABCDEF0123456789ABCDEF0123456789")
+                )
+            );
         }
         assert_eq!("Eden 0100000000010000", found[0].game.game_key(App::Eden));
     }
@@ -1938,11 +1925,13 @@ mod tests {
         let found = discover_saves(App::Eden, &install.root);
 
         assert_eq!(1, found.len());
-        assert!(found[0].area_root.equivalent(
-            &install
-                .root
-                .joined("nand/user/save/0000000000000000/extra/ABCDEF0123456789ABCDEF0123456789")
-        ));
+        assert!(
+            found[0].area_root.equivalent(
+                &install
+                    .root
+                    .joined("nand/user/save/0000000000000000/extra/ABCDEF0123456789ABCDEF0123456789")
+            )
+        );
     }
 
     /// A pasta do jogo é casada por FORMA, então um nível a mais ou a menos no caminho (perfil de

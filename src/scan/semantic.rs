@@ -466,17 +466,16 @@ mod tests {
         let EmulatorTarget::Redirected(path) = target else {
             panic!("esperava redirecionamento, veio {target:?}");
         };
-        assert!(path.equivalent(&root.joined(
-            "nand/user/save/0000000000000000/FFFFFFFF0000000000000000FFFFFFFF/0100000000010000/progress.dat"
-        )));
+        assert!(path.equivalent(
+            &root.joined(
+                "nand/user/save/0000000000000000/FFFFFFFF0000000000000000FFFFFFFF/0100000000010000/progress.dat"
+            )
+        ));
     }
 
     #[test]
     fn refuses_a_switch_save_when_the_machine_has_two_profiles() {
-        let (_guard, root) = eden_root_with(&[
-            "AAAAAAAA0000000000000000AAAAAAAA",
-            "BBBBBBBB0000000000000000BBBBBBBB",
-        ]);
+        let (_guard, root) = eden_root_with(&["AAAAAAAA0000000000000000AAAAAAAA", "BBBBBBBB0000000000000000BBBBBBBB"]);
 
         let recorded = "D:/Eden/nand/user/save/0000000000000000/ABCDEF0123456789ABCDEF0123456789";
         let target = emulator_restore_target(

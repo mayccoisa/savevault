@@ -98,10 +98,7 @@ pub fn media_code_in(text: &str) -> Option<String> {
         if !letters.iter().all(|c| c.is_ascii_alphabetic()) || chars.get(start + 4) != Some(&'-') {
             continue;
         }
-        let digits: String = chars[start + 5..]
-            .iter()
-            .take_while(|c| c.is_ascii_digit())
-            .collect();
+        let digits: String = chars[start + 5..].iter().take_while(|c| c.is_ascii_digit()).collect();
         if (3..=5).contains(&digits.len()) {
             let letters: String = letters.iter().collect();
             return Some(format!("{}-{}", letters.to_ascii_uppercase(), digits));
@@ -180,7 +177,9 @@ mod tests {
 
         /// Um save completo: diretório em uso, nome e título.
         fn save(self, slot: usize, name: &str, title: &str) -> Self {
-            self.state(slot, STATE_IN_USE_FIRST).filename(slot, name).title(slot, title)
+            self.state(slot, STATE_IN_USE_FIRST)
+                .filename(slot, name)
+                .title(slot, title)
         }
 
         fn build(self) -> Vec<u8> {

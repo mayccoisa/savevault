@@ -1034,10 +1034,9 @@ fn emulator_areas_with_included_files(
             for area_root in
                 emulator::resolve_area_dirs_with(data_root, spec.subdir, emulator::ProfileFallback::Container)
             {
-                if valid
-                    .iter()
-                    .any(|(seen_app, seen_area, seen)| *seen_app == app && *seen_area == spec.area && seen == &area_root)
-                {
+                if valid.iter().any(|(seen_app, seen_area, seen)| {
+                    *seen_app == app && *seen_area == spec.area && seen == &area_root
+                }) {
                     continue;
                 }
                 if found_files.iter().any(|(scan_key, file)| {

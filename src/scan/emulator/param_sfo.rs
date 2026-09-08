@@ -116,8 +116,13 @@ pub fn title_id_prefix(name: &str) -> Option<String> {
     let letters = chars.get(0..4)?;
     let digits = chars.get(4..9)?;
 
-    (letters.iter().all(|c| c.is_ascii_alphabetic()) && digits.iter().all(|c| c.is_ascii_digit()))
-        .then(|| format!("{}{}", letters.iter().collect::<String>().to_ascii_uppercase(), digits.iter().collect::<String>()))
+    (letters.iter().all(|c| c.is_ascii_alphabetic()) && digits.iter().all(|c| c.is_ascii_digit())).then(|| {
+        format!(
+            "{}{}",
+            letters.iter().collect::<String>().to_ascii_uppercase(),
+            digits.iter().collect::<String>()
+        )
+    })
 }
 
 #[cfg(test)]

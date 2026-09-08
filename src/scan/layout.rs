@@ -117,7 +117,12 @@ fn emulator_folder_name(id: &str, title: Option<&str>) -> String {
 
     let mut title = title.to_string();
     if title.chars().count() > TITLE_IN_FOLDER_LIMIT {
-        title = title.chars().take(TITLE_IN_FOLDER_LIMIT).collect::<String>().trim_end().to_string();
+        title = title
+            .chars()
+            .take(TITLE_IN_FOLDER_LIMIT)
+            .collect::<String>()
+            .trim_end()
+            .to_string();
     }
 
     format!("{title} ({id})")
@@ -902,7 +907,8 @@ impl GameLayout {
                 Some(&backup.semantics),
                 wine_redirect,
             );
-            let unresolved = Self::unresolved_emulator_target_for(&original_path, &backup.semantics, wine_redirect, &redirected);
+            let unresolved =
+                Self::unresolved_emulator_target_for(&original_path, &backup.semantics, wine_redirect, &redirected);
             let ignorable_path = redirected.as_ref().unwrap_or(&original_path);
             match backup.format() {
                 BackupFormat::Simple => {
@@ -1738,7 +1744,11 @@ impl GameLayout {
         let Some(leaf) = self.path.leaf() else { return };
 
         let grouped = parent.leaf().as_deref() == Some(app.name());
-        let app_dir = if grouped { parent.clone() } else { parent.joined(app.name()) };
+        let app_dir = if grouped {
+            parent.clone()
+        } else {
+            parent.joined(app.name())
+        };
 
         // The identity comes from the game's key, never from the folder's own name. Once a folder
         // carries a title, its name is no longer the identity, and reading it back would feed the
@@ -1746,7 +1756,11 @@ impl GameLayout {
         let id = crate::scan::emulator::App::from_game_key(&scan.game_name)
             .filter(|(keyed, _)| *keyed == app)
             .map(|(_, id)| id)
-            .unwrap_or_else(|| leaf.strip_prefix(&format!("{} ", app.name())).unwrap_or(&leaf).to_string());
+            .unwrap_or_else(|| {
+                leaf.strip_prefix(&format!("{} ", app.name()))
+                    .unwrap_or(&leaf)
+                    .to_string()
+            });
 
         let wanted = app_dir.joined(escape_folder_name(&emulator_folder_name(&id, scan.title.as_deref())));
 
@@ -3068,7 +3082,8 @@ mod tests {
         #[test]
         fn can_plan_backup_kind_when_merged_single_full() {
             let layout = GameLayout {
-                mapping: IndividualMapping { title: None,
+                mapping: IndividualMapping {
+                    title: None,
                     backups: VecDeque::from_iter(vec![FullBackup::default()]),
                     ..Default::default()
                 },
@@ -3080,7 +3095,8 @@ mod tests {
         #[test]
         fn can_plan_backup_kind_when_locked_single_full() {
             let layout = GameLayout {
-                mapping: IndividualMapping { title: None,
+                mapping: IndividualMapping {
+                    title: None,
                     backups: VecDeque::from_iter(vec![FullBackup {
                         locked: true,
                         ..Default::default()
@@ -3095,7 +3111,8 @@ mod tests {
         #[test]
         fn can_plan_backup_kind_when_multiple_full() {
             let layout = GameLayout {
-                mapping: IndividualMapping { title: None,
+                mapping: IndividualMapping {
+                    title: None,
                     backups: VecDeque::from_iter(vec![FullBackup::default()]),
                     ..Default::default()
                 },
@@ -3107,7 +3124,8 @@ mod tests {
         #[test]
         fn can_plan_backup_kind_when_single_full_with_differential() {
             let layout = GameLayout {
-                mapping: IndividualMapping { title: None,
+                mapping: IndividualMapping {
+                    title: None,
                     backups: VecDeque::from_iter(vec![FullBackup::default()]),
                     ..Default::default()
                 },
@@ -3119,7 +3137,8 @@ mod tests {
         #[test]
         fn can_plan_backup_kind_when_single_full_with_differential_rollover() {
             let layout = GameLayout {
-                mapping: IndividualMapping { title: None,
+                mapping: IndividualMapping {
+                    title: None,
                     backups: VecDeque::from_iter(vec![FullBackup {
                         children: VecDeque::from(vec![DifferentialBackup::default()]),
                         ..Default::default()
@@ -3134,7 +3153,8 @@ mod tests {
         #[test]
         fn can_plan_backup_kind_when_multiple_full_with_differential_room_remaining() {
             let layout = GameLayout {
-                mapping: IndividualMapping { title: None,
+                mapping: IndividualMapping {
+                    title: None,
                     backups: VecDeque::from_iter(vec![
                         FullBackup {
                             children: VecDeque::from(vec![
@@ -3158,7 +3178,8 @@ mod tests {
         #[test]
         fn can_plan_backup_kind_when_multiple_full_with_differential_at_limit() {
             let layout = GameLayout {
-                mapping: IndividualMapping { title: None,
+                mapping: IndividualMapping {
+                    title: None,
                     backups: VecDeque::from_iter(vec![
                         FullBackup {
                             children: VecDeque::from(vec![
@@ -3185,7 +3206,8 @@ mod tests {
         #[test]
         fn can_plan_backup_kind_when_single_full_with_differential_at_limit_but_locked() {
             let layout = GameLayout {
-                mapping: IndividualMapping { title: None,
+                mapping: IndividualMapping {
+                    title: None,
                     backups: VecDeque::from_iter(vec![FullBackup {
                         children: VecDeque::from(vec![
                             DifferentialBackup::default(),
@@ -3293,7 +3315,8 @@ mod tests {
                 ..Default::default()
             };
             let layout = GameLayout {
-                mapping: IndividualMapping { title: None,
+                mapping: IndividualMapping {
+                    title: None,
                     drives: drives(),
                     backups: VecDeque::from_iter(vec![FullBackup {
                         name: SOLO.to_string(),
@@ -3340,7 +3363,8 @@ mod tests {
                 ..Default::default()
             };
             let layout = GameLayout {
-                mapping: IndividualMapping { title: None,
+                mapping: IndividualMapping {
+                    title: None,
                     drives: drives(),
                     backups: VecDeque::from_iter(vec![FullBackup {
                         name: SOLO.to_string(),
@@ -3396,7 +3420,8 @@ mod tests {
                 ..Default::default()
             };
             let layout = GameLayout {
-                mapping: IndividualMapping { title: None,
+                mapping: IndividualMapping {
+                    title: None,
                     backups: VecDeque::from_iter(vec![FullBackup {
                         name: SOLO.to_string(),
                         when: past(),
@@ -3441,7 +3466,8 @@ mod tests {
                 ..Default::default()
             };
             let layout = GameLayout {
-                mapping: IndividualMapping { title: None,
+                mapping: IndividualMapping {
+                    title: None,
                     backups: VecDeque::from_iter(vec![FullBackup {
                         name: SOLO.to_string(),
                         when: past(),
@@ -3490,7 +3516,8 @@ mod tests {
                 })
             });
             let layout = GameLayout {
-                mapping: IndividualMapping { title: None,
+                mapping: IndividualMapping {
+                    title: None,
                     backups: VecDeque::from_iter(vec![FullBackup {
                         name: SOLO.to_string(),
                         when: past(),
@@ -3525,7 +3552,8 @@ mod tests {
                 ..Default::default()
             };
             let layout = GameLayout {
-                mapping: IndividualMapping { title: None,
+                mapping: IndividualMapping {
+                    title: None,
                     backups: VecDeque::from_iter(vec![FullBackup {
                         name: SOLO.to_string(),
                         when: past(),
@@ -3553,7 +3581,8 @@ mod tests {
         #[test]
         fn can_forget_excess_backups_without_locks() {
             let mut layout = GameLayout {
-                mapping: IndividualMapping { title: None,
+                mapping: IndividualMapping {
+                    title: None,
                     backups: VecDeque::from_iter(vec![
                         FullBackup {
                             name: "1".to_string(),
@@ -3600,7 +3629,8 @@ mod tests {
         #[test]
         fn can_forget_excess_backups_without_locks_using_duplicate_name() {
             let mut layout = GameLayout {
-                mapping: IndividualMapping { title: None,
+                mapping: IndividualMapping {
+                    title: None,
                     backups: VecDeque::from_iter(vec![
                         FullBackup {
                             name: SOLO.to_string(),
@@ -3632,7 +3662,8 @@ mod tests {
         #[test]
         fn can_forget_excess_backups_with_locks() {
             let mut layout = GameLayout {
-                mapping: IndividualMapping { title: None,
+                mapping: IndividualMapping {
+                    title: None,
                     backups: VecDeque::from_iter(vec![
                         FullBackup {
                             name: "1".to_string(),
@@ -3743,7 +3774,8 @@ mod tests {
         fn can_report_restorable_files_for_full_backup_in_simple_format() {
             let layout = GameLayout {
                 path: StrictPath::new(format!("{}/tests/backup/game1", repo_raw())),
-                mapping: IndividualMapping { title: None,
+                mapping: IndividualMapping {
+                    title: None,
                     name: "game1".to_string(),
                     drives: drives_x(),
                     backups: VecDeque::from(vec![FullBackup {
@@ -3797,7 +3829,8 @@ mod tests {
         fn can_report_restorable_files_for_full_backup_in_zip_format() {
             let layout = GameLayout {
                 path: StrictPath::new(format!("{}/tests/backup/game1", repo_raw())),
-                mapping: IndividualMapping { title: None,
+                mapping: IndividualMapping {
+                    title: None,
                     name: "game1".to_string(),
                     drives: drives_x(),
                     backups: VecDeque::from(vec![FullBackup {
@@ -3851,7 +3884,8 @@ mod tests {
         fn can_report_restorable_files_for_differential_backup_in_simple_format() {
             let layout = GameLayout {
                 path: StrictPath::new(format!("{}/tests/backup/game1", repo_raw())),
-                mapping: IndividualMapping { title: None,
+                mapping: IndividualMapping {
+                    title: None,
                     name: "game1".to_string(),
                     drives: drives_x(),
                     backups: VecDeque::from(vec![FullBackup {
@@ -3936,7 +3970,8 @@ mod tests {
                 format!("{diff_source_prefix}/drive_c/users/steamuser/Documents/Saved Games/Hades/Profile3.sav");
             let layout = GameLayout {
                 path: StrictPath::new(format!("{}/tests/backup/game1", repo_raw())),
-                mapping: IndividualMapping { title: None,
+                mapping: IndividualMapping {
+                    title: None,
                     name: "Hades".to_string(),
                     drives: drives_x(),
                     backups: VecDeque::from(vec![FullBackup {
@@ -3997,7 +4032,8 @@ mod tests {
         fn can_report_restorable_files_for_differential_backup_in_zip_format() {
             let layout = GameLayout {
                 path: StrictPath::new(format!("{}/tests/backup/game1", repo_raw())),
-                mapping: IndividualMapping { title: None,
+                mapping: IndividualMapping {
+                    title: None,
                     name: "game1".to_string(),
                     drives: drives_x(),
                     backups: VecDeque::from(vec![FullBackup {
@@ -4284,7 +4320,8 @@ mod tests {
         #[test]
         fn can_validate_a_simple_full_backup_when_valid() {
             let layout = GameLayout {
-                mapping: IndividualMapping { title: None,
+                mapping: IndividualMapping {
+                    title: None,
                     drives: drives_x_always(),
                     backups: VecDeque::from(vec![FullBackup {
                         name: SOLO.into(),
@@ -4304,7 +4341,8 @@ mod tests {
         #[test]
         fn can_validate_a_simple_full_backup_when_invalid() {
             let layout = GameLayout {
-                mapping: IndividualMapping { title: None,
+                mapping: IndividualMapping {
+                    title: None,
                     drives: drives_x_always(),
                     backups: VecDeque::from(vec![FullBackup {
                         name: SOLO.into(),
@@ -4323,7 +4361,8 @@ mod tests {
         #[test]
         fn can_validate_a_simple_diff_backup_when_valid() {
             let layout = GameLayout {
-                mapping: IndividualMapping { title: None,
+                mapping: IndividualMapping {
+                    title: None,
                     drives: drives_x_always(),
                     backups: VecDeque::from(vec![FullBackup {
                         name: SOLO.into(),
@@ -4351,7 +4390,8 @@ mod tests {
         #[test]
         fn can_validate_a_simple_diff_backup_when_invalid() {
             let layout = GameLayout {
-                mapping: IndividualMapping { title: None,
+                mapping: IndividualMapping {
+                    title: None,
                     drives: drives_x_always(),
                     backups: VecDeque::from(vec![FullBackup {
                         name: SOLO.into(),
@@ -4378,7 +4418,8 @@ mod tests {
         #[test]
         fn can_validate_a_zip_full_backup_when_valid() {
             let layout = GameLayout {
-                mapping: IndividualMapping { title: None,
+                mapping: IndividualMapping {
+                    title: None,
                     drives: drives_x_always(),
                     backups: VecDeque::from(vec![FullBackup {
                         name: "test.zip".into(),
@@ -4398,7 +4439,8 @@ mod tests {
         #[test]
         fn can_validate_a_zip_full_backup_when_invalid() {
             let layout = GameLayout {
-                mapping: IndividualMapping { title: None,
+                mapping: IndividualMapping {
+                    title: None,
                     drives: drives_x_always(),
                     backups: VecDeque::from(vec![FullBackup {
                         name: "test.zip".into(),
@@ -4417,7 +4459,8 @@ mod tests {
         #[test]
         fn can_validate_a_zip_diff_backup_when_valid() {
             let layout = GameLayout {
-                mapping: IndividualMapping { title: None,
+                mapping: IndividualMapping {
+                    title: None,
                     drives: drives_x_always(),
                     backups: VecDeque::from(vec![FullBackup {
                         name: "test.zip".into(),
@@ -4445,7 +4488,8 @@ mod tests {
         #[test]
         fn can_validate_a_zip_diff_backup_when_invalid() {
             let layout = GameLayout {
-                mapping: IndividualMapping { title: None,
+                mapping: IndividualMapping {
+                    title: None,
                     drives: drives_x_always(),
                     backups: VecDeque::from(vec![FullBackup {
                         name: "test.zip".into(),
@@ -4474,7 +4518,6 @@ mod tests {
             let layout = BackupLayout::new(StrictPath::new(format!("{}/tests/backup", repo_raw())));
 
             let before = IndividualMapping {
-
                 title: None,
                 name: "migrate-legacy-backup".to_string(),
                 drives: drives_x_static(),

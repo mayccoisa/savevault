@@ -209,7 +209,10 @@ mod tests {
             ]
         }"#;
 
-        let release = serde_json::from_str::<ReleaseResponse>(raw).unwrap().into_release().unwrap();
+        let release = serde_json::from_str::<ReleaseResponse>(raw)
+            .unwrap()
+            .into_release()
+            .unwrap();
 
         assert_eq!(Some("https://example.com/win.zip".to_string()), release.download);
     }
@@ -219,7 +222,10 @@ mod tests {
     fn a_release_without_a_build_has_nothing_to_download() {
         let raw = r#"{"html_url": "https://example.com", "tag_name": "savevault-v0.2.0", "assets": []}"#;
 
-        let release = serde_json::from_str::<ReleaseResponse>(raw).unwrap().into_release().unwrap();
+        let release = serde_json::from_str::<ReleaseResponse>(raw)
+            .unwrap()
+            .into_release()
+            .unwrap();
 
         assert_eq!(None, release.download);
     }
