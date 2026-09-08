@@ -73,10 +73,14 @@ pub fn console(app: App) -> &'static str {
 
 /// The logo, in the tile it sits in.
 ///
-/// The tile is always the same size and always the same light surface, in both themes. Both parts
-/// matter: the artwork arrives at seven different aspect ratios, so without a fixed frame no two
-/// cards in the grid would line up; and several of these logos are drawn for a light background,
-/// so on the dark theme they would lose their outline into the card behind them.
+/// The tile is always the same size, and it sits on the theme's field surface — the same one a text
+/// input uses, so it reads as a frame in either theme rather than as a light patch pasted on a dark
+/// card. The fixed size is the part that is not negotiable: the artwork arrives at seven different
+/// aspect ratios, and without a frame of its own no two cards in the grid would line up.
+///
+/// It works on the dark theme because every one of these logos is a coloured mark, not a
+/// single-colour silhouette. A logo that were white-on-transparent would disappear here, and the
+/// answer then would be a light tile, not a tinted logo.
 pub fn tile<'a>(app: App) -> Element<'a> {
     let art: Element<'a> = match logo(app) {
         Some(Logo::Png(bytes)) => iced::widget::image(iced::widget::image::Handle::from_bytes(bytes))
