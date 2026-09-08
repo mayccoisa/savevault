@@ -284,6 +284,10 @@ pub fn run(sub: Subcommand, no_manifest_update: bool, try_manifest_update: bool)
                 }
             }
 
+            // One timestamp for the whole run, so every game backed up by this command shares it.
+            // See the note in the GUI backup: taken per game, it left the run with no identity.
+            let run_at = chrono::Utc::now();
+
             let step = |i, name| {
                 log::trace!("step {i} / {}: {name}", games.len());
                 let game = &manifest.0[name];
@@ -358,7 +362,7 @@ pub fn run(sub: Subcommand, no_manifest_update: bool, try_manifest_update: bool)
                     ) {
                         Ok(true) => layout.game_layout(name).back_up(
                             &scan_info,
-                            &chrono::Utc::now(),
+                            &run_at,
                             &backup_format(),
                             retention,
                             config.backup.only_constructive,
@@ -368,7 +372,7 @@ pub fn run(sub: Subcommand, no_manifest_update: bool, try_manifest_update: bool)
                 } else {
                     layout.game_layout(name).back_up(
                         &scan_info,
-                        &chrono::Utc::now(),
+                        &run_at,
                         &backup_format(),
                         retention,
                         config.backup.only_constructive,

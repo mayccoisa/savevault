@@ -227,6 +227,8 @@ pub enum Message {
     ShowScanActiveGames,
     CopyText(String),
     OpenRegistry(RegistryItem),
+    /// Abre uma execução no registro, ou volta para a lista quando é `None`.
+    OpenLogRun(Option<chrono::DateTime<chrono::Local>>),
 }
 
 impl Message {

@@ -56,6 +56,9 @@ logs-added = {$count} new
 logs-changed = {$count} changed
 logs-removed = {$count} removed
 logs-empty = No backup has been made yet, so there is nothing to log.
+# The Logs screen lists one row per backup run; opening a row shows what that run did.
+logs-back-to-runs = All runs
+logs-run-detail = Run of { $when }
 button-add-game = Add game
 button-continue = Continue
 button-cancel = Cancel

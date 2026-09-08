@@ -567,7 +567,9 @@ suspeito, e essa suspeita já custou duas rodadas.
 
 Se esta sessão está rodando sem o Maycon acompanhando:
 
-- **Não** faça push em `master` com teste vermelho. O baseline é 263 verdes.
+- **Não** faça push em `master` com teste vermelho. O baseline é **363 verdes no `--lib`** (24
+  filtrados, os de registro) e **32 no `--bin ludusavi`**. Os dois: `--lib` não vê a interface,
+  porque o `gui` mora no `main.rs` e não no `lib.rs`, e passa dizendo "ok" sem ter rodado nada dela.
 - **Não** toque em pasta real de emulador de ninguém. Todo teste usa pasta sintética em diretório
   temporário, e modo portátil (`ludusavi.portable` ao lado do executável) para não mexer na
   configuração real.

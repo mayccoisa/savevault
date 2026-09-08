@@ -482,6 +482,14 @@ impl App {
                 let filter = std::sync::Arc::new(self.config.backup.filter.clone());
                 let steam_shortcuts = std::sync::Arc::new(steam);
                 let games_specified = self.operation.games_specified();
+                // One timestamp for the whole run, taken here and copied into every game's task.
+                //
+                // It used to be `Utc::now()` inside each task, so the games of a single backup came
+                // out stamped milliseconds to seconds apart, in whatever order the thread pool
+                // finished them. That left the run with no identity at all: nothing on disk said
+                // "these twelve backups were one execution", and the log could only ever be a flat
+                // list of games. Sharing the instant is what makes a run a thing that exists.
+                let run_at = chrono::Utc::now();
                 let retention = config
                     .backup
                     .retention
@@ -546,7 +554,7 @@ impl App {
                                 let backup_info = if !preview {
                                     layout.game_layout(&key).back_up(
                                         &scan_info,
-                                        &chrono::Utc::now(),
+                                        &run_at,
                                         &config.backup.format,
                                         retention,
                                         config.backup.only_constructive,
@@ -3008,6 +3016,10 @@ impl App {
             Message::ShowScanActiveGames => self.show_modal(Modal::ActiveScanGames),
             Message::CopyText(text) => iced::clipboard::write(text),
             #[cfg_attr(not(windows), allow(unused))]
+            Message::OpenLogRun(when) => {
+                self.logs.opened = when;
+                Task::none()
+            }
             Message::OpenRegistry(item) => {
                 #[cfg(windows)]
                 {

@@ -192,6 +192,10 @@ impl Ludusavi {
             }
         }
 
+        // One timestamp for the whole run, so every game of this call shares it. See the note in
+        // the GUI backup: taken per game, it left the run with no identity on disk.
+        let run_at = chrono::Utc::now();
+
         let step = |i, name| {
             log::trace!("step {i} / {}: {name}", games.len());
             let game = &self.manifest.0[name];
@@ -247,7 +251,7 @@ impl Ludusavi {
             } else {
                 self.layout.game_layout(name).back_up(
                     &scan_info,
-                    &chrono::Utc::now(),
+                    &run_at,
                     &self.config.backup.format,
                     retention,
                     self.config.backup.only_constructive,

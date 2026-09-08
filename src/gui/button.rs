@@ -586,6 +586,10 @@ pub fn open_url<'a>(label: String, url: String) -> Element<'a> {
     template(text(label).width(WIDTH), Some(Message::OpenUrl(url)), None)
 }
 
+/// Back out of a detail view, to whatever list it was opened from.
+pub fn back<'a>(action: Message) -> Element<'a> {
+    template(Icon::ArrowBack.text(), Some(action), None)
+}
 pub fn open_url_icon<'a>(url: String) -> Element<'a> {
     template(Icon::OpenInBrowser.text(), Some(Message::OpenUrl(url)), None)
 }

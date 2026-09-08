@@ -828,6 +828,16 @@ impl Translator {
         translate("logs-empty")
     }
 
+    pub fn logs_back_to_runs(&self) -> String {
+        translate("logs-back-to-runs")
+    }
+
+    pub fn logs_run_detail(&self, when: &str) -> String {
+        let mut args = FluentArgs::new();
+        args.set("when", when);
+        translate_args("logs-run-detail", &args)
+    }
+
     pub fn add_emulator_folder_button(&self) -> String {
         translate("button-add-emulator-folder")
     }

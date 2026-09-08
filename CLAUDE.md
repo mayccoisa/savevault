@@ -33,6 +33,14 @@ O Rust não está no PATH por padrão nesta máquina. Prefixe quando necessário
 cd C:\proj\savevault; cargo test --lib -- --skip scan::registry --skip _with_registry --skip _registry_
 ```
 
+**`--lib` NÃO cobre a interface.** O `gui` está declarado em `main.rs`, não em `lib.rs`, então todo
+teste dentro dele é invisível para o comando acima — ele diz "ok" sem ter rodado nenhum. Para a
+interface, é o alvo do binário:
+
+```bash
+cd C:\proj\savevault; cargo test --bin ludusavi
+```
+
 ```bash
 cd C:\proj\savevault; cargo clippy --all-targets
 ```
