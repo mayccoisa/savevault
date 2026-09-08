@@ -3,6 +3,13 @@
 SaveVault is a fork of [Ludusavi](https://github.com/mtkennerly/ludusavi) by Michael Kennerly.
 Everything under "Inherited from Ludusavi" is the upstream history, with its own version numbers.
 
+## SaveVault v0.8.1 (2026-09-07)
+
+* Fixed:
+  * In Brazilian Portuguese, the scan button and the two status lines called the action
+    "varrer", while the settings label and the game filter already called it "escanear". The
+    same action had two names depending on where you looked. All six now agree on "escanear".
+
 ## SaveVault v0.8.0 (2026-09-07)
 
 * Added:
