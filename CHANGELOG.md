@@ -3,6 +3,21 @@
 SaveVault is a fork of [Ludusavi](https://github.com/mtkennerly/ludusavi) by Michael Kennerly.
 Everything under "Inherited from Ludusavi" is the upstream history, with its own version numbers.
 
+## SaveVault v0.12.0 (2026-09-08)
+
+* Changed:
+  * **Custom games looks like the rest of the app.** Each game was a strip of eight controls at
+    equal weight inside a bordered box, so the game's name — the thing the row is about — was
+    just the fifth control along. Each game is a card now, with the game on the left and its
+    actions on the right.
+  * **The delete button is quiet until you point at it.** It was outlined in bright red, so a
+    list of ten games was ten red things asking for attention. The trash icon already says what
+    it does; the red is what the pointer reveals.
+  * The remaining colons inside an opened game — "Integration", "Installed name", "Wine prefix"
+    — are gone, like the rest of them.
+  * In Brazilian Portuguese, "Nome Instalado" became "Nome instalado", matching the sentence
+    case the rest of the translation uses.
+
 ## SaveVault v0.11.1 (2026-09-08)
 
 * Fixed:
