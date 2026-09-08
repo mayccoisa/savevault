@@ -79,6 +79,7 @@ button-upload = Upload
 button-ignore = Ignorar
 no-roots-are-configured = Adicione algumas raízes para armazenar ainda mais dados.
 config-is-invalid = Erro: O arquivo de configuração é inválido.
+config-archived = Suas configurações anteriores não se perderam: aquele arquivo foi guardado em { $path }. Conserte-o e renomeie de volta para config.yaml para usá-lo outra vez.
 manifest-is-invalid = Erro: O arquivo de manifesto é inválido.
 manifest-cannot-be-updated = Erro: Não foi possível verificar se há uma atualização no manifesto. Sua conexão com a Internet está inativa?
 cannot-prepare-backup-target = Erro: Não é possível preparar o destino do backup (criando ou esvaziando a pasta). Se você tiver a pasta aberta no seu navegador de arquivos, tente fechá-la: { $path }

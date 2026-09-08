@@ -97,6 +97,13 @@ pub enum Error {
     ConfigInvalid {
         why: String,
     },
+    /// The unreadable config was put aside, and this is where.
+    ///
+    /// Separate from `ConfigInvalid` because it is not a second failure: it is the reassurance
+    /// that goes with the first one, and it only exists when the copy was actually written.
+    ConfigArchived {
+        path: String,
+    },
     CliUnrecognizedGames {
         games: Vec<String>,
     },

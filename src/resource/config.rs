@@ -1466,17 +1466,29 @@ impl ResourceFile for Config {
 impl SaveableResourceFile for Config {}
 
 impl Config {
-    fn file_archived_invalid() -> StrictPath {
-        app_dir().joined("config.invalid.yaml")
+    /// Where a config that could not be read is put aside, so that it is not lost.
+    ///
+    /// The name carries the moment it happened. It used to be a single `config.invalid.yaml`, and
+    /// `move_to` is a rename, which replaces its destination: a second failure would have destroyed
+    /// the rescue of the first one. That first copy is the one that still holds the settings the
+    /// user actually configured — the second is usually the same broken file again.
+    fn file_archived_invalid(now: &chrono::DateTime<chrono::Utc>) -> StrictPath {
+        app_dir().joined(format!("config.invalid-{}.yaml", now.format("%Y%m%dT%H%M%S")))
     }
 
     pub fn load() -> Result<Self, Error> {
         ResourceFile::load().map_err(|e| Error::ConfigInvalid { why: format!("{e}") })
     }
 
-    pub fn archive_invalid() -> Result<(), Box<dyn std::error::Error>> {
-        Self::path().move_to(&Self::file_archived_invalid())?;
-        Ok(())
+    /// Puts an unreadable config aside, and says where it went.
+    ///
+    /// Returning the destination is the point. The copy has always been kept, but nothing ever told
+    /// anyone, and a message that says only "the config file is invalid" reads as though the
+    /// settings are gone. They are not, and the path is what gets them back.
+    pub fn archive_invalid() -> Result<StrictPath, Box<dyn std::error::Error>> {
+        let destination = Self::file_archived_invalid(&chrono::Utc::now());
+        Self::path().move_to(&destination)?;
+        Ok(destination)
     }
 
     pub fn find_missing_roots(&self) -> Vec<Root> {
@@ -2144,6 +2156,26 @@ mod tests {
 
     use super::*;
     use crate::testing::s;
+
+    /// Two failures must not land on the same file.
+    ///
+    /// A fixed `config.invalid.yaml` was the old behaviour, and `move_to` is a rename, so the
+    /// second rescue silently replaced the first — destroying the copy that still held the user's
+    /// real settings.
+    #[test]
+    fn a_second_invalid_config_does_not_overwrite_the_first_rescue() {
+        use chrono::TimeZone;
+
+        let first = Config::file_archived_invalid(&chrono::Utc.with_ymd_and_hms(2026, 9, 8, 10, 0, 0).unwrap());
+        let second = Config::file_archived_invalid(&chrono::Utc.with_ymd_and_hms(2026, 9, 8, 10, 0, 1).unwrap());
+
+        assert_ne!(first.render(), second.render());
+        assert!(
+            first.render().ends_with("config.invalid-20260908T100000.yaml"),
+            "{}",
+            first.render()
+        );
+    }
 
     #[test]
     fn can_parse_minimal_config() {

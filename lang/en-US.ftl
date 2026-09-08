@@ -89,6 +89,8 @@ button-ignore = Ignore
 no-roots-are-configured = Add some roots to back up even more data.
 
 config-is-invalid = Error: The config file is invalid.
+# Shown right after the message above. The old file is kept so its settings are not lost.
+config-archived = Your previous settings were not lost: that file was kept at {$path}. Fix it and rename it back to config.yaml to use it again.
 manifest-is-invalid = Error: The manifest file is invalid.
 manifest-cannot-be-updated = Error: Unable to check for an update to the manifest file. Is your Internet connection down?
 cannot-prepare-backup-target = Error: Unable to prepare backup target (either creating or emptying the folder). If you have the folder open in your file browser, try closing it: {$path}

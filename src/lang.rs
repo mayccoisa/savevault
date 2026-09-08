@@ -396,6 +396,7 @@ impl Translator {
     pub fn handle_error(&self, error: &Error) -> String {
         match error {
             Error::ConfigInvalid { why } => self.config_is_invalid(why),
+            Error::ConfigArchived { path } => self.config_archived(path),
             Error::ManifestInvalid { why, identifier } => self.manifest_is_invalid(why, identifier.as_deref()),
             Error::ManifestCannotBeUpdated { identifier } => self.manifest_cannot_be_updated(identifier.as_deref()),
             Error::CliUnrecognizedGames { games } => self.cli_unrecognized_games(games),
@@ -1121,6 +1122,12 @@ impl Translator {
 
     pub fn no_roots_are_configured(&self) -> String {
         translate("no-roots-are-configured")
+    }
+
+    pub fn config_archived(&self, path: &str) -> String {
+        let mut args = FluentArgs::new();
+        args.set(PATH, path);
+        translate_args("config-archived", &args)
     }
 
     pub fn config_is_invalid(&self, why: &str) -> String {

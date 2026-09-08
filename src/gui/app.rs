@@ -1405,7 +1405,13 @@ impl App {
             Ok(x) => x,
             Err(x) => {
                 errors.push(x);
-                let _ = Config::archive_invalid();
+                // Say where the copy went. Putting the file aside and telling nobody is how a
+                // broken config reads as lost settings: it was always kept, and nobody knew.
+                if let Ok(archived) = Config::archive_invalid() {
+                    errors.push(Error::ConfigArchived {
+                        path: archived.render(),
+                    });
+                }
                 Config::default()
             }
         };
