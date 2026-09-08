@@ -3,6 +3,15 @@
 SaveVault is a fork of [Ludusavi](https://github.com/mtkennerly/ludusavi) by Michael Kennerly.
 Everything under "Inherited from Ludusavi" is the upstream history, with its own version numbers.
 
+## SaveVault v0.11.1 (2026-09-08)
+
+* Fixed:
+  * The colons left inside the nested editors. The previous version took them off the labels and
+    headings of the Settings screen, but the ones built inside the editors kept theirs —
+    "Paths:", "Registry:", "Checked:", "Updated:". Half the labels on a screen written one way
+    and half the other is worse than the way it was before. Custom games gets the same
+    treatment, since it uses the same kind of label column.
+
 ## SaveVault v0.11.0 (2026-09-08)
 
 * Changed:
