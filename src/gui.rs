@@ -6,6 +6,7 @@ mod design;
 mod editor;
 mod emulator_art;
 mod file_tree;
+mod flags;
 mod font;
 mod game_list;
 mod icon;

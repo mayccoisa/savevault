@@ -1,0 +1,7 @@
+Flag artwork from flag-icons (https://github.com/lipis/flag-icons), MIT License.
+Copyright (c) 2013 Panayiotis Lipiridis.
+These files are the 4x3 SVGs, embedded so the language list does not depend on a
+font that can draw flag emoji. Windows does not render those emoji.
+
+eo.svg is not from that set (flag-icons does not ship Esperanto). It is an original
+drawing of the Esperanto flag: green field, white canton, green star.

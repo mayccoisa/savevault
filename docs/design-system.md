@@ -94,10 +94,11 @@ recente" (o mais novo tem até 30 dias) ou "Backup antigo". Quando o filtro redu
 legenda diz quantos jogos estão visíveis. O badge continua sendo o total.
 
 As outras telas seguem a mesma regra. Backup, Jogos personalizados, Emuladores, Registros e
-Configurações não repetem o nome da tela no corpo. O que aparece abaixo em Configurações
-(Aparência, Atualizações) e em Emuladores (o resumo "N de M encontrados") é título de seção, não
-uma segunda cópia do nome da tela. O cofre vazio tem a frase "Seu progresso começa aqui", que é o
-estado vazio, não outro "Biblioteca".
+Configurações não repetem o nome da tela no corpo. Emuladores mostra o resumo "N de M encontrados"
+como título de seção. Configurações troca de seção por uma lista à esquerda (Geral, Idioma, Cofre
+e backups, Atualizações, Avançado); o nome da seção dentro do cartão é o grupo, não uma segunda
+cópia de "Configurações". O cofre vazio tem a frase "Seu progresso começa aqui", que é o estado
+vazio, não outro "Biblioteca".
 
 ## Página do jogo
 
@@ -168,3 +169,44 @@ altura dos outros controles; só o modo ativo vem preenchido.
 Claro e escuro compartilham a escala. O que muda é a paleta em `style.rs`. A cor de destaque é a
 escolha do usuário e vale nos dois temas. O item ativo da sidebar usa um véu dessa cor, para não
 sumir num cinza em cima de outro cinza.
+
+No escuro, a página não é preto puro. Três degraus:
+
+| Papel | Cor | Onde |
+|---|---|---|
+| Página | `#12141c` | O fundo do conteúdo |
+| Painel | `#1a1e28` | Sidebar, barra de título, card |
+| Campo | `#222733` | Campo de texto, item sob o ponteiro |
+
+Texto `#eef0f6`, texto secundário `#a4aaba`. Entre a sidebar e a página, e debaixo da barra de
+título, vai um fio de 1 px a 10% do texto (`alpha::SUBTLE`). A borda do iced pinta os quatro
+lados, então esse fio é uma faixa, não uma borda de container.
+
+Um card tem superfície **e** um fio dessa mesma força. Um controle (botão secundário, campo,
+lista) usa um fio mais forte (`alpha::HALF` ou mais). Os dois no mesmo peso fazem o botão parecer
+outro card.
+
+Pressionar muda o preenchimento: o primário fica mais transparente, o secundário ganha a cor de
+campo, o item da sidebar ganha um véu mais forte. O iced 0.14 não tem estado de foco no botão, e
+não anima a troca de tela. Tab já percorre os controles; um anel de foco e uma transição de página
+ficam para uma decisão do dono.
+
+## Configurações
+
+A tela é uma lista de seções (`design::settings::NAV_WIDTH`, 200) e um formulário que para de
+crescer em 720. Cada linha simples é o nome, uma frase curta, e o controle alinhado à direita.
+Varredura, manifesto, nuvem, raízes, exclusões e redirecionamentos ficam em Avançado, cada um no
+próprio cartão. O caminho do cofre aparece em Cofre e backups; trocar o caminho continua no menu
+da biblioteca.
+
+O idioma não é uma lista de texto. Cada linha é a bandeira em SVG (24×18, a proporção 4:3 dos
+arquivos em `assets/flags`) e o nome nativo. Idioma incompleto mostra a porcentagem; idioma em
+100% não. Emoji de bandeira não entra: o Windows não desenha. As artes são do flag-icons (MIT),
+menos o Esperanto, desenhado no repositório porque aquele conjunto não traz a bandeira. O SVG não
+é pintado pela cor do tema.
+
+## Estado vazio
+
+Tela sem conteúdo tem um título e uma frase, não uma área em branco e não uma legenda solta.
+Biblioteca, Backup, Jogos personalizados e Registros seguem isso. A ação principal continua na
+barra de título, para não haver dois botões primários.

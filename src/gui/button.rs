@@ -598,9 +598,6 @@ pub fn open_url<'a>(label: String, url: String) -> Element<'a> {
 pub fn back<'a>(action: Message) -> Element<'a> {
     template(Icon::ArrowBack.text_narrow(), Some(action), None)
 }
-pub fn open_url_icon<'a>(url: String) -> Element<'a> {
-    template(Icon::OpenInBrowser.text_narrow(), Some(Message::OpenUrl(url)), None)
-}
 
 pub fn side_nav<'a>(screen: Screen, current_screen: Screen) -> Button<'a> {
     let label = match screen {

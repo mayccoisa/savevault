@@ -13,7 +13,7 @@ use crate::{
         search::CustomGamesFilter,
         shortcuts::TextHistories,
         style,
-        widget::{Column, Container, IcedParentExt, Row, checkbox, field_label, hint, pick_list, text},
+        widget::{Column, Container, IcedParentExt, Row, checkbox, empty_state, field_label, hint, pick_list, text},
     },
     lang::TRANSLATOR,
     resource::{
@@ -291,7 +291,21 @@ pub fn custom_games<'a>(
     filter: &CustomGamesFilter,
 ) -> Container<'a> {
     if config.custom_games.is_empty() {
-        return Container::new(Space::new());
+        return Container::new(empty_state(
+            TRANSLATOR.custom_games_empty_title(),
+            TRANSLATOR.custom_games_empty_body(),
+        ))
+        .width(Length::Fill);
+    }
+
+    if !config.custom_games.iter().any(|game| filter.qualifies(game)) {
+        return Container::new(
+            text(TRANSLATOR.custom_games_none_match())
+                .class(style::Text::Muted)
+                .size(design::text::BODY),
+        )
+        .padding(design::space::XXL)
+        .width(Length::Fill);
     }
 
     let content = config.custom_games.iter().enumerate().fold(

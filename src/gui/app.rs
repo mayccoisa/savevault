@@ -136,6 +136,8 @@ pub struct App {
     cache: Cache,
     operation: Operation,
     screen: Screen,
+    /// Which group of Configurações is on screen. The others stay in the config; only the view changes.
+    settings_section: crate::gui::common::SettingsSection,
     modals: Vec<Modal>,
     backup_screen: screen::Backup,
     restore_screen: screen::Restore,
@@ -164,6 +166,24 @@ pub struct App {
     pending_save: HashMap<SaveKind, Instant>,
     modifiers: keyboard::Modifiers,
     jump_to_game_after_scan: Option<String>,
+}
+
+/// The line between the sidebar and the page. A widget border paints every side, so this is a strip.
+fn hairline_y() -> Element<'static> {
+    Container::new(iced::widget::Space::new())
+        .width(design::stroke::HAIRLINE)
+        .height(Length::Fill)
+        .class(style::Container::Divider)
+        .into()
+}
+
+/// The line under the title bar.
+fn hairline_x() -> Element<'static> {
+    Container::new(iced::widget::Space::new())
+        .width(Length::Fill)
+        .height(design::stroke::HAIRLINE)
+        .class(style::Container::Divider)
+        .into()
 }
 
 impl App {
@@ -2440,6 +2460,11 @@ impl App {
                 self.close_specific_modal(modal::Kind::ConfirmAddMissingRoots)
             }
             Message::SwitchScreen(screen) => self.switch_screen(screen),
+            Message::SelectSettingsSection(section) => {
+                self.settings_section = section;
+                self.reset_scroll_position(ScrollSubject::Other);
+                self.refresh_scroll_position()
+            }
             Message::ToggleTargetEditor { scan_kind } => {
                 match scan_kind {
                     crate::scan::ScanKind::Backup => {
@@ -3472,6 +3497,7 @@ impl App {
             .width(Length::Fill)
             .align_x(Alignment::Center)
             .push(topbar)
+            .push(hairline_x())
             .push(match self.screen {
                 Screen::Backup => self.backup_screen.view(
                     &self.config,
@@ -3499,6 +3525,7 @@ impl App {
                     .view(&self.config, &self.text_histories, &self.modifiers),
                 Screen::Logs => self.logs.view(),
                 Screen::Other => screen::other(
+                    self.settings_section,
                     self.updating_manifest,
                     &self.config,
                     &self.cache,
@@ -3510,7 +3537,11 @@ impl App {
             .push(self.timed_notification.as_ref().map(|x| x.view()))
             .push(self.manifest_notification.as_ref().map(|x| x.view()));
 
-        let shell = Row::new().width(Length::Fill).push(sidebar).push(content);
+        let shell = Row::new()
+            .width(Length::Fill)
+            .push(sidebar)
+            .push(hairline_y())
+            .push(content);
 
         let stack = Stack::new()
             .push(

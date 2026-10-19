@@ -7,15 +7,16 @@ use crate::{
     gui::{
         badge::Badge,
         button,
-        common::{BrowseFileSubject, BrowseSubject, Message, Operation, ScrollSubject, UndoSubject},
-        design, editor, emulator_art, font,
+        common::{BrowseFileSubject, BrowseSubject, Message, Operation, ScrollSubject, SettingsSection, UndoSubject},
+        design, editor, emulator_art, flags, font,
         game_list::GameList,
         icon::Icon,
         search::CustomGamesFilter,
         shortcuts::TextHistories,
         style, vault,
         widget::{
-            Column, Container, Element, IcedParentExt, Row, checkbox, field_label, number_input, pick_list, text,
+            Button, Column, Container, Element, IcedParentExt, Row, checkbox, empty_state, field_label, number_input,
+            pick_list, text,
         },
     },
     lang::{Language, TRANSLATOR},
@@ -36,7 +37,7 @@ use crate::{
 const EXPLANATION_WIDTH: f32 = 560.0;
 
 const RCLONE_URL: &str = "https://rclone.org/downloads";
-const RELEASE_URL: &str = "https://github.com/mtkennerly/ludusavi/releases";
+const RELEASE_URL: &str = "https://github.com/mayccoisa/savevault/releases";
 
 fn template(content: Column) -> Element {
     // A coluna precisa declarar a largura: sem isto ela fica com a largura natural do que
@@ -251,16 +252,21 @@ impl Backup {
                     Self::SCAN_KIND,
                 )
             })
-            .push(self.log.view(
-                Self::SCAN_KIND,
-                config,
-                manifest,
-                &self.duplicate_detector,
-                duplicatees.as_ref(),
-                operation,
-                histories,
-                modifiers,
-            ));
+            .push_if(self.log.entries.is_empty() && operation.idle(), || {
+                empty_state(TRANSLATOR.backup_empty_title(), TRANSLATOR.backup_empty_body())
+            })
+            .push_if(!self.log.entries.is_empty() || !operation.idle(), || {
+                self.log.view(
+                    Self::SCAN_KIND,
+                    config,
+                    manifest,
+                    &self.duplicate_detector,
+                    duplicatees.as_ref(),
+                    operation,
+                    histories,
+                    modifiers,
+                )
+            });
 
         template(content)
     }
@@ -443,10 +449,13 @@ impl Restore {
             // Antes de varrer, a tela mostra o ACERVO. Varrer troca para a lista operacional, que é
             // a que sabe restaurar; o acervo só responde o que existe guardado, e é ele que faz a
             // tela abrir com conteúdo em vez de esperar alguém apertar Escanear.
-            .push_if(self.log.entries.is_empty(), || {
-                text("Escaneie o cofre para revisar os arquivos e restaurar vários jogos.")
+            .push_if(self.log.entries.is_empty() && operation.idle(), || {
+                empty_state(
+                    TRANSLATOR.restore_scan_empty_title(),
+                    TRANSLATOR.restore_scan_empty_body(),
+                )
             })
-            .push_if(!self.log.entries.is_empty(), || {
+            .push_if(!self.log.entries.is_empty() || !operation.idle(), || {
                 self.log.view(
                     Self::SCAN_KIND,
                     config,
@@ -885,21 +894,10 @@ impl CustomGames {
     }
 }
 
-/// The width the settings form stops growing at.
+/// The label column of a complex row (a path field plus buttons).
 ///
-/// A form is read down a single column, and a control that starts 900px away from its label has
-/// stopped being labelled. The old screen had no limit at all, so on a wide monitor the picker for
-/// the language sat alone in the top-left corner of a very large empty area.
-const FORM_WIDTH: f32 = 760.0;
-
-/// The width a picker gets in the settings form.
-///
-/// Common to all of them, so the column of controls has a straight right edge. Left to size
-/// themselves, "Escuro" and "Português brasileiro (100%)" end in very different places and the
-/// form looks ragged.
-const FIELD_CONTROL_WIDTH: f32 = 280.0;
-
-/// The label column of a settings row.
+/// Simple rows use [`settings_choice`] instead: the description takes the remaining width and the
+/// control sits on the right.
 ///
 /// Fixed, so every control in the form starts at the same x. Ragged labels each pushing their own
 /// control to a different place is what makes a form read as a dump of fields rather than a list of
@@ -944,14 +942,6 @@ fn settings_field<'a>(label: String, control: impl Into<Element<'a>>) -> Row<'a>
         .push(control)
 }
 
-/// A row of settings that is a sentence with a checkbox, not a label and a control.
-fn settings_toggle<'a>(control: impl Into<Element<'a>>) -> Row<'a> {
-    Row::new()
-        .spacing(design::space::SM)
-        .align_y(Alignment::Center)
-        .push(control)
-}
-
 /// Options that only apply while the checkbox above them is on.
 ///
 /// Indented, because the relationship is the whole point: without it, "Epic / GOG / Steam" reads as
@@ -960,7 +950,97 @@ fn settings_nested<'a>(content: impl Into<Element<'a>>) -> Container<'a> {
     Container::new(content).padding(padding::left(design::space::XL))
 }
 
+/// A settings row: what it is, one sentence about it, and the control on the right.
+fn settings_choice<'a>(title: String, hint: String, control: impl Into<Element<'a>>) -> Element<'a> {
+    Row::new()
+        .spacing(design::space::XL)
+        .align_y(Alignment::Center)
+        .width(Length::Fill)
+        .push(
+            Column::new()
+                .width(Length::Fill)
+                .spacing(design::space::XS)
+                .push(text(field_label(title)))
+                .push(text(hint).size(design::text::CAPTION).class(style::Text::Muted)),
+        )
+        .push(control)
+        .into()
+}
+
+/// A sentence on the left and its checkbox on the right.
+fn settings_switch<'a>(title: String, checked: bool, toggle: impl Fn(bool) -> Message + 'a) -> Element<'a> {
+    Row::new()
+        .spacing(design::space::LG)
+        .align_y(Alignment::Center)
+        .width(Length::Fill)
+        .push(text(field_label(title)).width(Length::Fill))
+        .push(checkbox("", checked, toggle))
+        .into()
+}
+
+fn settings_nav_item<'a>(section: SettingsSection, current: SettingsSection) -> Element<'a> {
+    let (label, icon) = match section {
+        SettingsSection::General => (TRANSLATOR.settings_section_general(), Icon::Edit),
+        SettingsSection::Language => (TRANSLATOR.settings_section_language(), Icon::Language),
+        SettingsSection::Vault => (TRANSLATOR.settings_section_vault(), Icon::FolderOpen),
+        SettingsSection::Updates => (TRANSLATOR.settings_section_updates(), Icon::Download),
+        SettingsSection::Advanced => (TRANSLATOR.settings_section_advanced(), Icon::Settings),
+    };
+
+    Button::new(
+        Container::new(
+            Row::new()
+                .spacing(design::space::SM)
+                .align_y(Alignment::Center)
+                .push(icon.text_small())
+                .push(text(label).size(design::text::BODY).line_height(design::leading::TIGHT)),
+        )
+        .center_y(Length::Fill),
+    )
+    .on_press(Message::SelectSettingsSection(section))
+    .width(Length::Fill)
+    .height(design::control::HEIGHT)
+    .padding([0.0, design::space::MD])
+    .class(if section == current {
+        style::Button::SideNavActive
+    } else {
+        style::Button::SideNavInactive
+    })
+    .into()
+}
+
+fn language_row<'a>(language: Language, selected: bool) -> Element<'a> {
+    Button::new(
+        Container::new(
+            Row::new()
+                .spacing(design::space::SM)
+                .align_y(Alignment::Center)
+                .push(flags::flag(language))
+                .push(text(language.to_string()).width(Length::Fill))
+                .push_if(selected, || Icon::Check.text_small()),
+        )
+        .center_y(Length::Fill),
+    )
+    .on_press(Message::Config {
+        event: config::Event::Language(language),
+    })
+    .width(Length::Fill)
+    .height(design::menu::ITEM_HEIGHT)
+    .padding([0.0, design::space::MD])
+    .class(if selected {
+        style::Button::SideNavActive
+    } else {
+        style::Button::SideNavInactive
+    })
+    .into()
+}
+
+fn settings_intro<'a>(copy: String) -> Element<'a> {
+    text(copy).class(style::Text::Muted).into()
+}
+
 pub fn other<'a>(
+    section: SettingsSection,
     updating_manifest: bool,
     config: &'a Config,
     cache: &'a Cache,
@@ -975,41 +1055,45 @@ pub fn other<'a>(
     let appearance = settings_section(
         TRANSLATOR.settings_appearance(),
         Column::new()
-            .push(settings_field(
-                TRANSLATOR.language_label(),
-                pick_list(
-                    Language::ALL,
-                    Some(config.language),
-                    Message::config(config::Event::Language),
-                )
-                .width(Length::Fixed(FIELD_CONTROL_WIDTH))
-                .class(style::PickList::Primary),
-            ))
-            .push(settings_field(
+            .push(settings_choice(
                 TRANSLATOR.theme_label(),
+                TRANSLATOR.settings_theme_hint(),
                 pick_list(Theme::ALL, Some(config.theme), Message::config(config::Event::Theme))
-                    .width(Length::Fixed(FIELD_CONTROL_WIDTH))
+                    .width(Length::Fixed(design::settings::CONTROL_WIDTH))
                     .class(style::PickList::Primary),
             ))
-            .push(settings_field(
+            .push(settings_choice(
                 TRANSLATOR.accent_label(),
+                TRANSLATOR.settings_accent_hint(),
                 pick_list(Accent::ALL, Some(config.accent), Message::config(config::Event::Accent))
-                    .width(Length::Fixed(FIELD_CONTROL_WIDTH))
+                    .width(Length::Fixed(design::settings::CONTROL_WIDTH))
                     .class(style::PickList::Primary),
             )),
     );
 
+    let mut languages = Column::new();
+    for language in Language::ALL {
+        languages = languages.push(language_row(*language, *language == config.language));
+    }
+    let language = settings_section(TRANSLATOR.language_label(), languages);
+
     let updates = settings_section(
         TRANSLATOR.settings_updates(),
-        Column::new().push(
-            settings_toggle(checkbox(
+        Column::new()
+            .push(settings_choice(
                 TRANSLATOR.new_version_check(),
-                config.release.check,
-                Message::config(config::Event::CheckRelease),
+                TRANSLATOR.settings_check_hint(),
+                checkbox("", config.release.check, Message::config(config::Event::CheckRelease)),
             ))
-            .push(iced::widget::space().width(Length::Fill))
-            .push(button::open_url_icon(RELEASE_URL.to_string())),
-        ),
+            .push(settings_choice(
+                TRANSLATOR.settings_releases(),
+                TRANSLATOR.settings_releases_hint(),
+                button::secondary(
+                    TRANSLATOR.settings_releases_button(),
+                    Some(Message::OpenUrl(RELEASE_URL.to_string())),
+                    None,
+                ),
+            )),
     );
 
     let scanning = settings_section(
@@ -1018,11 +1102,11 @@ pub fn other<'a>(
             .push_if(AVAILABLE_PARALELLISM.is_some(), || {
                 Column::new()
                     .spacing(design::space::SM)
-                    .push(settings_toggle(checkbox(
+                    .push(settings_switch(
                         TRANSLATOR.override_max_threads(),
                         config.runtime.threads.is_some(),
                         Message::config(config::Event::OverrideMaxThreads),
-                    )))
+                    ))
                     .push(
                         config
                             .runtime
@@ -1038,30 +1122,27 @@ pub fn other<'a>(
                             }),
                     )
             })
-            .push(settings_toggle(
-                checkbox(
-                    TRANSLATOR.explanation_for_exclude_store_screenshots(),
-                    config.backup.filter.exclude_store_screenshots,
-                    Message::config(config::Event::ExcludeStoreScreenshots),
-                )
-                .class(style::Checkbox),
+            .push(settings_switch(
+                TRANSLATOR.explanation_for_exclude_store_screenshots(),
+                config.backup.filter.exclude_store_screenshots,
+                Message::config(config::Event::ExcludeStoreScreenshots),
             ))
-            .push(settings_toggle(checkbox(
+            .push(settings_switch(
                 TRANSLATOR.show_disabled_games(),
                 config.scan.show_deselected_games,
                 Message::config(config::Event::ShowDeselectedGames),
-            )))
-            .push(settings_toggle(checkbox(
+            ))
+            .push(settings_switch(
                 TRANSLATOR.show_unchanged_games(),
                 config.scan.show_unchanged_games,
                 Message::config(config::Event::ShowUnchangedGames),
-            )))
-            .push(settings_toggle(checkbox(
+            ))
+            .push(settings_switch(
                 TRANSLATOR.show_unscanned_games(),
                 config.scan.show_unscanned_games,
                 Message::config(config::Event::ShowUnscannedGames),
-            )))
-            .push(settings_toggle(checkbox(
+            ))
+            .push(settings_switch(
                 TRANSLATOR.field(&TRANSLATOR.explanation_for_exclude_cloud_games()),
                 config.backup.filter.cloud.exclude,
                 Message::config(move |exclude| {
@@ -1070,7 +1151,7 @@ pub fn other<'a>(
                         ..config.backup.filter.cloud
                     })
                 }),
-            )))
+            ))
             .push(settings_nested(
                 Row::new()
                     .spacing(design::space::MD)
@@ -1149,8 +1230,19 @@ pub fn other<'a>(
     let backup = settings_section(
         TRANSLATOR.backup_label(),
         Column::new()
-            .push(settings_field(
+            .push(settings_choice(
+                TRANSLATOR.settings_vault_path(),
+                TRANSLATOR.settings_vault_path_hint(),
+                Container::new(
+                    text(config.backup.path.render())
+                        .size(design::text::CAPTION)
+                        .class(style::Text::Muted),
+                )
+                .width(Length::Fixed(design::settings::CONTROL_WIDTH)),
+            ))
+            .push(settings_choice(
                 TRANSLATOR.full_retention(),
+                TRANSLATOR.settings_full_retention_hint(),
                 number_input(
                     config.backup.retention.full as i32,
                     String::new(),
@@ -1158,8 +1250,9 @@ pub fn other<'a>(
                     Message::config(|x| config::Event::FullRetention(x as u8)),
                 ),
             ))
-            .push(settings_field(
+            .push(settings_choice(
                 TRANSLATOR.differential_retention(),
+                TRANSLATOR.settings_diff_retention_hint(),
                 number_input(
                     config.backup.retention.differential as i32,
                     String::new(),
@@ -1167,29 +1260,34 @@ pub fn other<'a>(
                     Message::config(|x| config::Event::DiffRetention(x as u8)),
                 ),
             ))
-            .push(settings_field(
+            .push(settings_choice(
                 TRANSLATOR.backup_format_field(),
+                TRANSLATOR.settings_backup_format_hint(),
                 pick_list(
                     BackupFormat::ALL,
                     Some(config.backup.format.chosen),
                     Message::config(config::Event::BackupFormat),
                 )
+                .width(Length::Fixed(design::settings::CONTROL_WIDTH))
                 .class(style::PickList::Primary),
             ))
             .push_if(config.backup.format.chosen == BackupFormat::Zip, || {
-                settings_field(
+                settings_choice(
                     TRANSLATOR.backup_compression_field(),
+                    TRANSLATOR.settings_backup_compression_hint(),
                     pick_list(
                         ZipCompression::ALL,
                         Some(config.backup.format.zip.compression),
                         Message::config(config::Event::BackupCompression),
                     )
+                    .width(Length::Fixed(design::settings::CONTROL_WIDTH))
                     .class(style::PickList::Primary),
                 )
             })
             .push(match (config.backup.format.level(), config.backup.format.range()) {
-                (Some(level), Some(range)) => Some(settings_field(
+                (Some(level), Some(range)) => Some(settings_choice(
                     TRANSLATOR.backup_compression_level_field(),
+                    TRANSLATOR.settings_backup_level_hint(),
                     number_input(
                         level,
                         String::new(),
@@ -1199,11 +1297,15 @@ pub fn other<'a>(
                 )),
                 _ => None,
             })
-            .push(settings_toggle(checkbox(
+            .push(settings_choice(
                 TRANSLATOR.skip_unconstructive_backups(),
-                config.backup.only_constructive,
-                Message::config(config::Event::OnlyConstructiveBackups),
-            ))),
+                TRANSLATOR.settings_constructive_hint(),
+                checkbox(
+                    "",
+                    config.backup.only_constructive,
+                    Message::config(config::Event::OnlyConstructiveBackups),
+                ),
+            )),
     );
 
     let manifest = settings_section(
@@ -1319,28 +1421,81 @@ pub fn other<'a>(
         Column::new().push(editor::redirect(config, histories, modifiers)),
     );
 
-    let form = Column::new()
-        .width(Length::Fixed(FORM_WIDTH))
-        .spacing(design::space::LG)
-        .padding([0.0, design::space::XL])
-        .push_if(*STEAM_DECK, || {
-            Row::new()
-                .width(Length::Fill)
-                .push(iced::widget::space().width(Length::Fill))
-                .push(button::negative(
-                    TRANSLATOR.exit_button(),
-                    Some(Message::Exit { user: true }),
-                ))
-        })
-        .push(appearance)
-        .push(updates)
-        .push(scanning)
-        .push(backup)
-        .push(manifest)
-        .push(cloud)
-        .push(roots)
-        .push(exclusions)
-        .push(redirects);
+    let mut form = Column::new()
+        .width(Length::Fixed(design::settings::FORM_WIDTH))
+        .spacing(design::space::LG);
 
-    template(Column::new().push(ScrollSubject::Other.into_widget(form)))
+    match section {
+        SettingsSection::General => {
+            form = form
+                .push(settings_intro(TRANSLATOR.settings_general_intro()))
+                .push(appearance);
+        }
+        SettingsSection::Language => {
+            form = form
+                .push(settings_intro(TRANSLATOR.settings_language_intro()))
+                .push(language);
+        }
+        SettingsSection::Vault => {
+            form = form
+                .push(settings_intro(TRANSLATOR.settings_vault_intro()))
+                .push(backup);
+        }
+        SettingsSection::Updates => {
+            form = form
+                .push(settings_intro(TRANSLATOR.settings_updates_intro()))
+                .push(updates);
+        }
+        SettingsSection::Advanced => {
+            form = form
+                .push(settings_intro(TRANSLATOR.settings_advanced_intro()))
+                .push_if(*STEAM_DECK, || {
+                    Row::new()
+                        .width(Length::Fill)
+                        .push(iced::widget::space().width(Length::Fill))
+                        .push(button::negative(
+                            TRANSLATOR.exit_button(),
+                            Some(Message::Exit { user: true }),
+                        ))
+                })
+                .push(scanning)
+                .push(manifest)
+                .push(cloud)
+                .push(roots)
+                .push(exclusions)
+                .push(redirects);
+        }
+    }
+
+    let nav = Container::new({
+        let mut column = Column::new()
+            .spacing(design::space::XS)
+            .padding([design::space::LG, design::space::SM]);
+        for item in SettingsSection::ALL {
+            column = column.push(settings_nav_item(*item, section));
+        }
+        column
+    })
+    .width(design::settings::NAV_WIDTH)
+    .height(Length::Fill);
+
+    Row::new()
+        .width(Length::Fill)
+        .height(Length::Fill)
+        .push(nav)
+        .push(
+            Container::new(iced::widget::Space::new())
+                .width(design::stroke::HAIRLINE)
+                .height(Length::Fill)
+                .class(style::Container::Divider),
+        )
+        .push(
+            ScrollSubject::Other.into_widget(
+                Container::new(form)
+                    .width(Length::Fill)
+                    .center_x(Length::Fill)
+                    .padding([design::space::XL, design::space::XXL]),
+            ),
+        )
+        .into()
 }

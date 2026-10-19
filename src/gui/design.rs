@@ -246,6 +246,22 @@ pub mod icon {
     pub const LG: f32 = 24.0;
 }
 
+/// The settings screen: a section list beside one form.
+pub mod settings {
+    /// The section list. Narrower than the app sidebar, because the labels are short.
+    pub const NAV_WIDTH: f32 = 200.0;
+
+    /// The form stops growing here, so a control stays on the same row as its description.
+    pub const FORM_WIDTH: f32 = 720.0;
+
+    /// Pick lists on the right edge of a row. One width, so the column of controls is straight.
+    pub const CONTROL_WIDTH: f32 = 220.0;
+
+    /// Flag artwork beside a language name. 4:3, the ratio of the embedded SVGs.
+    pub const FLAG_WIDTH: f32 = 24.0;
+    pub const FLAG_HEIGHT: f32 = 18.0;
+}
+
 /// The navigation column on the left.
 ///
 /// Fixed, never a percentage: a percentage column is wasteful on a monitor and truncates on a

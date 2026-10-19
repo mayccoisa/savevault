@@ -5,6 +5,9 @@ Everything under "Inherited from Ludusavi" is the upstream history, with its own
 
 ## SaveVault (não publicado)
 
+- Configurações virou uma lista de seções. Cada opção tem um nome, uma frase curta e o controle à direita. O idioma mostra a bandeira ao lado do nome nativo.
+- O tema escuro ganhou superfícies em camadas, fio entre a barra e o conteúdo, e um pressionar visível nos botões.
+- Backup, jogos personalizados e registros vazios explicam o que fazer em vez de ficar em branco.
 - A biblioteca tem um título só. O contador fica ao lado de "Biblioteca" na barra, e a ordenação fica nessa mesma linha.
 - O menu (⋮) abre com ícone em cada linha e um destaque discreto. Ele não cobre mais a ordenação.
 - As dicas esperam um instante, ficam afastadas do controle e usam um texto curto.

@@ -232,6 +232,8 @@ pub enum Message {
     OpenRegistry(RegistryItem),
     /// Abre uma execução no registro, ou volta para a lista quando é `None`.
     OpenLogRun(Option<chrono::DateTime<chrono::Local>>),
+    /// Troca a seção visível em Configurações. O corpo rola de volta ao topo.
+    SelectSettingsSection(SettingsSection),
 }
 
 impl Message {
@@ -695,6 +697,27 @@ pub enum Screen {
     Emulators,
     Logs,
     Other,
+}
+
+/// One group on the settings screen. The screen is a list of these, not one long form.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum SettingsSection {
+    #[default]
+    General,
+    Language,
+    Vault,
+    Updates,
+    Advanced,
+}
+
+impl SettingsSection {
+    pub const ALL: &'static [Self] = &[
+        Self::General,
+        Self::Language,
+        Self::Vault,
+        Self::Updates,
+        Self::Advanced,
+    ];
 }
 
 impl Screen {

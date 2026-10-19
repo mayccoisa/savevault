@@ -5,7 +5,7 @@ use iced::{Alignment, Length, widget as w};
 use crate::{
     gui::{
         common::{Message, Operation, UndoSubject},
-        design,
+        design, font,
         icon::Icon,
         style::{self, Theme},
     },
@@ -65,6 +65,25 @@ where
 
 pub fn text<'a>(content: impl iced::widget::text::IntoFragment<'a>) -> Text<'a> {
     Text::new(content).shaping(w::text::Shaping::Advanced)
+}
+
+/// A screen with nothing to list yet: a title, then one sentence about what fills it.
+pub fn empty_state<'a>(title: String, body: String) -> Element<'a> {
+    Container::new(
+        Column::new()
+            .spacing(design::space::SM)
+            .width(Length::Fill)
+            .push(
+                text(title)
+                    .font(font::TEXT_STRONG)
+                    .size(design::text::TITLE)
+                    .line_height(design::leading::TITLE),
+            )
+            .push(text(body).class(style::Text::Muted)),
+    )
+    .padding(design::space::XXL)
+    .width(Length::Fill)
+    .into()
 }
 
 /// One hint style for the whole app: caption type, a gap so it does not cover the control, and a
