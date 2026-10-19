@@ -151,6 +151,11 @@ pub enum Text {
     Failure,
     /// Secondary text, for the context strip under the command bar.
     Muted,
+    /// Ink drawn on top of a darkened cover. The theme's own text is dark in the light theme,
+    /// and a darkened cover would swallow it.
+    OnDark,
+    /// The secondary line on that same cover.
+    OnDarkMuted,
 }
 impl iced::widget::text::Catalog for Theme {
     type Class<'a> = Text;
@@ -167,6 +172,12 @@ impl iced::widget::text::Catalog for Theme {
             },
             Text::Failure => iced::widget::text::Style {
                 color: Some(self.negative),
+            },
+            Text::OnDark => iced::widget::text::Style {
+                color: Some(iced::Color::WHITE),
+            },
+            Text::OnDarkMuted => iced::widget::text::Style {
+                color: Some(iced::Color::WHITE.scale_alpha(0.72)),
             },
         }
     }

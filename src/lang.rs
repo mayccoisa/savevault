@@ -65,7 +65,6 @@ pub enum Language {
     #[serde(rename = "nl-NL")]
     Dutch,
     /// English
-    #[default]
     #[serde(rename = "en-US")]
     English,
     /// Esperanto
@@ -98,7 +97,12 @@ pub enum Language {
     /// Polish
     #[serde(rename = "pl-PL")]
     Polish,
-    /// Brazilian Portuguese
+    /// Brazilian Portuguese.
+    ///
+    /// The default. A config that does not name a language opens in Portuguese; English stays
+    /// selectable. The library screen is written in Portuguese, and a fresh vault used to mix that
+    /// with an English sidebar.
+    #[default]
     #[serde(rename = "pt-BR")]
     PortugueseBrazilian,
     /// Russian
@@ -716,6 +720,11 @@ impl Translator {
 
     pub fn nav_restore_button(&self) -> String {
         translate("button-nav-restore")
+    }
+
+    /// The library screen. It replaced the old "Restore" label in the sidebar.
+    pub fn nav_library_button(&self) -> String {
+        translate("button-nav-library")
     }
 
     pub fn nav_custom_games_button(&self) -> String {

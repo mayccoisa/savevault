@@ -4,15 +4,17 @@ use std::{
     path::PathBuf,
 };
 
-use iced::{Alignment, Length};
+use iced::{Alignment, Length, alignment};
 use serde::{Deserialize, Serialize};
 
 use crate::{
     gui::{
         button,
         common::{Message, Screen, ScrollSubject},
-        design, font, style, vault,
-        widget::{Button, Column, Container, Element, Row, TextInput, Tooltip, pick_list, text},
+        design, font,
+        icon::Icon,
+        style, vault,
+        widget::{Button, Column, Container, Element, Row, Stack, TextInput, Tooltip, pick_list, text},
     },
     resource::config::Config,
     scan::layout::{Backup, BackupLayout},
@@ -41,18 +43,74 @@ impl std::fmt::Display for Sort {
     }
 }
 
+/// Which platform the catalogue is narrowed to. Built from the games actually in the vault.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub enum PlatformFilter {
+    #[default]
+    All,
+    Pc,
+    Emulator(String),
+}
+
+impl std::fmt::Display for PlatformFilter {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            Self::All => "Todas as plataformas",
+            Self::Pc => "PC",
+            Self::Emulator(name) => name,
+        })
+    }
+}
+
+/// How old the newest backup is. Recent is inside [`design::library::RECENT_DAYS`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Freshness {
+    #[default]
+    Any,
+    Recent,
+    Older,
+}
+
+impl std::fmt::Display for Freshness {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            Self::Any => "Qualquer status",
+            Self::Recent => "Backup recente",
+            Self::Older => "Backup antigo",
+        })
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum DetailTab {
+    #[default]
+    Overview,
+    Versions,
+    Records,
+}
+
+/// The portrait and the 16:9 frame made from it. The frame is what the card and the hero show.
+#[derive(Clone, Debug)]
+pub struct LoadedCover {
+    pub portrait: iced::widget::image::Handle,
+    pub banner: iced::widget::image::Handle,
+}
+
 #[derive(Debug, Clone)]
 pub enum Event {
     Search(String),
     View(View),
     Sort(Sort),
+    Platform(PlatformFilter),
+    Freshness(Freshness),
+    Tab(DetailTab),
     Open(String),
     Back,
     Refresh,
     Operational,
     ChooseCover(String),
     CoverChosen(String, Option<PathBuf>),
-    CoverReady(String, Result<Option<iced::widget::image::Handle>, String>),
+    CoverReady(String, Result<Option<LoadedCover>, String>),
     Preview(String, Backup),
     Backup(String),
 }
@@ -69,10 +127,14 @@ pub struct Library {
     pub query: String,
     pub view: View,
     pub sort: Sort,
+    pub platform: PlatformFilter,
+    pub freshness: Freshness,
     pub selected: Option<String>,
     pub versions: Vec<Backup>,
+    pub tab: DetailTab,
     pub operational: bool,
     pub covers: BTreeMap<String, iced::widget::image::Handle>,
+    pub banners: BTreeMap<String, iced::widget::image::Handle>,
     pub requested: HashSet<String>,
     pub notice: Option<String>,
 }
@@ -116,17 +178,31 @@ impl Library {
             .unwrap_or_default();
         self.versions.sort_by_key(|backup| std::cmp::Reverse(*backup.when()));
         self.selected = Some(name);
+        self.tab = DetailTab::Overview;
         self.notice = None;
     }
 
     pub fn filtered<'a>(&self, games: &'a [vault::Game]) -> Vec<&'a vault::Game> {
         let query = self.query.trim().to_lowercase();
+        let cutoff = chrono::Local::now() - chrono::Duration::days(design::library::RECENT_DAYS);
         let mut result: Vec<_> = games
             .iter()
             .filter(|g| {
-                g.title.to_lowercase().contains(&query)
+                let platform_ok = match &self.platform {
+                    PlatformFilter::All => true,
+                    PlatformFilter::Pc => g.emulator.is_none(),
+                    PlatformFilter::Emulator(name) => g.emulator.as_deref() == Some(name),
+                };
+                let freshness_ok = match self.freshness {
+                    Freshness::Any => true,
+                    Freshness::Recent => g.last_backup >= cutoff,
+                    Freshness::Older => g.last_backup < cutoff,
+                };
+                let query_ok = query.is_empty()
+                    || g.title.to_lowercase().contains(&query)
                     || g.name.to_lowercase().contains(&query)
-                    || g.emulator.as_deref().unwrap_or("PC").to_lowercase().contains(&query)
+                    || g.emulator.as_deref().unwrap_or("PC").to_lowercase().contains(&query);
+                platform_ok && freshness_ok && query_ok
             })
             .collect();
         result.sort_by(|a, b| {
@@ -140,7 +216,8 @@ impl Library {
         result
     }
 
-    fn cover<'a>(&'a self, game: &'a vault::Game, width: f32, height: f32) -> Element<'a> {
+    fn portrait<'a>(&'a self, game: &'a vault::Game, width: f32, height: f32, round_bottom: bool) -> Element<'a> {
+        let radius = if round_bottom { design::RADIUS } else { 0.0 };
         if let Some(handle) = self.covers.get(&game.name) {
             iced::widget::image(handle.clone())
                 .width(width)
@@ -149,28 +226,19 @@ impl Library {
                 .border_radius(iced::border::Radius {
                     top_left: design::RADIUS,
                     top_right: design::RADIUS,
-                    bottom_left: 0.0,
-                    bottom_right: 0.0,
+                    bottom_left: radius,
+                    bottom_right: radius,
                 })
                 .into()
         } else {
             Container::new(
-                Column::new()
-                    .spacing(design::space::SM)
-                    .align_x(Alignment::Center)
-                    .push(
-                        text(game.title.chars().next().unwrap_or('?').to_string())
-                            .size(if width >= design::library::COVER_WIDTH {
-                                design::text::SUBTITLE
-                            } else {
-                                design::text::BODY
-                            })
-                            .font(font::TEXT_STRONG),
-                    )
-                    .push(
-                        (width >= design::library::COVER_WIDTH)
-                            .then(|| text("Sem capa").size(design::text::CAPTION).class(style::Text::Muted)),
-                    ),
+                text(game.title.chars().next().unwrap_or('?').to_string())
+                    .size(if height >= design::library::HERO_THUMB_HEIGHT {
+                        design::text::SUBTITLE
+                    } else {
+                        design::text::BODY
+                    })
+                    .font(font::TEXT_STRONG),
             )
             .center_x(width)
             .center_y(height)
@@ -179,39 +247,97 @@ impl Library {
         }
     }
 
+    /// The 16:9 frame. A portrait cover is not cropped: the frame is a blurred, darkened copy of
+    /// the same image with the sharp cover standing in the middle. Built when the cover loads.
+    fn banner<'a>(&'a self, game: &'a vault::Game, width: f32, height: f32) -> Element<'a> {
+        let radius = iced::border::Radius {
+            top_left: design::RADIUS,
+            top_right: design::RADIUS,
+            bottom_left: 0.0,
+            bottom_right: 0.0,
+        };
+        let picture: Element<'a> = if let Some(handle) = self.banners.get(&game.name) {
+            iced::widget::image(handle.clone())
+                .width(width)
+                .height(height)
+                .content_fit(iced::ContentFit::Cover)
+                .border_radius(radius)
+                .into()
+        } else {
+            Container::new(
+                Column::new()
+                    .spacing(design::space::XS)
+                    .align_x(Alignment::Center)
+                    .push(
+                        text(game.title.chars().next().unwrap_or('?').to_string())
+                            .size(design::text::SUBTITLE)
+                            .font(font::TEXT_STRONG),
+                    )
+                    .push(text("Sem capa").size(design::text::CAPTION).class(style::Text::Muted)),
+            )
+            .center_x(width)
+            .center_y(height)
+            .class(style::Container::Card)
+            .into()
+        };
+        Stack::new()
+            .width(width)
+            .height(height)
+            .push(picture)
+            .push(
+                Container::new(chip(platform_name(game)))
+                    .width(Length::Fill)
+                    .height(Length::Fill)
+                    .align_x(Alignment::End)
+                    .align_y(alignment::Vertical::Top)
+                    .padding(design::space::SM),
+            )
+            .into()
+    }
+
     fn card<'a>(&'a self, game: &'a vault::Game) -> Element<'a> {
-        let inner = design::library::COVER_WIDTH - 2.0 * design::library::CARD_PAD;
-        let title = ellipsize(&game.title, design::text_budget(inner, design::text::BODY, 2));
+        let inner = design::library::CARD_WIDTH - 2.0 * design::library::CARD_PAD;
+        let title = ellipsize(&game.title, design::text_budget(inner, design::text::SUBTITLE, 1));
         let body = Column::new()
-            .width(design::library::COVER_WIDTH)
-            .spacing(design::space::SM)
-            .push(self.cover(game, design::library::COVER_WIDTH, design::library::COVER_HEIGHT))
+            .width(design::library::CARD_WIDTH)
+            .push(self.banner(game, design::library::CARD_WIDTH, design::library::BANNER_HEIGHT))
             .push(
                 Container::new(
                     Column::new()
                         .spacing(design::space::XS)
                         .push(
+                            text(platform_name(game).to_uppercase())
+                                .size(design::text::CAPTION)
+                                .class(style::Text::Muted),
+                        )
+                        .push(
                             Container::new(
                                 text(title)
                                     .font(font::TEXT_STRONG)
-                                    .size(design::text::BODY)
+                                    .size(design::text::SUBTITLE)
                                     .line_height(design::leading::TIGHT)
-                                    .wrapping(iced::widget::text::Wrapping::Word),
+                                    .wrapping(iced::widget::text::Wrapping::None),
                             )
                             .width(Length::Fill)
                             .height(design::library::TITLE_BLOCK)
                             .clip(true),
                         )
+                        .push(chip(version_count(game.backups)))
                         .push(
-                            text(game.emulator.clone().unwrap_or_else(|| "PC".into()))
-                                .size(design::text::CAPTION)
-                                .class(style::Text::Muted),
-                        )
-                        .push(text(version_count(game.backups)).size(design::text::BODY))
-                        .push(
-                            text(format!("Último backup · {}", game.last_backup.format("%d/%m/%Y")))
-                                .size(design::text::CAPTION)
-                                .class(style::Text::Muted),
+                            Row::new()
+                                .width(Length::Fill)
+                                .align_y(Alignment::Center)
+                                .push(
+                                    text("Último backup")
+                                        .size(design::text::CAPTION)
+                                        .class(style::Text::Muted),
+                                )
+                                .push(iced::widget::space().width(Length::Fill))
+                                .push(
+                                    text(game.last_backup.format("%d/%m/%Y").to_string())
+                                        .size(design::text::CAPTION)
+                                        .class(style::Text::Muted),
+                                ),
                         ),
                 )
                 .width(Length::Fill)
@@ -220,7 +346,7 @@ impl Library {
         Tooltip::new(
             Button::new(body)
                 .padding(0)
-                .width(design::library::COVER_WIDTH)
+                .width(design::library::CARD_WIDTH)
                 .class(style::Button::LibraryCard)
                 .on_press(Message::Library(Event::Open(game.name.clone()))),
             text(game.title.clone()),
@@ -234,7 +360,7 @@ impl Library {
             Row::new()
                 .spacing(design::space::MD)
                 .align_y(Alignment::Center)
-                .push(self.cover(game, design::library::THUMB_WIDTH, design::library::THUMB_HEIGHT))
+                .push(self.portrait(game, design::library::THUMB_WIDTH, design::library::THUMB_HEIGHT, true))
                 .push(
                     Column::new()
                         .spacing(design::space::XS)
@@ -283,12 +409,36 @@ impl Library {
             .into();
         }
         let filtered = self.filtered(games);
-        let toolbar = Row::new()
+        let mut platforms = vec![PlatformFilter::All, PlatformFilter::Pc];
+        let mut names: Vec<String> = games.iter().filter_map(|game| game.emulator.clone()).collect();
+        names.sort();
+        names.dedup();
+        for name in names {
+            platforms.push(PlatformFilter::Emulator(name));
+        }
+        let selected_platform = platforms
+            .iter()
+            .find(|item| *item == &self.platform)
+            .cloned()
+            .unwrap_or_default();
+        let heading = Row::new()
+            .spacing(design::space::SM)
+            .align_y(Alignment::Center)
+            .push(text("Biblioteca").size(design::text::SUBTITLE).font(font::TEXT_STRONG))
+            .push(count_badge(games.len()))
+            .push(iced::widget::space().width(Length::Fill))
+            .push(pick_list(
+                [Sort::Recent, Sort::Name, Sort::Oldest],
+                Some(self.sort),
+                |s| Message::Library(Event::Sort(s)),
+            ));
+        let filters = Row::new()
             .spacing(design::space::SM)
             .align_y(Alignment::Center)
             .push(
                 TextInput::new("Buscar jogo ou emulador", &self.query)
                     .on_input(|q| Message::Library(Event::Search(q)))
+                    .icon(search_icon())
                     .size(design::text::BODY)
                     .line_height(iced::widget::text::LineHeight::Absolute(iced::Pixels(
                         design::control::LINE,
@@ -296,11 +446,20 @@ impl Library {
                     .padding([design::control::PAD_Y, design::control::PAD_X])
                     .width(Length::Fixed(design::control::SEARCH_WIDTH)),
             )
-            .push(pick_list(
-                [Sort::Recent, Sort::Name, Sort::Oldest],
-                Some(self.sort),
-                |s| Message::Library(Event::Sort(s)),
-            ))
+            .push(
+                pick_list(platforms, Some(selected_platform), |value| {
+                    Message::Library(Event::Platform(value))
+                })
+                .width(Length::Fixed(200.0)),
+            )
+            .push(
+                pick_list(
+                    [Freshness::Any, Freshness::Recent, Freshness::Older],
+                    Some(self.freshness),
+                    |value| Message::Library(Event::Freshness(value)),
+                )
+                .width(Length::Fixed(180.0)),
+            )
             .push(iced::widget::space().width(Length::Fill))
             .push(button::segment(
                 "Galeria".into(),
@@ -312,16 +471,15 @@ impl Library {
                 self.view == View::List,
                 Message::Library(Event::View(View::List)),
             ));
-        let mut body = Column::new().spacing(design::space::LG).push(toolbar).push(
-            text(format!(
-                "{} de {} jogos · {} versões no cofre",
-                filtered.len(),
-                games.len(),
-                games.iter().map(|g| g.backups).sum::<usize>()
-            ))
-            .size(design::text::CAPTION)
-            .class(style::Text::Muted),
-        );
+        let mut body = Column::new()
+            .spacing(design::space::MD)
+            .push(heading)
+            .push(filters)
+            .push((filtered.len() != games.len()).then(|| {
+                text(format!("{} de {} jogos", filtered.len(), games.len()))
+                    .size(design::text::CAPTION)
+                    .class(style::Text::Muted)
+            }));
         if let Some(notice) = &self.notice {
             body = body.push(text(notice));
         }
@@ -344,34 +502,18 @@ impl Library {
     }
 
     fn details<'a>(&'a self, game: &'a vault::Game, idle: bool) -> Element<'a> {
-        let mut info = Column::new()
-            .spacing(design::space::MD)
-            .width(Length::Fill)
-            .push(
-                text(game.title.clone())
-                    .size(design::text::TITLE)
-                    .font(font::TEXT_STRONG)
-                    .width(Length::Fill)
-                    .wrapping(iced::widget::text::Wrapping::Word),
-            )
-            .push(text(game.emulator.clone().unwrap_or_else(|| "PC".into())).class(style::Text::Muted))
-            .push(text(format!("{} para restaurar", version_count(game.backups))))
-            .push(text(format!(
-                "Último backup em {}",
-                game.last_backup.format("%d/%m/%Y às %H:%M")
-            )))
-            .push(
-                text(format!(
-                    "{} · {}",
-                    if game.files == 1 {
-                        "1 arquivo".into()
-                    } else {
-                        format!("{} arquivos", game.files)
-                    },
-                    crate::lang::TRANSLATOR.adjusted_size(game.bytes)
-                ))
-                .class(style::Text::Muted),
-            )
+        let newest = self.versions.first().cloned();
+        let restore = button::primary_bar(
+            "Restaurar última versão".into(),
+            newest
+                .as_ref()
+                .and_then(|backup| idle.then(|| Message::Library(Event::Preview(game.name.clone(), backup.clone())))),
+            Some("Abre a revisão do destino antes de escrever.".into()),
+        );
+        let mut actions = Row::new()
+            .spacing(design::space::SM)
+            .align_y(Alignment::Center)
+            .push(restore)
             .push(button::secondary(
                 "Fazer novo backup".into(),
                 idle.then(|| Message::Library(Event::Backup(game.name.clone()))),
@@ -383,74 +525,227 @@ impl Library {
                 None,
             ));
         if let Some(notice) = &self.notice {
-            info = info.push(text(notice));
+            actions = actions.push(text(notice.clone()).class(style::Text::OnDarkMuted));
         }
-        let mut body = Column::new()
+        let copy = Column::new()
+            .spacing(design::space::SM)
+            .width(Length::Fill)
+            .push(
+                text(platform_name(game).to_uppercase())
+                    .size(design::text::CAPTION)
+                    .class(style::Text::OnDarkMuted),
+            )
+            .push(
+                text(game.title.clone())
+                    .size(design::text::DISPLAY)
+                    .font(font::TEXT_STRONG)
+                    .class(style::Text::OnDark)
+                    .width(Length::Fill)
+                    .wrapping(iced::widget::text::Wrapping::Word),
+            )
+            .push(
+                text(format!(
+                    "{} para restaurar · último backup em {}",
+                    version_count(game.backups),
+                    game.last_backup.format("%d/%m/%Y às %H:%M")
+                ))
+                .class(style::Text::OnDarkMuted),
+            )
+            .push(
+                Row::new()
+                    .spacing(design::space::SM)
+                    .push(chip(version_count(game.backups)))
+                    .push(chip(file_count(game.files)))
+                    .push(chip(crate::lang::TRANSLATOR.adjusted_size(game.bytes))),
+            )
+            .push(actions);
+        let hero_body = Row::new()
             .spacing(design::space::XL)
+            .align_y(Alignment::Center)
+            .push(self.portrait(
+                game,
+                design::library::HERO_THUMB_WIDTH,
+                design::library::HERO_THUMB_HEIGHT,
+                true,
+            ))
+            .push(copy);
+        let hero_art: Element<'a> = if let Some(handle) = self.banners.get(&game.name) {
+            iced::widget::image(handle.clone())
+                .width(Length::Fill)
+                .height(design::library::HERO_HEIGHT)
+                .content_fit(iced::ContentFit::Cover)
+                .into()
+        } else {
+            Container::new(iced::widget::space())
+                .width(Length::Fill)
+                .height(design::library::HERO_HEIGHT)
+                .class(style::Container::Card)
+                .into()
+        };
+        let hero = Stack::new()
+            .width(Length::Fill)
+            .height(design::library::HERO_HEIGHT)
+            .push(hero_art)
+            .push(
+                Container::new(hero_body)
+                    .width(Length::Fill)
+                    .height(Length::Fill)
+                    .padding([design::space::LG, design::space::XL])
+                    .align_y(alignment::Vertical::Center),
+            );
+        let tabs = Row::new()
+            .spacing(design::space::SM)
+            .push(button::segment(
+                "Visão geral".into(),
+                self.tab == DetailTab::Overview,
+                Message::Library(Event::Tab(DetailTab::Overview)),
+            ))
+            .push(button::segment(
+                "Versões".into(),
+                self.tab == DetailTab::Versions,
+                Message::Library(Event::Tab(DetailTab::Versions)),
+            ))
+            .push(button::segment(
+                "Registros".into(),
+                self.tab == DetailTab::Records,
+                Message::Library(Event::Tab(DetailTab::Records)),
+            ));
+        let main = match self.tab {
+            DetailTab::Overview => self.overview(game),
+            DetailTab::Versions => self.version_list(game, idle),
+            DetailTab::Records => self.record_list(),
+        };
+        let page = Column::new()
+            .spacing(design::space::LG)
+            .width(Length::Fill)
             .push(button::secondary(
                 "Voltar à biblioteca".into(),
                 Some(Message::Library(Event::Back)),
                 None,
             ))
+            .push(hero)
+            .push(tabs)
             .push(
                 Row::new()
                     .spacing(design::space::XL)
-                    .push(self.cover(game, design::library::DETAIL_WIDTH, design::library::DETAIL_HEIGHT))
-                    .push(info),
-            )
-            .push(
-                text("Histórico de versões")
-                    .size(design::text::SUBTITLE)
-                    .font(font::TEXT_STRONG),
-            )
-            .push(
-                text("Escolha uma versão para revisar os arquivos e o destino antes de restaurar.")
-                    .class(style::Text::Muted),
+                    .align_y(Alignment::Start)
+                    .push(main)
+                    .push(self.side_facts(game)),
             );
-        for (index, backup) in self.versions.iter().enumerate() {
+        ScrollSubject::Restore
+            .into_widget(page.padding([design::space::LG, design::space::XXL]))
+            .into()
+    }
+
+    fn overview<'a>(&'a self, game: &'a vault::Game) -> Element<'a> {
+        let newest = self.versions.first();
+        let mut body = Column::new()
+            .spacing(design::space::SM)
+            .width(Length::Fill)
+            .push(text("O que está guardado").size(design::text::SUBTITLE).font(font::TEXT_STRONG))
+            .push(
+                text(format!(
+                    "Os saves de {} estão no cofre. Restaurar abre a revisão dos arquivos e do destino antes de escrever qualquer coisa.",
+                    game.title
+                ))
+                .class(style::Text::Muted),
+            );
+        if let Some(backup) = newest {
             let kind = if matches!(backup, Backup::Full(_)) {
-                "Completo"
+                "completa"
             } else {
-                "Diferencial"
+                "diferencial"
             };
-            let mut description = Column::new()
-                .spacing(design::space::XS)
-                .width(Length::Fill)
-                .push(text(backup.when_local().format("%d/%m/%Y às %H:%M").to_string()).font(font::TEXT_STRONG))
-                .push(
-                    text(format!(
-                        "{kind}{}{}",
-                        if index == 0 { " · Mais recente" } else { "" },
-                        if backup.locked() { " · Protegido" } else { "" }
-                    ))
-                    .class(style::Text::Muted),
-                );
+            body = body.push(text(format!(
+                "A versão mais recente é {kind}, de {}.",
+                backup.when_local().format("%d/%m/%Y às %H:%M")
+            )));
             if let Some(comment) = backup.comment() {
-                description = description.push(text(comment.clone()));
+                body = body.push(text(comment.clone()).class(style::Text::Muted));
             }
-            body = body.push(
+        } else {
+            body = body.push(text("As versões não estão mais disponíveis. Atualize a biblioteca."));
+        }
+        Container::new(body)
+            .padding(design::space::LG)
+            .width(Length::Fill)
+            .class(style::Container::Card)
+            .into()
+    }
+
+    fn version_list<'a>(&'a self, game: &'a vault::Game, idle: bool) -> Element<'a> {
+        let mut column = Column::new().spacing(design::space::MD).width(Length::Fill).push(
+            text("Escolha uma versão para revisar os arquivos e o destino antes de restaurar.")
+                .class(style::Text::Muted),
+        );
+        for (index, backup) in self.versions.iter().enumerate() {
+            column = column.push(version_card(game, backup, index == 0, idle));
+        }
+        if self.versions.is_empty() {
+            column = column.push(text("As versões não estão mais disponíveis. Atualize a biblioteca."));
+        }
+        column.into()
+    }
+
+    fn record_list<'a>(&'a self) -> Element<'a> {
+        let mut column = Column::new()
+            .spacing(design::space::MD)
+            .width(Length::Fill)
+            .push(text("Anotações gravadas com cada versão.").class(style::Text::Muted));
+        let mut any = false;
+        for backup in &self.versions {
+            let Some(comment) = backup.comment() else {
+                continue;
+            };
+            if comment.trim().is_empty() {
+                continue;
+            }
+            any = true;
+            column = column.push(
                 Container::new(
-                    Row::new()
-                        .spacing(design::space::MD)
-                        .align_y(Alignment::Center)
-                        .push(description)
-                        .push(button::secondary(
-                            "Revisar restauração".into(),
-                            idle.then(|| Message::Library(Event::Preview(game.name.clone(), backup.clone()))),
-                            None,
-                        )),
+                    Column::new()
+                        .spacing(design::space::XS)
+                        .push(text(backup.when_local().format("%d/%m/%Y às %H:%M").to_string()).font(font::TEXT_STRONG))
+                        .push(text(comment.clone())),
                 )
                 .padding(design::space::MD)
                 .width(Length::Fill)
                 .class(style::Container::Card),
             );
         }
-        if self.versions.is_empty() {
-            body = body.push(text("As versões não estão mais disponíveis. Atualize a biblioteca."));
+        if !any {
+            column = column.push(
+                Container::new(text("Nenhuma versão tem anotação.").class(style::Text::Muted))
+                    .padding(design::space::LG)
+                    .width(Length::Fill)
+                    .class(style::Container::Card),
+            );
         }
-        ScrollSubject::Restore
-            .into_widget(body.padding([design::space::LG, design::space::XXL]))
-            .into()
+        column.into()
+    }
+
+    fn side_facts<'a>(&'a self, game: &'a vault::Game) -> Element<'a> {
+        Container::new(
+            Column::new()
+                .spacing(design::space::SM)
+                .push(text("No cofre").size(design::text::SUBTITLE).font(font::TEXT_STRONG))
+                .push(text(platform_name(game)).class(style::Text::Muted))
+                .push(text(version_count(game.backups)))
+                .push(text(file_count(game.files)).class(style::Text::Muted))
+                .push(text(crate::lang::TRANSLATOR.adjusted_size(game.bytes)).class(style::Text::Muted))
+                .push(
+                    text(format!("Último backup em {}", game.last_backup.format("%d/%m/%Y"))).class(style::Text::Muted),
+                )
+                .push(
+                    text("A restauração não escreve direto. Ela abre a revisão do destino.")
+                        .size(design::text::CAPTION)
+                        .class(style::Text::Muted),
+                ),
+        )
+        .padding(design::space::LG)
+        .width(design::library::SIDE_WIDTH)
+        .class(style::Container::Card)
+        .into()
     }
 }
 
@@ -479,39 +774,39 @@ fn decode(bytes: &[u8]) -> Result<image::DynamicImage, String> {
         .map_err(|_| "Não foi possível ler a imagem. Escolha um arquivo PNG ou JPEG válido.".into())
 }
 
-fn persist(game: &str, bytes: &[u8], manual: bool) -> Result<iced::widget::image::Handle, String> {
-    let image = decode(bytes)?.thumbnail(600, 900);
+fn loaded_from_image(image: &image::DynamicImage) -> LoadedCover {
+    let portrait = image.thumbnail(300, 450).to_rgba8();
+    let banner = landscape_frame(image);
+    LoadedCover {
+        portrait: iced::widget::image::Handle::from_rgba(portrait.width(), portrait.height(), portrait.into_raw()),
+        banner: iced::widget::image::Handle::from_rgba(banner.width(), banner.height(), banner.into_raw()),
+    }
+}
+
+fn persist(game: &str, bytes: &[u8], manual: bool) -> Result<LoadedCover, String> {
+    let image = decode(bytes)?;
     let path = cover_path(game, manual);
     std::fs::create_dir_all(path.parent().unwrap()).map_err(|e| e.to_string())?;
     image
+        .thumbnail(600, 900)
         .save_with_format(&path, image::ImageFormat::Png)
         .map_err(|e| e.to_string())?;
-    let rgba = image.thumbnail(300, 450).to_rgba8();
-    Ok(iced::widget::image::Handle::from_rgba(
-        rgba.width(),
-        rgba.height(),
-        rgba.into_raw(),
-    ))
+    Ok(loaded_from_image(&image))
 }
 
-pub fn import_cover(game: &str, path: PathBuf) -> Result<Option<iced::widget::image::Handle>, String> {
+pub fn import_cover(game: &str, path: PathBuf) -> Result<Option<LoadedCover>, String> {
     if std::fs::metadata(&path).map_err(|e| e.to_string())?.len() > 12 * 1024 * 1024 {
         return Err("A capa deve ter no máximo 12 MB.".into());
     }
     persist(game, &std::fs::read(path).map_err(|e| e.to_string())?, true).map(Some)
 }
 
-pub async fn fetch_cover(game: String, steam: Option<u32>) -> Result<Option<iced::widget::image::Handle>, String> {
+pub async fn fetch_cover(game: String, steam: Option<u32>) -> Result<Option<LoadedCover>, String> {
     for manual in [true, false] {
         if let Ok(bytes) = std::fs::read(cover_path(&game, manual))
             && let Ok(image) = decode(&bytes)
         {
-            let rgba = image.thumbnail(300, 450).to_rgba8();
-            return Ok(Some(iced::widget::image::Handle::from_rgba(
-                rgba.width(),
-                rgba.height(),
-                rgba.into_raw(),
-            )));
+            return Ok(Some(loaded_from_image(&image)));
         }
     }
     let Some(id) = steam else {
@@ -547,6 +842,47 @@ pub async fn fetch_cover(game: String, steam: Option<u32>) -> Result<Option<iced
         return import_cover(&game, cover_path(&game, true));
     }
     persist(&game, &bytes, false).map(Some)
+}
+
+/// A 16:9 frame for a cover that is usually a portrait.
+///
+/// There is no separate landscape art. The background is the same cover, scaled to fill, blurred
+/// and darkened. The sharp cover is fitted inside that frame and centered, so a 2:3 box is not
+/// cropped down to a face or a logo.
+fn landscape_frame(source: &image::DynamicImage) -> image::RgbaImage {
+    const FRAME_W: u32 = 960;
+    const FRAME_H: u32 = 540;
+    let backdrop = cover_crop(source, 320, 180);
+    let backdrop = image::imageops::blur(&backdrop, 8.0);
+    let mut frame = image::DynamicImage::ImageRgba8(backdrop)
+        .resize_exact(FRAME_W, FRAME_H, image::imageops::FilterType::Triangle)
+        .to_rgba8();
+    for pixel in frame.pixels_mut() {
+        pixel[0] = (f32::from(pixel[0]) * 0.38) as u8;
+        pixel[1] = (f32::from(pixel[1]) * 0.38) as u8;
+        pixel[2] = (f32::from(pixel[2]) * 0.38) as u8;
+    }
+    let sharp = source
+        .resize(
+            FRAME_W * 2 / 5,
+            FRAME_H.saturating_sub(48),
+            image::imageops::FilterType::Triangle,
+        )
+        .to_rgba8();
+    let x = FRAME_W.saturating_sub(sharp.width()) / 2;
+    let y = FRAME_H.saturating_sub(sharp.height()) / 2;
+    image::imageops::overlay(&mut frame, &sharp, i64::from(x), i64::from(y));
+    frame
+}
+
+fn cover_crop(source: &image::DynamicImage, width: u32, height: u32) -> image::RgbaImage {
+    let scale = (width as f32 / source.width().max(1) as f32).max(height as f32 / source.height().max(1) as f32);
+    let scaled_w = ((source.width() as f32) * scale).ceil().max(width as f32) as u32;
+    let scaled_h = ((source.height() as f32) * scale).ceil().max(height as f32) as u32;
+    let scaled = source.resize_exact(scaled_w, scaled_h, image::imageops::FilterType::Triangle);
+    let x = scaled_w.saturating_sub(width) / 2;
+    let y = scaled_h.saturating_sub(height) / 2;
+    scaled.crop_imm(x, y, width, height).to_rgba8()
 }
 
 #[cfg(test)]
@@ -594,6 +930,37 @@ mod tests {
         assert!(decode(b"<html>erro</html>").is_err());
     }
     #[test]
+    fn filtra_por_plataforma_sem_trocar_identidade() {
+        let games = vec![
+            game("SLUS-00594", "Final Fantasy VII", 1),
+            vault::Game {
+                emulator: None,
+                ..game("hk", "Hollow Knight", 2)
+            },
+        ];
+        let mut library = Library {
+            platform: PlatformFilter::Pc,
+            ..Library::default()
+        };
+        assert_eq!(library.filtered(&games)[0].name, "hk");
+        library.platform = PlatformFilter::Emulator("DuckStation".into());
+        assert_eq!(library.filtered(&games)[0].name, "SLUS-00594");
+    }
+
+    #[test]
+    fn quadro_horizontal_nao_corta_a_capa() {
+        let image = image::RgbaImage::from_pixel(20, 30, image::Rgba([220, 40, 40, 255]));
+        let frame = landscape_frame(&image::DynamicImage::ImageRgba8(image));
+        assert_eq!((frame.width(), frame.height()), (960, 540));
+        let center = frame.get_pixel(480, 270);
+        let corner = frame.get_pixel(4, 4);
+        assert!(
+            u16::from(center[0]) > u16::from(corner[0]) + 40,
+            "a capa nítida fica no centro e o fundo desfocado fica escurecido"
+        );
+    }
+
+    #[test]
     fn capa_usa_chave_opaca_sem_caminho_do_jogo() {
         let path = cover_path("../../jogo", true);
         assert_eq!(path.parent().unwrap(), directory().join("covers"));
@@ -607,6 +974,84 @@ fn version_count(count: usize) -> String {
     } else {
         format!("{count} versões")
     }
+}
+
+fn file_count(count: usize) -> String {
+    if count == 1 {
+        "1 arquivo".into()
+    } else {
+        format!("{count} arquivos")
+    }
+}
+
+fn platform_name(game: &vault::Game) -> String {
+    game.emulator.clone().unwrap_or_else(|| "PC".into())
+}
+
+fn chip<'a>(label: impl Into<String>) -> Element<'a> {
+    Container::new(text(label.into()).size(design::text::CAPTION))
+        .padding([2.0, design::space::SM])
+        .class(style::Container::Chip { positive: false })
+        .into()
+}
+
+fn count_badge<'a>(count: usize) -> Element<'a> {
+    Container::new(
+        text(count.to_string())
+            .size(design::text::CAPTION)
+            .font(font::TEXT_STRONG),
+    )
+    .padding([2.0, design::space::SM])
+    .class(style::Container::Chip { positive: true })
+    .into()
+}
+
+fn search_icon() -> iced::widget::text_input::Icon<iced::Font> {
+    iced::widget::text_input::Icon {
+        font: font::ICONS,
+        code_point: Icon::Search.as_char(),
+        size: Some(iced::Pixels(design::icon::SM)),
+        spacing: design::space::SM,
+        side: iced::widget::text_input::Side::Left,
+    }
+}
+
+fn version_card<'a>(game: &'a vault::Game, backup: &'a Backup, newest: bool, idle: bool) -> Element<'a> {
+    let kind = if matches!(backup, Backup::Full(_)) {
+        "Completo"
+    } else {
+        "Diferencial"
+    };
+    let mut description = Column::new()
+        .spacing(design::space::XS)
+        .width(Length::Fill)
+        .push(text(backup.when_local().format("%d/%m/%Y às %H:%M").to_string()).font(font::TEXT_STRONG))
+        .push(
+            text(format!(
+                "{kind}{}{}",
+                if newest { " · Mais recente" } else { "" },
+                if backup.locked() { " · Protegido" } else { "" }
+            ))
+            .class(style::Text::Muted),
+        );
+    if let Some(comment) = backup.comment() {
+        description = description.push(text(comment.clone()));
+    }
+    Container::new(
+        Row::new()
+            .spacing(design::space::MD)
+            .align_y(Alignment::Center)
+            .push(description)
+            .push(button::secondary(
+                "Revisar restauração".into(),
+                idle.then(|| Message::Library(Event::Preview(game.name.clone(), backup.clone()))),
+                None,
+            )),
+    )
+    .padding(design::space::MD)
+    .width(Length::Fill)
+    .class(style::Container::Card)
+    .into()
 }
 
 /// Cuts a title so it stays inside the card. The full name stays on the tooltip.

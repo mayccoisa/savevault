@@ -625,7 +625,7 @@ pub fn open_url_icon<'a>(url: String) -> Element<'a> {
 pub fn side_nav<'a>(screen: Screen, current_screen: Screen) -> Button<'a> {
     let label = match screen {
         Screen::Backup => TRANSLATOR.nav_backup_button(),
-        Screen::Restore => "Biblioteca".into(),
+        Screen::Restore => TRANSLATOR.nav_library_button(),
         Screen::CustomGames => TRANSLATOR.nav_custom_games_button(),
         Screen::Emulators => TRANSLATOR.nav_emulators_button(),
         Screen::Logs => TRANSLATOR.nav_logs_button(),

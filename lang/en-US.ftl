@@ -31,6 +31,7 @@ button-preview = Preview
 button-restore = Restore
 button-nav-backup = Backup
 button-nav-restore = Restore
+button-nav-library = Library
 button-nav-custom-games = Custom games
 button-nav-settings = Settings
 # Section headings on the Settings screen.

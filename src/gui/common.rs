@@ -701,7 +701,7 @@ impl Screen {
     pub fn title(&self) -> String {
         match self {
             Self::Backup => TRANSLATOR.nav_backup_button(),
-            Self::Restore => "Biblioteca".into(),
+            Self::Restore => TRANSLATOR.nav_library_button(),
             Self::CustomGames => TRANSLATOR.nav_custom_games_button(),
             Self::Emulators => TRANSLATOR.nav_emulators_button(),
             Self::Logs => TRANSLATOR.nav_logs_button(),

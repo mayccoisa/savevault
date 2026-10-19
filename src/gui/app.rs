@@ -1359,6 +1359,19 @@ impl App {
                 self.reset_scroll_position(ScrollSubject::Restore);
                 return self.refresh_scroll_position();
             }
+            Event::Platform(value) => {
+                self.restore_screen.library.platform = value;
+                self.reset_scroll_position(ScrollSubject::Restore);
+                return self.refresh_scroll_position();
+            }
+            Event::Freshness(value) => {
+                self.restore_screen.library.freshness = value;
+                self.reset_scroll_position(ScrollSubject::Restore);
+                return self.refresh_scroll_position();
+            }
+            Event::Tab(value) => {
+                self.restore_screen.library.tab = value;
+            }
             Event::Open(name) => {
                 self.restore_screen.library.open(name, &self.config);
                 self.reset_scroll_position(ScrollSubject::Restore);
@@ -1438,8 +1451,9 @@ impl App {
             }
             Event::CoverChosen(_, None) => {}
             Event::CoverReady(game, result) => match result {
-                Ok(Some(handle)) => {
-                    self.restore_screen.library.covers.insert(game, handle);
+                Ok(Some(art)) => {
+                    self.restore_screen.library.covers.insert(game.clone(), art.portrait);
+                    self.restore_screen.library.banners.insert(game, art.banner);
                 }
                 Ok(None) => {}
                 Err(message) => {
@@ -3321,19 +3335,12 @@ impl App {
                 .spacing(design::space::MD)
                 .align_y(Alignment::Center)
                 .push(
-                    Column::new()
-                        .spacing(design::space::XS)
-                        .push(
-                            text(self.screen.title())
-                                .font(font::TEXT_STRONG)
-                                .size(design::text::TITLE)
-                                .line_height(design::leading::TITLE),
-                        )
-                        .push((self.screen == Screen::Restore).then(|| {
-                            text("Seus jogos, versões e progresso protegido")
-                                .size(design::text::CAPTION)
-                                .class(style::Text::Muted)
-                        })),
+                    Column::new().spacing(design::space::XS).push(
+                        text(self.screen.title())
+                            .font(font::TEXT_STRONG)
+                            .size(design::text::TITLE)
+                            .line_height(design::leading::TITLE),
+                    ),
                 )
                 .push(iced::widget::space().width(Length::Fill))
                 .push(match self.screen {

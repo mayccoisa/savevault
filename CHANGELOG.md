@@ -5,7 +5,9 @@ Everything under "Inherited from Ludusavi" is the upstream history, with its own
 
 ## SaveVault (não publicado)
 
-- A biblioteca cabe mais jogos por linha. As capas ficaram menores, o título longo termina em reticências, e a busca deixou de ocupar a largura da janela.
+- A biblioteca mostra cards largos: capa em quadro horizontal, plataforma, título, quantidade de versões e a data do último backup. A busca ficou separada dos filtros.
+- A página do jogo abre em tela cheia, com a arte de fundo, a ação de restaurar a última versão e as abas de visão geral, versões e registros.
+- Um cofre novo abre em português. A barra lateral deixou de misturar inglês com o resto da tela.
 - Atualizar, trocar o cofre e a restauração em lote saíram da fileira de botões e foram para um menu. O nome do cofre continua visível.
 - O texto dos botões e do item ativo da barra lateral ficou centralizado no controle.
 - Biblioteca em galeria ou lista compacta, com busca, ordenação, último backup e quantidade de versões.

@@ -11,10 +11,12 @@ O clique abre detalhes, histórico e ações. A restauração passa pela revisã
 
 ## Densidade
 
-A capa da grelha é 128×192. Título com mais de duas linhas é cortado com reticências; o nome
-inteiro fica na dica. Busca, ordenação e o par Galeria/Lista ficam na faixa da grelha. Atualizar,
-trocar o cofre e a restauração em lote ficam no menu da barra de título. As regras de tamanho e de
-qual botão usar estão em [design-system.md](design-system.md).
+O card é largo, com quadro 16:9 em cima e plataforma, título, chip de versões e data embaixo.
+Quatro cabem em 1280 px. Título de uma linha ganha reticências; o nome inteiro fica na dica. A
+busca fica numa linha com os filtros de plataforma e de status; a ordenação fica na linha do
+título, ao lado do total. O clique abre a página do jogo. Atualizar, trocar o cofre e a
+restauração em lote ficam no menu da barra de título. As regras estão em
+[design-system.md](design-system.md).
 
 ## Capas
 

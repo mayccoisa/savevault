@@ -2212,7 +2212,7 @@ mod tests {
                     enable: true,
                     secondary: vec![]
                 },
-                language: Language::English,
+                language: Language::PortugueseBrazilian,
                 theme: Theme::Dark,
                 accent: Accent::Green,
                 roots: vec![],
@@ -2337,7 +2337,7 @@ mod tests {
                         enable: true,
                     }]
                 },
-                language: Language::English,
+                language: Language::PortugueseBrazilian,
                 theme: Theme::Dark,
                 accent: Accent::Green,
                 roots: vec![Root::new("~/steam", Store::Steam), Root::new("~/other", Store::Other),],

@@ -25,6 +25,7 @@ button-preview = Visualizar
 button-restore = Restaurar
 button-nav-backup = Backup
 button-nav-restore = Restauração
+button-nav-library = Biblioteca
 button-nav-custom-games = Jogos personalizados
 button-nav-settings = Configurações
 settings-appearance = Aparência

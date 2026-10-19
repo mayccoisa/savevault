@@ -59,9 +59,12 @@ pub mod text {
     /// with [`font::TEXT_STRONG`](crate::gui::font::TEXT_STRONG) instead of a bigger jump in size.
     pub const SUBTITLE: f32 = 16.0;
 
-    /// The screen title in the top bar. The largest type in the app, and there is exactly one of it
-    /// on screen at a time.
+    /// The screen title in the top bar. One per screen.
     pub const TITLE: f32 = 20.0;
+
+    /// The name of a game on its own page. Larger than the screen title because the screen title
+    /// there is still "Biblioteca" and the game is the subject of the page.
+    pub const DISPLAY: f32 = 28.0;
 }
 
 /// How many characters of a single-line label fit in `width` at `font_size`.
@@ -242,30 +245,42 @@ pub mod emulator_card {
     pub const LOGO: f32 = 28.0;
 }
 
-/// The library gallery.
+/// The library catalogue.
 ///
-/// Covers keep the 2:3 ratio of a portrait, at a size where the minimum window (1036px, sidebar
-/// included) still fits a full row of them. A cover that dominates the row is a poster, not a
-/// catalogue.
+/// A card is wide, not a poster. Four of them fit a 1280px window once the sidebar and the page
+/// margin are subtracted. The art on the card is a 16:9 frame; the stored cover is often a 2:3
+/// portrait, and that portrait is composed into the frame rather than cropped.
 pub mod library {
-    /// Portrait, 2:3.
-    pub const COVER_WIDTH: f32 = 128.0;
-    pub const COVER_HEIGHT: f32 = 192.0;
+    /// Wide enough for four cards at 1280px, narrow enough for three at the minimum window.
+    pub const CARD_WIDTH: f32 = 228.0;
 
-    /// The cover on a game's own page. Larger than the grid, still the same ratio.
-    pub const DETAIL_WIDTH: f32 = 160.0;
-    pub const DETAIL_HEIGHT: f32 = 240.0;
+    /// 16:9, the frame on top of a card.
+    pub const BANNER_HEIGHT: f32 = 128.0;
 
-    /// Padding inside the text block under a cover.
+    /// Padding inside the text block under the art.
     pub const CARD_PAD: f32 = super::space::SM;
 
-    /// Two lines of body type. Anything longer is ellipsized, not wrapped out of the card.
-    pub const TITLE_BLOCK: f32 = 36.0;
+    /// One line. A second line makes the row of cards uneven.
+    pub const TITLE_BLOCK: f32 = 20.0;
 
-    pub const THUMB_WIDTH: f32 = 36.0;
-    pub const THUMB_HEIGHT: f32 = 54.0;
+    /// Portrait thumb in the list and on the game page. 2:3, the cover's own ratio.
+    pub const THUMB_WIDTH: f32 = 48.0;
+    pub const THUMB_HEIGHT: f32 = 72.0;
+
+    /// The cover standing next to the title on the game page.
+    pub const HERO_THUMB_WIDTH: f32 = 88.0;
+    pub const HERO_THUMB_HEIGHT: f32 = 132.0;
+
+    /// The darkened art behind the game page header.
+    pub const HERO_HEIGHT: f32 = 248.0;
+
+    /// The column of facts beside the tabs.
+    pub const SIDE_WIDTH: f32 = 260.0;
 
     /// Gap between cards. Tighter than the space between sections, because a row of covers is
     /// one group.
     pub const GAP: f32 = super::space::MD;
+
+    /// "Backup recente" means the newest copy is inside this many days.
+    pub const RECENT_DAYS: i64 = 30;
 }

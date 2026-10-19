@@ -53,15 +53,54 @@ a largura (240).
 
 ## Densidade
 
-Uma tela de ferramenta mostra caminho, data e contagem. Título de 25 px, barra de 96 px, capa de
-192×288 e campo de busca na largura da janela competiam entre si e cabiam quatro capas por linha.
+Uma tela de ferramenta mostra caminho, data e contagem. Título de 25 px, barra de 96 px e capa
+vertical de 192×288 competiam entre si.
 
-A galeria usa capa 128×192 (proporção 2:3). Na janela mínima (1036 px, com a sidebar) cabem cinco
-capas; numa janela de 1280 px cabem sete. O título do card tem no máximo duas linhas e o que não
-cabe vira reticências. O nome inteiro continua na dica. A página do jogo usa 160×240, a mesma
-proporção, porque ali a capa é o assunto e não um item de uma grelha.
+O card da biblioteca é largo (228 px). Em 1280 px cabem quatro; na janela mínima cabem três. O
+título do card tem uma linha e o que não cabe vira reticências. O nome inteiro continua na dica.
+O espaço entre cards é 12. O espaço entre seções continua 24.
 
-O espaço entre capas é 12. O espaço entre seções continua 24.
+O nome do jogo na página dele é 28 px (`text::DISPLAY`). É o único tipo acima do título de tela,
+porque nessa página o título de tela continua sendo "Biblioteca" e o assunto é o jogo.
+
+## Card da biblioteca
+
+O card abre a página do jogo. Não abre painel nem diálogo.
+
+De cima para baixo:
+
+1. Quadro 16:9. O selo no canto direito é a plataforma (PC ou o nome do emulador).
+2. A mesma plataforma em caixa-alta, pequena. Repete o selo de propósito: a arte compete com o
+   texto, e a linha continua legível quando a capa é escura.
+3. Título, uma linha.
+4. Chip com a quantidade de versões.
+5. Rodapé: "Último backup" à esquerda, a data à direita.
+
+Não existe arte horizontal separada da capa. A capa Steam é retrato 2:3. O quadro é montado quando
+a imagem carrega: o fundo é a mesma capa ampliada, desfocada e escurecida, e a capa nítida fica
+centralizada, sem corte. A miniatura da página e a lista continuam com o retrato inteiro.
+
+## Barra da biblioteca
+
+Duas linhas, e a busca não divide a linha com a ordenação.
+
+1. "Biblioteca", um badge com o total de jogos no cofre, e a ordenação à direita.
+2. Campo de busca com ícone de lupa, depois os selects de plataforma e de status. Galeria e Lista
+   ficam no fim dessa linha.
+
+Plataforma lista o que o cofre realmente tem (PC e cada emulador). Status é "Qualquer", "Backup
+recente" (o mais novo tem até 30 dias) ou "Backup antigo". Quando o filtro reduz a lista, uma
+legenda diz quantos jogos estão visíveis. O badge continua sendo o total.
+
+## Página do jogo
+
+"Voltar à biblioteca" fica acima do hero. O hero é o mesmo quadro 16:9, escurecido, na largura da
+página. Sobre ele: a miniatura do retrato, a plataforma pequena, o título grande, a data, os chips
+e as ações. A ação primária é "Restaurar última versão" e ela abre a revisão do destino; não
+escreve. "Fazer novo backup" e "Escolher capa" são secundárias.
+
+Abaixo, três abas — Visão geral, Versões, Registros — e uma coluna à direita com o que o cofre
+guarda. Versões lista cada cópia com "Revisar restauração". Registros mostra só as anotações.
 
 ## Qual botão usar
 
