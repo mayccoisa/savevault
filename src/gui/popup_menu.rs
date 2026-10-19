@@ -6,7 +6,7 @@ use std::borrow::Cow;
 
 pub use iced::widget::pick_list::{Catalog, Status};
 use iced::{
-    Border, Element, Length, Padding, Rectangle, Shadow, Size, Vector,
+    Border, Element, Length, Padding, Point, Rectangle, Shadow, Size, Vector,
     advanced::{
         self, Clipboard, Layout, Shell, Widget, layout, overlay, renderer, text,
         widget::tree::{self, Tree},
@@ -14,9 +14,16 @@ use iced::{
     alignment,
     event::Event,
     mouse, touch,
-    widget::overlay::menu::{self, Menu},
+    widget::overlay::menu,
     window,
 };
+
+/// A row in a [`PopupMenu`]. The icon is optional; every menu in the app sets one.
+pub trait Entry: Clone + Eq + ToString + 'static {
+    fn icon(&self) -> Option<crate::gui::icon::Icon> {
+        None
+    }
+}
 
 /// A widget for selecting a single value from a list of options.
 #[allow(missing_debug_implementations)]
@@ -39,7 +46,7 @@ where
 
 impl<'a, T: 'a, Message, Theme, Renderer> PopupMenu<'a, T, Message, Theme, Renderer>
 where
-    T: ToString + Eq,
+    T: Entry,
     [T]: ToOwned<Owned = Vec<T>>,
     Theme: Catalog,
     Renderer: text::Renderer,
@@ -85,10 +92,10 @@ where
 impl<'a, T: 'a, Message, Theme, Renderer> Widget<Message, Theme, Renderer>
     for PopupMenu<'a, T, Message, Theme, Renderer>
 where
-    T: Clone + ToString + Eq + 'static,
+    T: Entry,
     [T]: ToOwned<Owned = Vec<T>>,
     Message: 'a,
-    Theme: Catalog,
+    Theme: Catalog + menu::Catalog,
     Renderer: text::Renderer<Font = iced::Font> + 'a,
 {
     fn tag(&self) -> tree::Tag {
@@ -126,7 +133,7 @@ where
                 .expand(self.padding)
         };
 
-        layout::Node::new(Size::new(size.width, 24.0))
+        layout::Node::new(Size::new(size.width, crate::gui::design::control::HEIGHT))
     }
 
     fn update(
@@ -146,21 +153,14 @@ where
             Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Left))
             | Event::Touch(touch::Event::FingerPressed { .. }) => {
                 if state.is_open {
-                    // Event wasn't processed by overlay, so cursor was clicked either outside its
-                    // bounds or on the drop-down, either way we close the overlay.
+                    // Event wasn't processed by overlay, so the pointer was outside the menu or on
+                    // the button. Either way the menu closes. A click on a row is captured there.
                     state.is_open = false;
+                    state.hovered = None;
 
                     shell.capture_event();
                 } else if cursor.is_over(layout.bounds()) {
                     state.is_open = !self.options.is_empty();
-
-                    shell.capture_event();
-                }
-
-                if let Some(last_selection) = state.last_selection.take() {
-                    shell.publish((self.on_selected.as_ref())(last_selection));
-
-                    state.is_open = false;
 
                     shell.capture_event();
                 }
@@ -257,7 +257,7 @@ where
                 },
                 align_x: advanced::text::Alignment::Center,
                 align_y: alignment::Vertical::Center,
-                line_height: text::LineHeight::default(),
+                line_height: text::LineHeight::Relative(crate::gui::design::leading::TIGHT),
                 shaping: text::Shaping::Advanced,
                 wrapping: text::Wrapping::Word,
             },
@@ -271,55 +271,43 @@ where
         &'b mut self,
         tree: &'b mut Tree,
         layout: Layout<'b>,
-        renderer: &Renderer,
-        viewport: &Rectangle,
+        _renderer: &Renderer,
+        _viewport: &Rectangle,
         translation: Vector,
     ) -> Option<overlay::Element<'b, Message, Theme, Renderer>> {
         let state = tree.state.downcast_mut::<State<T>>();
-
-        if state.is_open {
-            let bounds = layout.bounds();
-
-            let mut menu = Menu::new(
-                &mut state.menu,
-                &self.options,
-                &mut state.hovered_option,
-                |option| {
-                    state.is_open = false;
-
-                    (self.on_selected)(option)
-                },
-                None,
-                &self.menu_style,
-            )
-            .width(150.0)
-            .padding(self.padding)
-            .font(self.font.unwrap_or_else(|| renderer.default_font()))
-            .text_shaping(text::Shaping::Advanced);
-
-            if let Some(text_size) = self.text_size {
-                menu = menu.text_size(text_size);
-            }
-
-            Some(menu.overlay(
-                layout.position() + translation,
-                *viewport,
-                bounds.height,
-                Length::Shrink,
-            ))
-        } else {
-            None
+        if !state.is_open {
+            return None;
         }
+
+        let bounds = layout.bounds();
+        let anchor = Rectangle {
+            x: bounds.x + translation.x,
+            y: bounds.y + translation.y,
+            ..bounds
+        };
+        let font = self.font.unwrap_or_else(|| _renderer.default_font());
+        let text_size = self.text_size.unwrap_or(crate::gui::design::text::BODY);
+
+        Some(overlay::Element::new(Box::new(Panel {
+            options: self.options.clone().into_owned(),
+            on_selected: &self.on_selected,
+            state,
+            anchor,
+            class: &self.menu_style,
+            font,
+            text_size,
+        })))
     }
 }
 
 impl<'a, T: 'a, Message, Theme, Renderer> From<PopupMenu<'a, T, Message, Theme, Renderer>>
     for Element<'a, Message, Theme, Renderer>
 where
-    T: Clone + ToString + Eq + 'static,
+    T: Entry,
     [T]: ToOwned<Owned = Vec<T>>,
     Message: 'a,
-    Theme: Catalog + 'a,
+    Theme: Catalog + menu::Catalog + 'a,
     Renderer: text::Renderer<Font = iced::Font> + 'a,
 {
     fn from(pick_list: PopupMenu<'a, T, Message, Theme, Renderer>) -> Self {
@@ -330,20 +318,218 @@ where
 /// The local state of a [`PopupMenu`].
 #[derive(Debug)]
 pub struct State<T> {
-    menu: menu::State,
     is_open: bool,
-    hovered_option: Option<usize>,
-    last_selection: Option<T>,
+    hovered: Option<usize>,
+    _option: std::marker::PhantomData<T>,
 }
 
 impl<T> State<T> {
     /// Creates a new [`State`] for a [`PopupMenu`].
     pub fn new() -> Self {
         Self {
-            menu: menu::State::default(),
             is_open: bool::default(),
-            hovered_option: Option::default(),
-            last_selection: Option::default(),
+            hovered: None,
+            _option: std::marker::PhantomData,
+        }
+    }
+}
+
+/// The open menu. Drawn under the button, and slid left when the right edge of the window would
+/// clip it. Rows carry an icon and a label with the same inset, and the hover is a veil rather
+/// than a solid accent.
+struct Panel<'a, 'b, T, Message, Theme>
+where
+    Theme: menu::Catalog,
+{
+    options: Vec<T>,
+    on_selected: &'a dyn Fn(T) -> Message,
+    state: &'a mut State<T>,
+    anchor: Rectangle,
+    class: &'a <Theme as menu::Catalog>::Class<'b>,
+    font: iced::Font,
+    text_size: f32,
+}
+
+impl<T, Message, Theme> Panel<'_, '_, T, Message, Theme>
+where
+    T: Entry,
+    Theme: menu::Catalog,
+{
+    fn place(&self, viewport: Size) -> Rectangle {
+        let height =
+            crate::gui::design::menu::PAD * 2.0 + self.options.len() as f32 * crate::gui::design::menu::ITEM_HEIGHT;
+        let width = crate::gui::design::menu::WIDTH;
+        let mut x = self.anchor.x;
+        let mut y = self.anchor.y + self.anchor.height + crate::gui::design::space::XS;
+        if x + width > viewport.width {
+            x = (viewport.width - width).max(0.0);
+        }
+        if y + height > viewport.height {
+            let above = self.anchor.y - crate::gui::design::space::XS - height;
+            if above >= 0.0 {
+                y = above;
+            }
+        }
+        Rectangle { x, y, width, height }
+    }
+
+    fn row_at(&self, bounds: Rectangle, cursor: mouse::Cursor) -> Option<usize> {
+        let point = cursor.position()?;
+        if !bounds.contains(point) {
+            return None;
+        }
+        let local = point.y - bounds.y - crate::gui::design::menu::PAD;
+        if local < 0.0 {
+            return None;
+        }
+        let index = (local / crate::gui::design::menu::ITEM_HEIGHT) as usize;
+        (index < self.options.len()).then_some(index)
+    }
+}
+
+impl<T, Message, Theme, Renderer> overlay::Overlay<Message, Theme, Renderer> for Panel<'_, '_, T, Message, Theme>
+where
+    T: Entry,
+    Theme: menu::Catalog,
+    Renderer: text::Renderer<Font = iced::Font>,
+{
+    fn layout(&mut self, _renderer: &Renderer, bounds: Size) -> layout::Node {
+        let place = self.place(bounds);
+        layout::Node::new(place.size()).move_to(Point::new(place.x, place.y))
+    }
+
+    fn update(
+        &mut self,
+        event: &Event,
+        layout: Layout<'_>,
+        cursor: mouse::Cursor,
+        _renderer: &Renderer,
+        _clipboard: &mut dyn Clipboard,
+        shell: &mut Shell<'_, Message>,
+    ) {
+        let bounds = layout.bounds();
+        let hovered = self.row_at(bounds, cursor);
+        if self.state.hovered != hovered {
+            self.state.hovered = hovered;
+            shell.request_redraw();
+        }
+
+        if let Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Left))
+        | Event::Touch(touch::Event::FingerPressed { .. }) = event
+            && let Some(index) = hovered
+            && let Some(option) = self.options.get(index).cloned()
+        {
+            self.state.is_open = false;
+            shell.publish((self.on_selected)(option));
+            shell.capture_event();
+        }
+    }
+
+    fn draw(
+        &self,
+        renderer: &mut Renderer,
+        theme: &Theme,
+        _style: &renderer::Style,
+        layout: Layout<'_>,
+        cursor: mouse::Cursor,
+    ) {
+        let bounds = layout.bounds();
+        let style = <Theme as menu::Catalog>::style(theme, self.class);
+        let hovered = self.row_at(bounds, cursor);
+
+        renderer.fill_quad(
+            renderer::Quad {
+                bounds,
+                border: style.border,
+                shadow: style.shadow,
+                snap: true,
+            },
+            style.background,
+        );
+
+        for (index, option) in self.options.iter().enumerate() {
+            let row = Rectangle {
+                x: bounds.x,
+                y: bounds.y + crate::gui::design::menu::PAD + index as f32 * crate::gui::design::menu::ITEM_HEIGHT,
+                width: bounds.width,
+                height: crate::gui::design::menu::ITEM_HEIGHT,
+            };
+            let selected = hovered == Some(index);
+            let color = if selected {
+                style.selected_text_color
+            } else {
+                style.text_color
+            };
+
+            if selected {
+                renderer.fill_quad(
+                    renderer::Quad {
+                        bounds: Rectangle {
+                            x: row.x + crate::gui::design::menu::PAD,
+                            y: row.y + 2.0,
+                            width: row.width - crate::gui::design::menu::PAD * 2.0,
+                            height: row.height - 4.0,
+                        },
+                        border: Border {
+                            radius: crate::gui::design::RADIUS.into(),
+                            width: 0.0,
+                            color: iced::Color::TRANSPARENT,
+                        },
+                        shadow: Shadow::default(),
+                        snap: true,
+                    },
+                    style.selected_background,
+                );
+            }
+
+            let mut text_x = row.x + crate::gui::design::space::MD;
+            if let Some(icon) = option.icon() {
+                renderer.fill_text(
+                    advanced::Text {
+                        content: icon.as_char().to_string(),
+                        font: crate::gui::font::ICONS,
+                        size: crate::gui::design::icon::SM.into(),
+                        bounds: Size::new(crate::gui::design::icon::SM, row.height),
+                        align_x: advanced::text::Alignment::Center,
+                        align_y: alignment::Vertical::Center,
+                        line_height: text::LineHeight::Relative(crate::gui::design::leading::TIGHT),
+                        shaping: text::Shaping::Advanced,
+                        wrapping: text::Wrapping::None,
+                    },
+                    Point::new(text_x + crate::gui::design::icon::SM / 2.0, row.center_y()),
+                    color,
+                    bounds,
+                );
+                text_x += crate::gui::design::icon::SM + crate::gui::design::space::SM;
+            }
+
+            renderer.fill_text(
+                advanced::Text {
+                    content: option.to_string(),
+                    font: self.font,
+                    size: self.text_size.into(),
+                    bounds: Size::new(
+                        bounds.x + bounds.width - text_x - crate::gui::design::space::MD,
+                        row.height,
+                    ),
+                    align_x: advanced::text::Alignment::Left,
+                    align_y: alignment::Vertical::Center,
+                    line_height: text::LineHeight::Absolute(iced::Pixels(crate::gui::design::control::LINE)),
+                    shaping: text::Shaping::Advanced,
+                    wrapping: text::Wrapping::None,
+                },
+                Point::new(text_x, row.center_y()),
+                color,
+                bounds,
+            );
+        }
+    }
+
+    fn mouse_interaction(&self, layout: Layout<'_>, cursor: mouse::Cursor, _renderer: &Renderer) -> mouse::Interaction {
+        if self.row_at(layout.bounds(), cursor).is_some() {
+            mouse::Interaction::Pointer
+        } else {
+            mouse::Interaction::default()
         }
     }
 }

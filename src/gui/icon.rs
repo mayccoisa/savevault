@@ -14,6 +14,7 @@ pub enum Icon {
     ArrowUpward,
     CallMerge,
     CallSplit,
+    Check,
     Comment,
     Copy,
     Delete,
@@ -30,6 +31,7 @@ pub enum Icon {
     Lock,
     LockOpen,
     MoreVert,
+    #[allow(unused)]
     OpenInBrowser,
     OpenInNew,
     PlayCircleOutline,
@@ -57,6 +59,7 @@ impl Icon {
             Self::ArrowUpward => '\u{E5D8}',
             Self::CallMerge => '\u{e0b3}',
             Self::CallSplit => '\u{e0b6}',
+            Self::Check => '\u{E5CA}',
             Self::Comment => '\u{E0B9}',
             Self::Copy => '\u{e14d}',
             Self::Delete => '\u{E872}',

@@ -204,14 +204,8 @@ fn cell<'a>(value: String, portion: u16) -> (crate::gui::widget::Element<'a>, u1
 
 impl Logs {
     pub fn view(&self) -> crate::gui::widget::Element<'_> {
-        use crate::gui::widget::{Container, text};
-        use iced::Length;
-
         if !self.loaded || self.runs.is_empty() {
-            return Container::new(text(TRANSLATOR.logs_empty()).size(design::text::BODY))
-                .padding(design::space::XXL)
-                .width(Length::Fill)
-                .into();
+            return crate::gui::widget::empty_state(TRANSLATOR.logs_empty_title(), TRANSLATOR.logs_empty());
         }
 
         match self
@@ -362,6 +356,7 @@ mod tests {
         Entry {
             when,
             game: game.to_string(),
+            title: game.to_string(),
             full: true,
             added: 1,
             changed: 0,

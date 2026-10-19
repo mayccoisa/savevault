@@ -65,7 +65,6 @@ pub enum Language {
     #[serde(rename = "nl-NL")]
     Dutch,
     /// English
-    #[default]
     #[serde(rename = "en-US")]
     English,
     /// Esperanto
@@ -98,7 +97,12 @@ pub enum Language {
     /// Polish
     #[serde(rename = "pl-PL")]
     Polish,
-    /// Brazilian Portuguese
+    /// Brazilian Portuguese.
+    ///
+    /// The default. A config that does not name a language opens in Portuguese; English stays
+    /// selectable. The library screen is written in Portuguese, and a fresh vault used to mix that
+    /// with an English sidebar.
+    #[default]
     #[serde(rename = "pt-BR")]
     PortugueseBrazilian,
     /// Russian
@@ -201,7 +205,7 @@ impl Language {
             Language::Korean => "한국어",
             Language::Norwegian => "Norsk",
             Language::Polish => "Polski",
-            Language::PortugueseBrazilian => "Português brasileiro",
+            Language::PortugueseBrazilian => "Português (Brasil)",
             Language::Russian => "Русский язык",
             Language::Spanish => "Español",
             Language::Swedish => "Svenska",
@@ -244,9 +248,15 @@ impl Language {
 
 impl ToString for Language {
     fn to_string(&self) -> String {
-        match self {
-            Self::English => self.name().to_string(),
-            _ => format!("{} ({}%)", self.name(), self.completion()),
+        let name = self.name();
+        let completion = self.completion();
+        // A finished translation does not need a percentage next to the name. The number only
+        // earns its place when the file is still partial, so the reader knows what will fall
+        // back to English.
+        if completion >= 100 {
+            name.to_string()
+        } else {
+            format!("{name} ({completion}%)")
         }
     }
 }
@@ -718,6 +728,11 @@ impl Translator {
         translate("button-nav-restore")
     }
 
+    /// The library screen. It replaced the old "Restore" label in the sidebar.
+    pub fn nav_library_button(&self) -> String {
+        translate("button-nav-library")
+    }
+
     pub fn nav_custom_games_button(&self) -> String {
         translate("button-nav-custom-games")
     }
@@ -745,6 +760,134 @@ impl Translator {
 
     pub fn settings_updates(&self) -> String {
         translate("settings-updates")
+    }
+
+    pub fn settings_section_general(&self) -> String {
+        translate("settings-section-general")
+    }
+
+    pub fn settings_section_language(&self) -> String {
+        translate("settings-section-language")
+    }
+
+    pub fn settings_section_vault(&self) -> String {
+        translate("settings-section-vault")
+    }
+
+    pub fn settings_section_updates(&self) -> String {
+        translate("settings-section-updates")
+    }
+
+    pub fn settings_section_advanced(&self) -> String {
+        translate("settings-section-advanced")
+    }
+
+    pub fn settings_general_intro(&self) -> String {
+        translate("settings-general-intro")
+    }
+
+    pub fn settings_language_intro(&self) -> String {
+        translate("settings-language-intro")
+    }
+
+    pub fn settings_vault_intro(&self) -> String {
+        translate("settings-vault-intro")
+    }
+
+    pub fn settings_updates_intro(&self) -> String {
+        translate("settings-updates-intro")
+    }
+
+    pub fn settings_advanced_intro(&self) -> String {
+        translate("settings-advanced-intro")
+    }
+
+    pub fn settings_theme_hint(&self) -> String {
+        translate("settings-theme-hint")
+    }
+
+    pub fn settings_accent_hint(&self) -> String {
+        translate("settings-accent-hint")
+    }
+
+    pub fn settings_vault_path(&self) -> String {
+        translate("settings-vault-path")
+    }
+
+    pub fn settings_vault_path_hint(&self) -> String {
+        translate("settings-vault-path-hint")
+    }
+
+    pub fn settings_full_retention_hint(&self) -> String {
+        translate("settings-full-retention-hint")
+    }
+
+    pub fn settings_diff_retention_hint(&self) -> String {
+        translate("settings-diff-retention-hint")
+    }
+
+    pub fn settings_backup_format_hint(&self) -> String {
+        translate("settings-backup-format-hint")
+    }
+
+    pub fn settings_backup_compression_hint(&self) -> String {
+        translate("settings-backup-compression-hint")
+    }
+
+    pub fn settings_backup_level_hint(&self) -> String {
+        translate("settings-backup-level-hint")
+    }
+
+    pub fn settings_constructive_hint(&self) -> String {
+        translate("settings-constructive-hint")
+    }
+
+    pub fn settings_check_hint(&self) -> String {
+        translate("settings-check-hint")
+    }
+
+    pub fn settings_releases(&self) -> String {
+        translate("settings-releases")
+    }
+
+    pub fn settings_releases_hint(&self) -> String {
+        translate("settings-releases-hint")
+    }
+
+    pub fn settings_releases_button(&self) -> String {
+        translate("settings-releases-button")
+    }
+
+    pub fn backup_empty_title(&self) -> String {
+        translate("backup-empty-title")
+    }
+
+    pub fn backup_empty_body(&self) -> String {
+        translate("backup-empty-body")
+    }
+
+    pub fn custom_games_empty_title(&self) -> String {
+        translate("custom-games-empty-title")
+    }
+
+    pub fn custom_games_empty_body(&self) -> String {
+        translate("custom-games-empty-body")
+    }
+
+    pub fn custom_games_none_match(&self) -> String {
+        translate("custom-games-none-match")
+    }
+
+    pub fn logs_empty_title(&self) -> String {
+        translate("logs-empty-title")
+    }
+
+    pub fn restore_scan_empty_title(&self) -> String {
+        translate("restore-scan-empty-title")
+    }
+
+    pub fn restore_scan_empty_body(&self) -> String {
+        translate("restore-scan-empty-body")
     }
 
     /// The bare label, without the colon `field` adds.
@@ -983,6 +1126,24 @@ impl Translator {
 
     pub fn check_for_update_button(&self) -> String {
         translate("button-check-for-update")
+    }
+
+    pub fn apply_update_button(&self) -> String {
+        translate("button-apply-update")
+    }
+
+    /// "v0.13.0 · Atualizado". Only after a check that found nothing newer.
+    pub fn app_version_current(&self, version: &str) -> String {
+        let mut args = FluentArgs::new();
+        args.set("version", version);
+        translate_args("app-version-current", &args)
+    }
+
+    /// "Nova versão vX disponível". The version is the one on the release, not the one installed.
+    pub fn app_version_available(&self, version: &str) -> String {
+        let mut args = FluentArgs::new();
+        args.set("version", version);
+        translate_args("app-version-available", &args)
     }
 
     pub fn updating_app(&self) -> String {
@@ -1345,6 +1506,7 @@ impl Translator {
     pub fn accent_name(&self, accent: &Accent) -> String {
         translate(match accent {
             Accent::Green => "accent-green",
+            Accent::Pink => "accent-pink",
             Accent::Blue => "accent-blue",
             Accent::Purple => "accent-purple",
             Accent::Orange => "accent-orange",

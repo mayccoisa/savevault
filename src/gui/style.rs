@@ -1,3 +1,4 @@
+//! Colours and widget classes. Every length this file uses comes from [`crate::gui::design`].
 use iced::{
     Background, Border, Color, Shadow,
     widget::{button, checkbox, container, pick_list, scrollable, text_editor, text_input},
@@ -62,6 +63,7 @@ impl Theme {
         // Every accent carries its own ink: the text drawn on top of the accent itself. A single
         // ink for all of them would be unreadable on at least one, since they differ in lightness.
         let (accent, accent_ink) = match choice {
+            config::Accent::Pink => (rgb8!(0xff, 0x3d, 0x81), rgb8!(0x1a, 0x04, 0x10)),
             config::Accent::Green => (rgb8!(0x38, 0xe0, 0x8a), rgb8!(0x04, 0x16, 0x0c)),
             config::Accent::Blue => (rgb8!(0x5b, 0x8d, 0xef), rgb8!(0x04, 0x0d, 0x1e)),
             config::Accent::Purple => (rgb8!(0xc7, 0x7d, 0xff), rgb8!(0x18, 0x06, 0x2a)),
@@ -94,14 +96,16 @@ impl Theme {
             },
             config::Theme::Dark => Self {
                 source,
-                background: rgb8!(0x0e, 0x0f, 0x13),
-                panel: rgb8!(0x15, 0x17, 0x1d),
-                field: rgb8!(0x1a, 0x1d, 0x25),
-                text: rgb8!(0xe8, 0xea, 0xf0),
-                text_inverted: rgb8!(0x0e, 0x0f, 0x13),
-                text_skipped: rgb8!(0x9a, 0xa0, 0xb2),
+                // Layered, and none of them is pure black. The page is the darkest step, the
+                // sidebar and cards sit on the next step, and a field is one step above a card.
+                background: rgb8!(0x12, 0x14, 0x1c),
+                panel: rgb8!(0x1a, 0x1e, 0x28),
+                field: rgb8!(0x22, 0x27, 0x33),
+                text: rgb8!(0xee, 0xf0, 0xf6),
+                text_inverted: rgb8!(0x12, 0x14, 0x1c),
+                text_skipped: rgb8!(0xa4, 0xaa, 0xba),
                 disabled: rgb8!(0x6b, 0x72, 0x85),
-                navigation: rgb8!(0x20, 0x24, 0x2e),
+                navigation: rgb8!(0x2c, 0x31, 0x3e),
                 success: rgb8!(0x27, 0x8c, 0x5c),
                 failure: rgb8!(0xa8, 0x36, 0x47),
                 skipped: rgb8!(0x1a, 0x1d, 0x25),
@@ -149,6 +153,11 @@ pub enum Text {
     Failure,
     /// Secondary text, for the context strip under the command bar.
     Muted,
+    /// Ink drawn on top of a darkened cover. The theme's own text is dark in the light theme,
+    /// and a darkened cover would swallow it.
+    OnDark,
+    /// The secondary line on that same cover.
+    OnDarkMuted,
 }
 impl iced::widget::text::Catalog for Theme {
     type Class<'a> = Text;
@@ -165,6 +174,12 @@ impl iced::widget::text::Catalog for Theme {
             },
             Text::Failure => iced::widget::text::Style {
                 color: Some(self.negative),
+            },
+            Text::OnDark => iced::widget::text::Style {
+                color: Some(iced::Color::WHITE),
+            },
+            Text::OnDarkMuted => iced::widget::text::Style {
+                color: Some(iced::Color::WHITE.scale_alpha(0.72)),
             },
         }
     }
@@ -183,14 +198,16 @@ impl iced::widget::overlay::menu::Catalog for Theme {
         iced::overlay::menu::Style {
             background: self.field.into(),
             border: Border {
-                color: self.text.alpha(0.5),
+                color: self.text.alpha(design::alpha::HALF),
                 width: 1.0,
                 radius: design::RADIUS.into(),
             },
             text_color: self.text,
-            selected_background: self.positive.into(),
-            selected_text_color: self.accent_ink,
-            shadow: Shadow::default(),
+            // A veil of the accent, the same treatment as the active sidebar item. A solid accent
+            // turns the row under the pointer into the loudest thing on the screen.
+            selected_background: self.positive.alpha(design::alpha::SOFT).into(),
+            selected_text_color: self.text,
+            shadow: design::elevation::OVERLAY,
         }
     }
 }
@@ -199,6 +216,7 @@ impl iced::widget::overlay::menu::Catalog for Theme {
 pub enum Button {
     #[default]
     Primary,
+    LibraryCard,
     Negative,
     GameActionPrimary,
     GameListEntryTitle,
@@ -237,24 +255,35 @@ impl button::Catalog for Theme {
                 Button::GameListEntryTitleDisabled => Some(self.skipped.into()),
                 Button::GameListEntryTitleUnscanned => None,
                 Button::Negative => Some(self.negative.into()),
-                Button::NavButtonActive | Button::SideNavActive => Some(self.navigation.alpha(0.9).into()),
+                Button::NavButtonActive => Some(self.navigation.into()),
+                // A tint of the accent, not a second gray. Gray-on-gray is how the active item
+                // disappeared into the sidebar.
+                Button::SideNavActive => Some(self.positive.alpha(0.18).into()),
                 Button::NavButtonInactive | Button::SideNavInactive | Button::Secondary | Button::Danger => None,
                 Button::Badge => None,
                 Button::Bare => None,
+                Button::LibraryCard => Some(self.panel.into()),
             },
             border: Border {
                 color: match class {
                     Button::NavButtonActive | Button::NavButtonInactive => self.navigation,
-                    Button::Secondary => self.field,
+                    // A hairline the text colour can carry. `field` on the dark theme is one step
+                    // off the background, which is a border that only shows up in a screenshot
+                    // if you go looking for it.
+                    // Stronger than a card hairline, so a control does not look like another card.
+                    Button::Secondary => self.text.alpha(design::alpha::HALF),
+                    Button::LibraryCard => self.text.alpha(design::alpha::SUBTLE),
                     // Neutral at rest, like any other quiet button. The trash icon already says what
                     // it does; the red is what the pointer reveals, and it is the whole warning.
                     Button::Danger => self.field,
                     _ => Color::TRANSPARENT,
                 },
                 width: match class {
-                    Button::NavButtonActive | Button::NavButtonInactive | Button::Secondary | Button::Danger => {
-                        design::stroke::HAIRLINE
-                    }
+                    Button::NavButtonActive
+                    | Button::NavButtonInactive
+                    | Button::Secondary
+                    | Button::Danger
+                    | Button::LibraryCard => design::stroke::HAIRLINE,
                     _ => 0.0,
                 },
                 // One radius for every button. This block used to hand out 9px to the pill-shaped
@@ -266,7 +295,7 @@ impl button::Catalog for Theme {
                 Button::GameListEntryTitleDisabled => self.text_skipped.alpha(0.8),
                 Button::GameListEntryTitleUnscanned => self.text.alpha(0.8),
                 Button::NavButtonActive | Button::NavButtonInactive | Button::Bare | Button::SideNavActive => self.text,
-                Button::Secondary => self.text,
+                Button::Secondary | Button::LibraryCard => self.text,
                 Button::Danger => self.text_skipped,
                 Button::SideNavInactive => self.text_skipped,
                 Button::Primary | Button::GameActionPrimary => self.accent_ink,
@@ -292,9 +321,10 @@ impl button::Catalog for Theme {
             button::Status::Active => active,
             button::Status::Hovered => button::Style {
                 background: match class {
-                    Button::NavButtonActive | Button::SideNavActive => Some(self.navigation.alpha(0.95).into()),
+                    Button::NavButtonActive => Some(self.navigation.into()),
+                    Button::SideNavActive => Some(self.positive.alpha(0.28).into()),
                     Button::NavButtonInactive | Button::SideNavInactive => Some(self.navigation.alpha(0.5).into()),
-                    Button::Secondary => Some(self.field.into()),
+                    Button::Secondary | Button::LibraryCard => Some(self.field.into()),
                     // Under the pointer it becomes what it does. Anywhere else it stays quiet.
                     Button::Danger => Some(self.negative.into()),
                     _ => active.background,
@@ -320,7 +350,7 @@ impl button::Catalog for Theme {
                     | Button::SideNavActive
                     | Button::SideNavInactive => self.text,
                     Button::Bare => self.text.alpha(0.9),
-                    Button::Secondary => self.text,
+                    Button::Secondary | Button::LibraryCard => self.text,
                     Button::Danger => self.text_button,
                     Button::Primary | Button::GameActionPrimary => self.accent_ink,
                     _ => self.text_button,
@@ -338,11 +368,35 @@ impl button::Catalog for Theme {
                 },
                 snap: true,
             },
-            // Pressed sits back down on the surface, which is the whole feedback.
-            button::Status::Pressed => button::Style {
-                shadow: design::elevation::FLAT,
-                ..active
-            },
+            // Pressed has to change the fill. A shadow that was already flat cannot be the only
+            // signal, and iced has no focus status to draw a ring with.
+            button::Status::Pressed => {
+                let mut pressed = button::Style {
+                    shadow: design::elevation::FLAT,
+                    ..active
+                };
+                match class {
+                    Button::Primary | Button::GameActionPrimary => {
+                        pressed.background = Some(self.positive.scale_alpha(0.85).into());
+                    }
+                    Button::Secondary | Button::LibraryCard => {
+                        pressed.background = Some(self.field.into());
+                    }
+                    Button::SideNavActive | Button::SideNavInactive => {
+                        pressed.background = Some(self.positive.alpha(design::alpha::HALF).into());
+                        pressed.text_color = self.text;
+                    }
+                    Button::Danger => {
+                        pressed.background = Some(self.negative.into());
+                        pressed.text_color = self.text_button;
+                    }
+                    Button::Negative => {
+                        pressed.background = Some(self.negative.scale_alpha(0.85).into());
+                    }
+                    _ => {}
+                }
+                pressed
+            }
             button::Status::Disabled => button::Style {
                 shadow: design::elevation::FLAT,
                 background: active.background.map(|background| match background {
@@ -388,11 +442,15 @@ pub enum Container {
     DisabledBackup,
     Notification,
     Tooltip,
-    /// A card: a self-contained block of content with its own surface.
+    /// A card: a lifted surface plus a hairline.
     ///
-    /// It carries a surface **or** a border, never both, because a block that has a different
-    /// background and an outline around it reads as two nested boxes.
+    /// The hairline is fainter than a control border. A control has to announce that it can be
+    /// used; a card only has to separate itself from the page. The old rule was "surface or
+    /// border, never both", and it left cards with no edge at all on a dark page.
     Card,
+    /// A 1px strip. Widget borders paint every side, so the line between the sidebar and the
+    /// page is its own element.
+    Divider,
     /// The square a logo or an avatar sits in.
     ///
     /// Artwork supplied by someone else arrives at whatever aspect ratio and whatever background
@@ -420,9 +478,11 @@ impl container::Catalog for Theme {
                 Container::TableHeader => self.field.into(),
                 Container::TableRow => Color::TRANSPARENT.into(),
                 Container::Sidebar => self.panel.into(),
-                Container::Topbar => self.background.into(),
+                Container::Topbar => self.panel.into(),
+                Container::Divider => self.text.alpha(design::alpha::SUBTLE).into(),
                 Container::ModalForeground => self.panel.into(),
-                Container::Tooltip => self.field.into(),
+                // Lifted off the page, so a hint reads as a hint and not as another field.
+                Container::Tooltip => self.navigation.into(),
                 Container::DisabledBackup => self.disabled.into(),
                 Container::Card => self.panel.into(),
                 Container::LogoTile => self.field.into(),
@@ -459,11 +519,12 @@ impl container::Catalog for Theme {
                         }
                     }
                     Container::BadgeActivated => self.negative,
-                    // The card is a surface, so it takes no border at all. Both would read as two
-                    // nested boxes.
-                    Container::Card | Container::LogoTile => Color::TRANSPARENT,
+                    // Fainter than a control border. See [`Container::Card`].
+                    Container::Card => self.text.alpha(design::alpha::SUBTLE),
+                    Container::LogoTile | Container::Divider => Color::TRANSPARENT,
                     Container::Chip { .. } => Color::TRANSPARENT,
                     Container::ModalForeground | Container::BadgeFaded => self.disabled,
+                    Container::Tooltip => self.text.alpha(design::alpha::HALF),
                     _ => self.text,
                 },
                 // A block gets a surface or an outline, never both. The sidebar, the top bar and
@@ -475,7 +536,9 @@ impl container::Catalog for Theme {
                     | Container::Badge
                     | Container::BadgeActivated
                     | Container::BadgeFaded
-                    | Container::ChangeBadge { .. } => design::stroke::HAIRLINE,
+                    | Container::ChangeBadge { .. }
+                    | Container::Tooltip
+                    | Container::Card => design::stroke::HAIRLINE,
                     _ => 0.0,
                 },
                 radius: match class {
@@ -728,9 +791,9 @@ impl text_input::Catalog for Theme {
 
     fn style(&self, _class: &Self::Class<'_>, status: text_input::Status) -> text_input::Style {
         let active = text_input::Style {
-            background: Color::TRANSPARENT.into(),
+            background: self.field.into(),
             border: Border {
-                color: self.text.alpha(0.8),
+                color: self.text.alpha(design::alpha::HEAVY),
                 width: 1.0,
                 radius: design::RADIUS.into(),
             },

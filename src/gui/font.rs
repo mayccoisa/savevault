@@ -1,3 +1,9 @@
+//! The faces the interface actually draws.
+//!
+//! Noto Sans is bundled and requested by name on every platform. A previous pass asked Windows
+//! for Segoe UI while still shipping these files. Segoe's vertical metrics in iced's shaper sit
+//! the ink high inside a control; Noto's do not, and one face is what makes a screenshot on Linux
+//! predict the Windows build.
 use iced::{Font, font};
 
 pub const TEXT_DATA: &[u8] = include_bytes!("../../assets/NotoSans-Regular.ttf");

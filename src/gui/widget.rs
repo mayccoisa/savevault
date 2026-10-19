@@ -5,7 +5,7 @@ use iced::{Alignment, Length, widget as w};
 use crate::{
     gui::{
         common::{Message, Operation, UndoSubject},
-        design,
+        design, font,
         icon::Icon,
         style::{self, Theme},
     },
@@ -58,11 +58,54 @@ where
 {
     PickList::new(options, selected, on_selected)
         .text_shaping(w::text::Shaping::Advanced)
-        .padding(design::space::XS)
+        .text_size(design::text::BODY)
+        .text_line_height(w::text::LineHeight::Absolute(iced::Pixels(design::control::LINE)))
+        .padding([design::control::PAD_Y, design::control::PAD_X])
 }
 
 pub fn text<'a>(content: impl iced::widget::text::IntoFragment<'a>) -> Text<'a> {
     Text::new(content).shaping(w::text::Shaping::Advanced)
+}
+
+/// A screen with nothing to list yet: a title, then one sentence about what fills it.
+pub fn empty_state<'a>(title: String, body: String) -> Element<'a> {
+    Container::new(
+        Column::new()
+            .spacing(design::space::SM)
+            .width(Length::Fill)
+            .push(
+                text(title)
+                    .font(font::TEXT_STRONG)
+                    .size(design::text::TITLE)
+                    .line_height(design::leading::TITLE),
+            )
+            .push(text(body).class(style::Text::Muted)),
+    )
+    .padding(design::space::XXL)
+    .width(Length::Fill)
+    .into()
+}
+
+/// One hint style for the whole app: caption type, a gap so it does not cover the control, and a
+/// short delay so crossing the control does not flash a tip.
+pub fn hint<'a>(
+    content: impl Into<Element<'a>>,
+    label: impl Into<String>,
+    position: w::tooltip::Position,
+) -> Element<'a> {
+    Tooltip::new(
+        content,
+        text(label.into())
+            .size(design::text::CAPTION)
+            .line_height(design::leading::TIGHT),
+        position,
+    )
+    .gap(design::tooltip::GAP)
+    .padding(design::tooltip::PADDING)
+    .delay(std::time::Duration::from_millis(design::tooltip::DELAY_MS))
+    .snap_within_viewport(true)
+    .class(style::Container::Tooltip)
+    .into()
 }
 
 pub mod id {
@@ -138,14 +181,14 @@ pub fn number_input<'a>(
             // styling by semantics, and by the wrong semantics at that — lowering how many backups
             // to keep is not destruction, and raising it is not the primary action of the screen.
             .push({
-                Button::new(Icon::Remove.text().width(Length::Shrink))
+                Button::new(Container::new(Icon::Remove.text().width(Length::Shrink)).center_y(Length::Fill))
                     .on_press_if(&value > range.start(), || (change)(value - 1))
                     .class(style::Button::Secondary)
                     .height(design::control::HEIGHT)
                     .padding([0.0, design::control::PAD_X_ICON])
             })
             .push({
-                Button::new(Icon::Add.text().width(Length::Shrink))
+                Button::new(Container::new(Icon::Add.text().width(Length::Shrink)).center_y(Length::Fill))
                     .on_press_if(&value < range.end(), || (change)(value + 1))
                     .class(style::Button::Secondary)
                     .height(design::control::HEIGHT)

@@ -360,6 +360,7 @@ impl ToString for Theme {
 pub enum Accent {
     #[default]
     Green,
+    Pink,
     Blue,
     Purple,
     Orange,
@@ -367,7 +368,14 @@ pub enum Accent {
 }
 
 impl Accent {
-    pub const ALL: &'static [Self] = &[Self::Green, Self::Blue, Self::Purple, Self::Orange, Self::Red];
+    pub const ALL: &'static [Self] = &[
+        Self::Green,
+        Self::Pink,
+        Self::Blue,
+        Self::Purple,
+        Self::Orange,
+        Self::Red,
+    ];
 }
 
 impl ToString for Accent {
@@ -2204,7 +2212,7 @@ mod tests {
                     enable: true,
                     secondary: vec![]
                 },
-                language: Language::English,
+                language: Language::PortugueseBrazilian,
                 theme: Theme::Dark,
                 accent: Accent::Green,
                 roots: vec![],
@@ -2329,7 +2337,7 @@ mod tests {
                         enable: true,
                     }]
                 },
-                language: Language::English,
+                language: Language::PortugueseBrazilian,
                 theme: Theme::Dark,
                 accent: Accent::Green,
                 roots: vec![Root::new("~/steam", Store::Steam), Root::new("~/other", Store::Other),],

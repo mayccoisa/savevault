@@ -1,4 +1,4 @@
-use iced::{Length, alignment, padding, widget::tooltip};
+use iced::{Length, alignment, padding};
 
 use crate::{
     gui::{
@@ -6,7 +6,7 @@ use crate::{
         design,
         icon::Icon,
         style,
-        widget::{Button, Container, Tooltip, text},
+        widget::{Button, Container, hint, text},
     },
     lang::TRANSLATOR,
     scan::ScanChange,
@@ -145,11 +145,7 @@ impl Badge {
 
             let content = match self.tooltip {
                 None => content,
-                Some(tooltip) => Container::new(
-                    Tooltip::new(content, text(tooltip).size(design::text::BODY), tooltip::Position::Top)
-                        .gap(5)
-                        .class(style::Container::Tooltip),
-                ),
+                Some(tooltip) => Container::new(hint(content, tooltip, iced::widget::tooltip::Position::Top)),
             };
 
             match self.on_press {

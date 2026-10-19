@@ -84,6 +84,45 @@ pub struct LoadedManifest {
     pub extended: Manifest,
 }
 
+/// What the sidebar may say about the installed version.
+///
+/// `Silent` is the honest state whenever we have not confirmed the answer: the check is off, it
+/// has not returned yet, or it failed. Saying "Atualizado" in those cases would be a guess.
+#[derive(Clone, Debug, Default)]
+enum UpdateNotice {
+    #[default]
+    Silent,
+    Current,
+    Available {
+        version: semver::Version,
+        release: Option<crate::metadata::Release>,
+    },
+}
+
+impl UpdateNotice {
+    /// A recent successful check is enough to label the version. A check that is still due stays
+    /// silent until the request returns, so the label does not flicker from a stale cache.
+    fn from_cache(check: bool, cache: &Cache) -> Self {
+        if !check || cache.should_check_app_update() {
+            return Self::Silent;
+        }
+        let Some(latest) = cache.release.latest.clone() else {
+            return Self::Silent;
+        };
+        let Ok(current) = semver::Version::parse(*crate::prelude::VERSION) else {
+            return Self::Silent;
+        };
+        if latest > current {
+            Self::Available {
+                version: latest,
+                release: None,
+            }
+        } else {
+            Self::Current
+        }
+    }
+}
+
 pub struct OperationStep {
     title: String,
     task: Task<Message>,
@@ -97,6 +136,8 @@ pub struct App {
     cache: Cache,
     operation: Operation,
     screen: Screen,
+    /// Which group of Configurações is on screen. The others stay in the config; only the view changes.
+    settings_section: crate::gui::common::SettingsSection,
     modals: Vec<Modal>,
     backup_screen: screen::Backup,
     restore_screen: screen::Restore,
@@ -112,6 +153,9 @@ pub struct App {
     /// Trava o botão de atualizar enquanto o download corre, para dois cliques não mexerem no
     /// mesmo arquivo ao mesmo tempo.
     updating_app: bool,
+    /// Resultado da checagem de release. Erro e offline ficam em [`UpdateNotice::Silent`]: a
+    /// sidebar não inventa "Atualizado" quando a rede não respondeu.
+    update_notice: UpdateNotice,
     notify_on_single_game_scanned: Option<(String, Screen)>,
     manifest_notification: Option<Notification>,
     timed_notification: Option<Notification>,
@@ -122,6 +166,24 @@ pub struct App {
     pending_save: HashMap<SaveKind, Instant>,
     modifiers: keyboard::Modifiers,
     jump_to_game_after_scan: Option<String>,
+}
+
+/// The line between the sidebar and the page. A widget border paints every side, so this is a strip.
+fn hairline_y() -> Element<'static> {
+    Container::new(iced::widget::Space::new())
+        .width(design::stroke::HAIRLINE)
+        .height(Length::Fill)
+        .class(style::Container::Divider)
+        .into()
+}
+
+/// The line under the title bar.
+fn hairline_x() -> Element<'static> {
+    Container::new(iced::widget::Space::new())
+        .width(Length::Fill)
+        .height(design::stroke::HAIRLINE)
+        .class(style::Container::Divider)
+        .into()
 }
 
 impl App {
@@ -1322,6 +1384,148 @@ impl App {
         Task::none()
     }
 
+    fn load_library_covers(&mut self) -> Task<Message> {
+        use crate::gui::library::{self, Event};
+        let mut tasks = vec![];
+        for game in &self.restore_screen.inventory {
+            if !self.restore_screen.library.requested.insert(game.name.clone()) {
+                continue;
+            }
+            let name = game.name.clone();
+            let steam = self.manifest.extended.0.get(&name).and_then(|entry| entry.steam.id);
+            tasks.push(Task::future(async move {
+                let result = library::fetch_cover(name.clone(), steam).await;
+                Message::Library(Event::CoverReady(name, result))
+            }));
+        }
+        Task::batch(tasks)
+    }
+
+    fn handle_library(&mut self, event: crate::gui::library::Event) -> Task<Message> {
+        use crate::gui::library::{self, Event};
+        match event {
+            Event::Search(value) => {
+                self.restore_screen.library.query = value;
+                self.reset_scroll_position(ScrollSubject::Restore);
+                return self.refresh_scroll_position();
+            }
+            Event::View(value) => {
+                self.restore_screen.library.view = value;
+                self.restore_screen.library.save_preferences();
+                self.reset_scroll_position(ScrollSubject::Restore);
+                return self.refresh_scroll_position();
+            }
+            Event::Sort(value) => {
+                self.restore_screen.library.sort = value;
+                self.restore_screen.library.save_preferences();
+                self.reset_scroll_position(ScrollSubject::Restore);
+                return self.refresh_scroll_position();
+            }
+            Event::Platform(value) => {
+                self.restore_screen.library.platform = value;
+                self.reset_scroll_position(ScrollSubject::Restore);
+                return self.refresh_scroll_position();
+            }
+            Event::Freshness(value) => {
+                self.restore_screen.library.freshness = value;
+                self.reset_scroll_position(ScrollSubject::Restore);
+                return self.refresh_scroll_position();
+            }
+            Event::Tab(value) => {
+                self.restore_screen.library.tab = value;
+            }
+            Event::Open(name) => {
+                self.restore_screen.library.open(name, &self.config);
+                self.reset_scroll_position(ScrollSubject::Restore);
+                return self.refresh_scroll_position();
+            }
+            Event::Back => {
+                if !self.operation.idle() {
+                    return Task::none();
+                }
+                self.restore_screen.library.operational = false;
+                self.restore_screen.library.selected = None;
+                self.restore_screen.inventory = crate::gui::vault::games(&self.config);
+                self.reset_scroll_position(ScrollSubject::Restore);
+                return Task::batch([self.load_library_covers(), self.refresh_scroll_position()]);
+            }
+            Event::Refresh => {
+                if !self.operation.idle() {
+                    return Task::none();
+                }
+                self.restore_screen.inventory = crate::gui::vault::games(&self.config);
+                if let Some(name) = self.restore_screen.library.selected.clone() {
+                    self.restore_screen.library.open(name, &self.config);
+                }
+                self.restore_screen.library.requested.clear();
+                return self.load_library_covers();
+            }
+            Event::Operational => {
+                if !self.operation.idle() {
+                    return Task::none();
+                }
+                self.restore_screen.library.operational = true;
+                self.restore_screen.library.selected = None;
+                self.restore_screen.log.clear();
+                self.restore_screen.duplicate_detector.clear();
+                return self.handle_restore(RestorePhase::Start {
+                    preview: true,
+                    games: None,
+                });
+            }
+            Event::Preview(game, backup) => {
+                if !self.operation.idle() {
+                    return Task::none();
+                }
+                self.restore_screen.library.operational = true;
+                self.restore_screen.log.clear();
+                self.restore_screen.duplicate_detector.clear();
+                self.backups_to_restore.insert(game.clone(), backup.id());
+                return self.handle_restore(RestorePhase::Start {
+                    preview: true,
+                    games: Some(GameSelection::single(game)),
+                });
+            }
+            Event::Backup(game) => {
+                if !self.operation.idle() {
+                    return Task::none();
+                }
+                self.screen = Screen::Backup;
+                return self.handle_backup(BackupPhase::Confirm {
+                    games: Some(GameSelection::single(game)),
+                });
+            }
+            Event::ChooseCover(game) => {
+                return Task::future(async move {
+                    let file = rfd::AsyncFileDialog::new()
+                        .set_title("Escolher capa do jogo")
+                        .add_filter("Imagem", &["png", "jpg", "jpeg"])
+                        .pick_file()
+                        .await;
+                    Message::Library(Event::CoverChosen(game, file.map(|file| file.path().to_path_buf())))
+                });
+            }
+            Event::CoverChosen(game, Some(path)) => {
+                return Task::future(async move {
+                    let result = library::import_cover(&game, path);
+                    Message::Library(Event::CoverReady(game, result))
+                });
+            }
+            Event::CoverChosen(_, None) => {}
+            Event::CoverReady(game, result) => match result {
+                Ok(Some(art)) => {
+                    self.restore_screen.library.covers.insert(game.clone(), art.portrait);
+                    self.restore_screen.library.banners.insert(game, art.banner);
+                }
+                Ok(None) => {}
+                Err(message) => {
+                    self.restore_screen.library.notice = Some(message);
+                }
+            },
+        }
+        Task::none()
+    }
+
     fn switch_screen(&mut self, screen: Screen) -> Task<Message> {
         self.screen = screen;
 
@@ -1341,6 +1545,9 @@ impl App {
         // guardado, que é diferente do que a última varredura encontrou.
         if screen == Screen::Restore {
             self.restore_screen.inventory = crate::gui::vault::games(&self.config);
+            self.restore_screen.library.operational = false;
+            self.restore_screen.library.selected = None;
+            return Task::batch([self.refresh_scroll_position(), self.load_library_covers()]);
         }
 
         self.refresh_scroll_position()
@@ -1397,6 +1604,7 @@ impl App {
     pub fn new(flags: Flags) -> (Self, Task<Message>) {
         let mut errors = vec![];
         let mut commands = vec![
+            Task::done(Message::Library(crate::gui::library::Event::Refresh)),
             iced::font::load(std::borrow::Cow::Borrowed(crate::gui::font::TEXT_DATA)).map(|_| Message::Ignore),
             iced::font::load(std::borrow::Cow::Borrowed(crate::gui::font::ICONS_DATA)).map(|_| Message::Ignore),
             iced::font::load(std::borrow::Cow::Borrowed(crate::gui::font::TEXT_STRONG_DATA)).map(|_| Message::Ignore),
@@ -1501,6 +1709,8 @@ impl App {
             }))
         }
 
+        let update_notice = UpdateNotice::from_cache(config.release.check, &cache);
+
         (
             Self {
                 backup_screen: screen::Backup::new(&config, &cache),
@@ -1514,6 +1724,7 @@ impl App {
                 flags,
                 screen,
                 pending_save,
+                update_notice,
                 ..Self::default()
             },
             Task::batch(commands),
@@ -1531,6 +1742,7 @@ impl App {
     pub fn update(&mut self, message: Message) -> Task<Message> {
         match message {
             Message::Ignore => Task::none(),
+            Message::Library(event) => self.handle_library(event),
             Message::RefreshEmulators => {
                 self.emulators_screen.refresh(&self.config);
                 Task::none()
@@ -1577,6 +1789,11 @@ impl App {
                     }
                     config::Event::CheckRelease(enabled) => {
                         self.config.release.check = enabled;
+                        self.update_notice = if enabled {
+                            UpdateNotice::from_cache(true, &self.cache)
+                        } else {
+                            UpdateNotice::Silent
+                        };
                     }
                     config::Event::BackupTarget(text) => {
                         self.text_histories.backup_target.push(&text);
@@ -2067,23 +2284,33 @@ impl App {
                     Message::AppReleaseChecked(result.map_err(|x| x.to_string()))
                 })
             }
+            Message::ShowAppUpdate(release) => self.show_modal(Modal::AppUpdate { release }),
             Message::AppReleaseChecked(outcome) => {
                 self.save_cache();
                 self.cache.release.checked = chrono::offset::Utc::now();
 
+                if !self.config.release.check {
+                    self.update_notice = UpdateNotice::Silent;
+                    return Task::none();
+                }
+
                 match outcome {
                     Ok(release) => {
-                        let previous_latest = self.cache.release.latest.clone();
                         self.cache.release.latest = Some(release.version.clone());
-
-                        if previous_latest.as_ref() != Some(&release.version) {
-                            // The latest available version has changed (or this is our first time checking)
-                            if release.is_update() {
-                                return self.show_modal(Modal::AppUpdate { release });
+                        // The sidebar is the notice. A modal here would block the library the
+                        // moment the check returns.
+                        self.update_notice = if release.is_update() {
+                            UpdateNotice::Available {
+                                version: release.version.clone(),
+                                release: Some(release),
                             }
-                        }
+                        } else {
+                            UpdateNotice::Current
+                        };
                     }
                     Err(e) => {
+                        // Offline and any other failure stay quiet. A previous confident result
+                        // is kept; an unknown state does not become "Atualizado".
                         log::warn!("App update check failed: {e:?}");
                     }
                 }
@@ -2185,7 +2412,11 @@ impl App {
                     }
                 }
 
-                let mut tasks = vec![self.close_specific_modal(modal::Kind::UpdatingManifest)];
+                self.restore_screen.library.requested.clear();
+                let mut tasks = vec![
+                    self.close_specific_modal(modal::Kind::UpdatingManifest),
+                    self.load_library_covers(),
+                ];
                 if !errors.is_empty() {
                     tasks.push(self.show_modal(Modal::Errors { errors }));
                 }
@@ -2229,6 +2460,11 @@ impl App {
                 self.close_specific_modal(modal::Kind::ConfirmAddMissingRoots)
             }
             Message::SwitchScreen(screen) => self.switch_screen(screen),
+            Message::SelectSettingsSection(section) => {
+                self.settings_section = section;
+                self.reset_scroll_position(ScrollSubject::Other);
+                self.refresh_scroll_position()
+            }
             Message::ToggleTargetEditor { scan_kind } => {
                 match scan_kind {
                     crate::scan::ScanKind::Backup => {
@@ -2236,6 +2472,10 @@ impl App {
                     }
                     crate::scan::ScanKind::Restore => {
                         self.restore_screen.target_editor_open = !self.restore_screen.target_editor_open;
+                        if !self.restore_screen.target_editor_open && !self.restore_screen.library.operational {
+                            self.restore_screen.library.selected = None;
+                            return self.handle_library(crate::gui::library::Event::Refresh);
+                        }
                     }
                 }
                 Task::none()
@@ -3135,6 +3375,50 @@ impl App {
         iced::Subscription::batch(subscriptions)
     }
 
+    /// The line under the product name. A check in flight, a disabled check, and a failed check
+    /// all look the same: the version, and nothing else.
+    fn version_status(&self) -> Element {
+        match &self.update_notice {
+            UpdateNotice::Current => text(TRANSLATOR.app_version_current(&crate::prelude::VERSION))
+                .size(design::text::CAPTION)
+                .line_height(design::leading::TIGHT)
+                .class(style::Text::Muted)
+                .into(),
+            UpdateNotice::Available { version, release } => {
+                // A Windows build uses the installer that already lived on the old button. Without
+                // that asset, the existing release dialog opens the download page instead.
+                let action = if self.updating_app {
+                    None
+                } else if let Some(release) = release.clone() {
+                    if release.download.is_some() {
+                        Some(Message::UpdateApp)
+                    } else {
+                        Some(Message::ShowAppUpdate(release))
+                    }
+                } else {
+                    Some(Message::OpenUrl(format!(
+                        "https://github.com/mayccoisa/savevault/releases/tag/savevault-v{version}"
+                    )))
+                };
+                Column::new()
+                    .spacing(design::space::XS)
+                    .width(Length::Fill)
+                    .push(
+                        text(TRANSLATOR.app_version_available(&version.to_string()))
+                            .size(design::text::CAPTION)
+                            .line_height(design::leading::TIGHT),
+                    )
+                    .push(button::secondary(TRANSLATOR.apply_update_button(), action, None))
+                    .into()
+            }
+            UpdateNotice::Silent => text(format!("v{}", *crate::prelude::VERSION))
+                .size(design::text::CAPTION)
+                .line_height(design::leading::TIGHT)
+                .class(style::Text::Muted)
+                .into(),
+        }
+    }
+
     pub fn view(&self) -> Element {
         let sidebar = Container::new(
             Column::new()
@@ -3150,22 +3434,17 @@ impl App {
                                 .size(design::text::SUBTITLE)
                                 .line_height(design::leading::TITLE),
                         )
-                        .push(
-                            text(format!("v{}", *crate::prelude::VERSION))
-                                .size(design::text::CAPTION)
-                                .line_height(design::leading::TIGHT)
-                                .class(style::Text::Muted),
-                        ),
+                        .push(self.version_status()),
                 )
-                .push(button::side_nav(Screen::Backup, self.screen))
+                .push(iced::widget::space().height(design::space::LG))
                 .push(button::side_nav(Screen::Restore, self.screen))
+                .push(button::side_nav(Screen::Backup, self.screen))
+                .push(iced::widget::space().height(design::space::LG))
                 .push(button::side_nav(Screen::CustomGames, self.screen))
                 .push(button::side_nav(Screen::Emulators, self.screen))
                 .push(button::side_nav(Screen::Logs, self.screen))
-                .push(button::side_nav(Screen::Other, self.screen))
-                // O rodape da coluna fica colado embaixo, como no desenho.
                 .push(iced::widget::space().height(Length::Fill))
-                .push(button::check_for_update(&self.updating_app)),
+                .push(button::side_nav(Screen::Other, self.screen)),
         )
         .width(design::SIDEBAR_WIDTH)
         .height(Length::Fill)
@@ -3173,16 +3452,27 @@ impl App {
 
         let topbar = Container::new(
             Row::new()
-                .padding([0.0, design::space::XL])
+                .padding([0.0, design::space::XXL])
                 .height(design::TOPBAR_HEIGHT)
                 .spacing(design::space::MD)
                 .align_y(Alignment::Center)
-                .push(
-                    text(self.screen.title())
-                        .font(font::TEXT_STRONG)
-                        .size(design::text::TITLE)
-                        .line_height(design::leading::TITLE),
-                )
+                .push({
+                    let catalogue = self.screen == Screen::Restore
+                        && !self.restore_screen.library.operational
+                        && self.restore_screen.library.selected.is_none();
+                    Row::new()
+                        .spacing(design::space::SM)
+                        .align_y(Alignment::Center)
+                        .push(
+                            text(self.screen.title())
+                                .font(font::TEXT_STRONG)
+                                .size(design::text::TITLE)
+                                .line_height(design::leading::TITLE),
+                        )
+                        .push_if(catalogue, || {
+                            crate::gui::library::count_badge(self.restore_screen.inventory.len())
+                        })
+                })
                 .push(iced::widget::space().width(Length::Fill))
                 .push(match self.screen {
                     Screen::Backup => {
@@ -3207,6 +3497,7 @@ impl App {
             .width(Length::Fill)
             .align_x(Alignment::Center)
             .push(topbar)
+            .push(hairline_x())
             .push(match self.screen {
                 Screen::Backup => self.backup_screen.view(
                     &self.config,
@@ -3234,6 +3525,7 @@ impl App {
                     .view(&self.config, &self.text_histories, &self.modifiers),
                 Screen::Logs => self.logs.view(),
                 Screen::Other => screen::other(
+                    self.settings_section,
                     self.updating_manifest,
                     &self.config,
                     &self.cache,
@@ -3245,7 +3537,11 @@ impl App {
             .push(self.timed_notification.as_ref().map(|x| x.view()))
             .push(self.manifest_notification.as_ref().map(|x| x.view()));
 
-        let shell = Row::new().width(Length::Fill).push(sidebar).push(content);
+        let shell = Row::new()
+            .width(Length::Fill)
+            .push(sidebar)
+            .push(hairline_y())
+            .push(content);
 
         let stack = Stack::new()
             .push(
@@ -3266,5 +3562,43 @@ impl App {
             .push(stack)
             .push_if(self.progress.visible(), || self.progress.view(&self.operation))
             .into()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::UpdateNotice;
+    use crate::resource::cache::Cache;
+
+    fn cache_checked(latest: &str) -> Cache {
+        let mut cache = Cache::default();
+        cache.release.checked = chrono::Utc::now();
+        cache.release.latest = Some(semver::Version::parse(latest).unwrap());
+        cache
+    }
+
+    #[test]
+    fn versao_calada_sem_checagem_ou_com_checagem_pendente() {
+        let fresh = cache_checked("99.0.0");
+        assert!(matches!(UpdateNotice::from_cache(false, &fresh), UpdateNotice::Silent));
+
+        let mut due = fresh.clone();
+        due.release.checked = chrono::DateTime::UNIX_EPOCH;
+        assert!(matches!(UpdateNotice::from_cache(true, &due), UpdateNotice::Silent));
+    }
+
+    #[test]
+    fn versao_atualizada_so_depois_de_uma_checagem_recente() {
+        let current = cache_checked(*crate::prelude::VERSION);
+        assert!(matches!(
+            UpdateNotice::from_cache(true, &current),
+            UpdateNotice::Current
+        ));
+
+        let newer = cache_checked("99.0.0");
+        assert!(matches!(
+            UpdateNotice::from_cache(true, &newer),
+            UpdateNotice::Available { release: None, .. }
+        ));
     }
 }

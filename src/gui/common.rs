@@ -105,6 +105,7 @@ pub enum ValidatePhase {
 
 #[derive(Debug, Clone)]
 pub enum Message {
+    Library(crate::gui::library::Event),
     /// Abre ou fecha a gaveta do caminho do cofre, na tela indicada.
     ToggleTargetEditor {
         scan_kind: crate::scan::ScanKind,
@@ -122,6 +123,8 @@ pub enum Message {
     },
     CheckAppRelease,
     AppReleaseChecked(Result<crate::metadata::Release, String>),
+    /// Abre o diálogo de atualização que já existia, com o link da página da release.
+    ShowAppUpdate(crate::metadata::Release),
     UpdateManifest {
         force: bool,
     },
@@ -229,6 +232,8 @@ pub enum Message {
     OpenRegistry(RegistryItem),
     /// Abre uma execução no registro, ou volta para a lista quando é `None`.
     OpenLogRun(Option<chrono::DateTime<chrono::Local>>),
+    /// Troca a seção visível em Configurações. O corpo rola de volta ao topo.
+    SelectSettingsSection(SettingsSection),
 }
 
 impl Message {
@@ -685,13 +690,34 @@ impl Operation {
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub enum Screen {
-    #[default]
     Backup,
+    #[default]
     Restore,
     CustomGames,
     Emulators,
     Logs,
     Other,
+}
+
+/// One group on the settings screen. The screen is a list of these, not one long form.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum SettingsSection {
+    #[default]
+    General,
+    Language,
+    Vault,
+    Updates,
+    Advanced,
+}
+
+impl SettingsSection {
+    pub const ALL: &'static [Self] = &[
+        Self::General,
+        Self::Language,
+        Self::Vault,
+        Self::Updates,
+        Self::Advanced,
+    ];
 }
 
 impl Screen {
@@ -700,7 +726,7 @@ impl Screen {
     pub fn title(&self) -> String {
         match self {
             Self::Backup => TRANSLATOR.nav_backup_button(),
-            Self::Restore => TRANSLATOR.nav_restore_button(),
+            Self::Restore => TRANSLATOR.nav_library_button(),
             Self::CustomGames => TRANSLATOR.nav_custom_games_button(),
             Self::Emulators => TRANSLATOR.nav_emulators_button(),
             Self::Logs => TRANSLATOR.nav_logs_button(),
@@ -933,6 +959,12 @@ impl GameAction {
             GameAction::Unlock => Icon::LockOpen,
             GameAction::MakeAlias => Icon::Edit,
         }
+    }
+}
+
+impl crate::gui::popup_menu::Entry for GameAction {
+    fn icon(&self) -> Option<crate::gui::icon::Icon> {
+        Some(self.icon())
     }
 }
 

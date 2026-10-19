@@ -1,6 +1,6 @@
 use iced::{
     Alignment, Length, keyboard, padding,
-    widget::{Space, space, tooltip},
+    widget::{Space, space},
 };
 
 use crate::{
@@ -13,7 +13,7 @@ use crate::{
         search::CustomGamesFilter,
         shortcuts::TextHistories,
         style,
-        widget::{Column, Container, IcedParentExt, Row, Tooltip, checkbox, field_label, pick_list, text},
+        widget::{Column, Container, IcedParentExt, Row, checkbox, empty_state, field_label, hint, pick_list, text},
     },
     lang::TRANSLATOR,
     resource::{
@@ -158,7 +158,15 @@ pub fn manifest<'a>(
                     .spacing(0)
                     .class(style::Checkbox),
                 )
-                .push(iced::widget::TextInput::new("", config.manifest.url()).width(Length::Fill))
+                .push(
+                    iced::widget::TextInput::new("", config.manifest.url())
+                        .width(Length::Fill)
+                        .size(design::text::BODY)
+                        .line_height(iced::widget::text::LineHeight::Absolute(iced::Pixels(
+                            design::control::LINE,
+                        )))
+                        .padding([design::control::PAD_Y, design::control::PAD_X]),
+                )
                 .push(get_checked(Some(config.manifest.url()), cache))
                 .push(get_updated(Some(config.manifest.url()), cache))
                 .push_if(!config.manifest.secondary.is_empty(), || {
@@ -283,7 +291,21 @@ pub fn custom_games<'a>(
     filter: &CustomGamesFilter,
 ) -> Container<'a> {
     if config.custom_games.is_empty() {
-        return Container::new(Space::new());
+        return Container::new(empty_state(
+            TRANSLATOR.custom_games_empty_title(),
+            TRANSLATOR.custom_games_empty_body(),
+        ))
+        .width(Length::Fill);
+    }
+
+    if !config.custom_games.iter().any(|game| filter.qualifies(game)) {
+        return Container::new(
+            text(TRANSLATOR.custom_games_none_match())
+                .class(style::Text::Muted)
+                .size(design::text::BODY),
+        )
+        .padding(design::space::XXL)
+        .width(Length::Fill);
     }
 
     let content = config.custom_games.iter().enumerate().fold(
@@ -353,24 +375,20 @@ pub fn custom_games<'a>(
                             .class(style::PickList::Primary)
                             .width(100),
                         )
-                        .push(
-                            Tooltip::new(
-                                button::refresh_custom_game(
-                                    Message::Backup(BackupPhase::Start {
-                                        games: Some(GameSelection::single(config.custom_games[i].name.clone())),
-                                        preview: true,
-                                        jump: true,
-                                        repair: false,
-                                    }),
-                                    operating,
-                                    config.is_custom_game_individually_scannable(i),
-                                ),
-                                text(TRANSLATOR.preview_button_in_custom_mode()).size(design::text::BODY),
-                                tooltip::Position::Top,
-                            )
-                            .gap(5)
-                            .class(style::Container::Tooltip),
-                        )
+                        .push(hint(
+                            button::refresh_custom_game(
+                                Message::Backup(BackupPhase::Start {
+                                    games: Some(GameSelection::single(config.custom_games[i].name.clone())),
+                                    preview: true,
+                                    jump: true,
+                                    repair: false,
+                                }),
+                                operating,
+                                config.is_custom_game_individually_scannable(i),
+                            ),
+                            TRANSLATOR.preview_button_in_custom_mode(),
+                            iced::widget::tooltip::Position::Top,
+                        ))
                         .push(button::delete(Message::config(config::Event::CustomGame), i)),
                 );
 

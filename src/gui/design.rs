@@ -1,4 +1,8 @@
-//! Save Vault's visual foundation, version 3.
+//! Save Vault's visual foundation.
+//!
+//! One file, on purpose. The v4/v5 experiments (`design_v4`, `design_v5`, `visual_v4`,
+//! `visual_v5`) each carried a second copy of these numbers and a switch in `gui.rs`.
+//! Screens drifted between them. This module is the only scale the widgets read.
 //!
 //! # Why this file exists
 //!
@@ -55,9 +59,21 @@ pub mod text {
     /// with [`font::TEXT_STRONG`](crate::gui::font::TEXT_STRONG) instead of a bigger jump in size.
     pub const SUBTITLE: f32 = 16.0;
 
-    /// The screen title in the top bar. The largest type in the app, and there is exactly one of it
-    /// on screen at a time.
+    /// The screen title in the top bar. One per screen.
     pub const TITLE: f32 = 20.0;
+
+    /// The name of a game on its own page. Larger than the screen title because the screen title
+    /// there is still "Biblioteca" and the game is the subject of the page.
+    pub const DISPLAY: f32 = 28.0;
+}
+
+/// How many characters of a single-line label fit in `width` at `font_size`.
+///
+/// Noto Sans averages a little over half an em for Latin text. The factor is deliberately
+/// high so a title is ellipsized before it paints past the box that is supposed to hold it.
+pub fn text_budget(width: f32, font_size: f32, lines: usize) -> usize {
+    let per_line = (width / (font_size * 0.62)).floor() as usize;
+    per_line.saturating_mul(lines).max(4)
 }
 
 /// Line height, as a multiplier of the font size.
@@ -96,7 +112,7 @@ pub mod space {
 }
 
 /// The one corner radius.
-pub const RADIUS: f32 = 6.0;
+pub const RADIUS: f32 = 8.0;
 
 /// The pill, for badges and chips.
 ///
@@ -169,11 +185,52 @@ pub mod control {
     /// them.
     pub const HEIGHT: f32 = 32.0;
 
+    /// The line box inside a field or a pick list.
+    ///
+    /// Shorter than [`HEIGHT`]. The difference is [`PAD_Y`] above and below, so the ink and the
+    /// caret sit in the middle of the control. A line box as tall as the control draws a caret that
+    /// touches both borders.
+    pub const LINE: f32 = 20.0;
+
+    /// Vertical padding that centers [`LINE`] inside [`HEIGHT`].
+    pub const PAD_Y: f32 = (HEIGHT - LINE) / 2.0;
+
     /// Horizontal padding inside a control that carries a label.
     pub const PAD_X: f32 = 12.0;
 
     /// Horizontal padding inside a control that carries only an icon, so it comes out square.
     pub const PAD_X_ICON: f32 = 8.0;
+
+    /// A disclosure chevron in a list row. Not a labelled control: those stay at [`HEIGHT`].
+    pub const COMPACT: f32 = 24.0;
+
+    /// Search fields do not span the screen. A full-bleed field reads as a second toolbar.
+    pub const SEARCH_WIDTH: f32 = 280.0;
+}
+
+/// Tooltip geometry. One delay, one gap, one padding, so a hint never sits on the control it names.
+pub mod tooltip {
+    /// Space between the control and the hint. Zero lets the hint cover the thing being pointed at.
+    pub const GAP: f32 = super::space::SM;
+
+    /// Padding inside the hint. The same inset as a chip, so a two-word tip is not a cramped strip.
+    pub const PADDING: f32 = super::space::SM;
+
+    /// How long the pointer rests before the hint appears. Immediate hints flash while the pointer
+    /// is only crossing the control.
+    pub const DELAY_MS: u64 = 400;
+}
+
+/// The secondary-action menu opened from (⋮).
+pub mod menu {
+    /// Wide enough for "Restauração em lote" plus its icon.
+    pub const WIDTH: f32 = 240.0;
+
+    /// One row. Taller than a bare line so the icon and the label have the same inset.
+    pub const ITEM_HEIGHT: f32 = 36.0;
+
+    /// Inset between the panel edge and the rows, so a hover does not paint the border.
+    pub const PAD: f32 = super::space::XS;
 }
 
 /// Icon sizes.
@@ -187,6 +244,22 @@ pub mod icon {
     pub const MD: f32 = 20.0;
     /// Leading an item in a list or a card header.
     pub const LG: f32 = 24.0;
+}
+
+/// The settings screen: a section list beside one form.
+pub mod settings {
+    /// The section list. Narrower than the app sidebar, because the labels are short.
+    pub const NAV_WIDTH: f32 = 200.0;
+
+    /// The form stops growing here, so a control stays on the same row as its description.
+    pub const FORM_WIDTH: f32 = 720.0;
+
+    /// Pick lists on the right edge of a row. One width, so the column of controls is straight.
+    pub const CONTROL_WIDTH: f32 = 220.0;
+
+    /// Flag artwork beside a language name. 4:3, the ratio of the embedded SVGs.
+    pub const FLAG_WIDTH: f32 = 24.0;
+    pub const FLAG_HEIGHT: f32 = 18.0;
 }
 
 /// The navigation column on the left.
@@ -211,4 +284,48 @@ pub mod emulator_card {
     /// The logo inside the tile. Smaller than the tile, so every logo gets the same optical weight
     /// no matter how much padding its own artwork already carries.
     pub const LOGO: f32 = 28.0;
+}
+
+/// The library catalogue.
+///
+/// A card is wide, not a poster. Four of them fit a 1280px window once the sidebar and the page
+/// margin are subtracted. The art on the card is a 16:9 frame; the stored cover is often a 2:3
+/// portrait, and that portrait is composed into the frame rather than cropped.
+pub mod library {
+    /// Wide enough for four cards at 1280px, narrow enough for three at the minimum window.
+    pub const CARD_WIDTH: f32 = 228.0;
+
+    /// 16:9, the frame on top of a card.
+    pub const BANNER_HEIGHT: f32 = 128.0;
+
+    /// Padding inside the text block under the art.
+    pub const CARD_PAD: f32 = super::space::SM;
+
+    /// One line. A second line makes the row of cards uneven.
+    pub const TITLE_BLOCK: f32 = 20.0;
+
+    /// Portrait thumb in the list and on the game page. 2:3, the cover's own ratio.
+    pub const THUMB_WIDTH: f32 = 48.0;
+    pub const THUMB_HEIGHT: f32 = 72.0;
+
+    /// The cover standing next to the title on the game page.
+    pub const HERO_THUMB_WIDTH: f32 = 88.0;
+    pub const HERO_THUMB_HEIGHT: f32 = 132.0;
+
+    /// The darkened art behind the game page header.
+    pub const HERO_HEIGHT: f32 = 248.0;
+
+    /// The column of facts beside the tabs.
+    pub const SIDE_WIDTH: f32 = 260.0;
+
+    /// Gap between cards. Tighter than the space between sections, because a row of covers is
+    /// one group.
+    pub const GAP: f32 = super::space::MD;
+
+    /// "Backup recente" means the newest copy is inside this many days.
+    pub const RECENT_DAYS: i64 = 30;
+
+    /// The sort control on the title line. Wide enough for "Nome do jogo" without resizing the bar
+    /// when the choice changes.
+    pub const SORT_WIDTH: f32 = 168.0;
 }

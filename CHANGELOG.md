@@ -3,6 +3,24 @@
 SaveVault is a fork of [Ludusavi](https://github.com/mtkennerly/ludusavi) by Michael Kennerly.
 Everything under "Inherited from Ludusavi" is the upstream history, with its own version numbers.
 
+## SaveVault (não publicado)
+
+- Configurações virou uma lista de seções. Cada opção tem um nome, uma frase curta e o controle à direita. O idioma mostra a bandeira ao lado do nome nativo.
+- O tema escuro ganhou superfícies em camadas, fio entre a barra e o conteúdo, e um pressionar visível nos botões.
+- Backup, jogos personalizados e registros vazios explicam o que fazer em vez de ficar em branco.
+- A biblioteca tem um título só. O contador fica ao lado de "Biblioteca" na barra, e a ordenação fica nessa mesma linha.
+- O menu (⋮) abre com ícone em cada linha e um destaque discreto. Ele não cobre mais a ordenação.
+- As dicas esperam um instante, ficam afastadas do controle e usam um texto curto.
+- A checagem de atualização saiu da barra lateral. O app verifica sozinho ao abrir e mostra o resultado ao lado da versão. Sem rede, a versão continua lá e nada mais aparece.
+- A biblioteca mostra cards largos: capa em quadro horizontal, plataforma, título, quantidade de versões e a data do último backup. A busca ficou separada dos filtros.
+- A página do jogo abre em tela cheia, com a arte de fundo, a ação de restaurar a última versão e as abas de visão geral, versões e registros.
+- Um cofre novo abre em português. A barra lateral deixou de misturar inglês com o resto da tela.
+- Atualizar, trocar o cofre e a restauração em lote saíram da fileira de botões e foram para um menu. O nome do cofre continua visível.
+- O texto dos botões e do item ativo da barra lateral ficou centralizado no controle.
+- Biblioteca em galeria ou lista compacta, com busca, ordenação, último backup e quantidade de versões.
+- Detalhes por jogo com histórico e revisão da versão escolhida antes de restaurar.
+- Capas Steam pelo ID do manifesto, cache local e substituição manual por PNG ou JPEG.
+
 ## SaveVault v0.13.0 (2026-09-08)
 
 * Added:

@@ -21,6 +21,7 @@ use crate::{
 pub struct Entry {
     pub when: chrono::DateTime<chrono::Local>,
     pub game: String,
+    pub title: String,
     /// A full backup stands on its own; a differential one only carries what moved.
     pub full: bool,
     pub added: usize,
@@ -41,6 +42,7 @@ pub struct Entry {
 #[derive(Clone, Debug)]
 pub struct Game {
     pub name: String,
+    pub title: String,
     /// The newest backup. This is what the inventory is sorted by, oldest first, because the
     /// oldest is the one worth knowing about.
     pub last_backup: chrono::DateTime<chrono::Local>,
@@ -116,6 +118,7 @@ pub fn entries(config: &Config) -> Vec<Entry> {
             entries.push(Entry {
                 when: backup.when_local(),
                 game: name.clone(),
+                title: game.display_name(config, &name).to_string(),
                 full: matches!(backup, Backup::Full(_)),
                 added,
                 changed,
@@ -151,6 +154,7 @@ pub fn games(config: &Config) -> Vec<Game> {
                     entry.game.clone(),
                     Game {
                         name: entry.game,
+                        title: entry.title,
                         last_backup: entry.when,
                         backups: 1,
                         files: entry.files,
@@ -165,4 +169,46 @@ pub fn games(config: &Config) -> Vec<Game> {
     let mut games: Vec<Game> = by_game.into_values().collect();
     games.sort_by(|a, b| a.last_backup.cmp(&b.last_backup).then_with(|| a.name.cmp(&b.name)));
     games
+}
+
+#[cfg(test)]
+mod library_tests {
+    use super::*;
+    #[test]
+    fn inventario_preserva_identidade_titulo_e_conta_as_versoes_do_cofre() {
+        let temp = tempfile::tempdir().unwrap();
+        let folder = temp.path().join("DuckStation").join("Final Fantasy VII (SLUS-00594)");
+        std::fs::create_dir_all(&folder).unwrap();
+        std::fs::write(
+            folder.join("mapping.yaml"),
+            r#"
+name: DuckStation SLUS-00594
+title: Final Fantasy VII
+backups:
+  - name: backup-1
+    when: 2026-10-10T10:00:00Z
+    files:
+      'C:/teste/save.dat': {hash: abc, size: 12}
+    children:
+      - name: backup-2
+        when: 2026-10-12T10:00:00Z
+        files:
+          'C:/teste/save.dat': {hash: def, size: 18}
+"#,
+        )
+        .unwrap();
+        let mut config = Config::default();
+        config.restore.path = crate::prelude::StrictPath::from(temp.path().to_path_buf());
+        let games = games(&config);
+        assert_eq!(games.len(), 1);
+        assert_eq!(games[0].name, "DuckStation SLUS-00594");
+        assert_eq!(games[0].title, "Final Fantasy VII");
+        assert_eq!(games[0].backups, 2);
+        assert_eq!(
+            games[0].last_backup.with_timezone(&chrono::Utc).to_rfc3339(),
+            "2026-10-12T10:00:00+00:00"
+        );
+        assert_eq!(games[0].bytes, 18);
+        assert_eq!(games[0].emulator.as_deref(), Some("DuckStation"));
+    }
 }
