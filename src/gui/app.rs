@@ -84,6 +84,45 @@ pub struct LoadedManifest {
     pub extended: Manifest,
 }
 
+/// What the sidebar may say about the installed version.
+///
+/// `Silent` is the honest state whenever we have not confirmed the answer: the check is off, it
+/// has not returned yet, or it failed. Saying "Atualizado" in those cases would be a guess.
+#[derive(Clone, Debug, Default)]
+enum UpdateNotice {
+    #[default]
+    Silent,
+    Current,
+    Available {
+        version: semver::Version,
+        release: Option<crate::metadata::Release>,
+    },
+}
+
+impl UpdateNotice {
+    /// A recent successful check is enough to label the version. A check that is still due stays
+    /// silent until the request returns, so the label does not flicker from a stale cache.
+    fn from_cache(check: bool, cache: &Cache) -> Self {
+        if !check || cache.should_check_app_update() {
+            return Self::Silent;
+        }
+        let Some(latest) = cache.release.latest.clone() else {
+            return Self::Silent;
+        };
+        let Ok(current) = semver::Version::parse(*crate::prelude::VERSION) else {
+            return Self::Silent;
+        };
+        if latest > current {
+            Self::Available {
+                version: latest,
+                release: None,
+            }
+        } else {
+            Self::Current
+        }
+    }
+}
+
 pub struct OperationStep {
     title: String,
     task: Task<Message>,
@@ -112,6 +151,9 @@ pub struct App {
     /// Trava o botão de atualizar enquanto o download corre, para dois cliques não mexerem no
     /// mesmo arquivo ao mesmo tempo.
     updating_app: bool,
+    /// Resultado da checagem de release. Erro e offline ficam em [`UpdateNotice::Silent`]: a
+    /// sidebar não inventa "Atualizado" quando a rede não respondeu.
+    update_notice: UpdateNotice,
     notify_on_single_game_scanned: Option<(String, Screen)>,
     manifest_notification: Option<Notification>,
     timed_notification: Option<Notification>,
@@ -1647,6 +1689,8 @@ impl App {
             }))
         }
 
+        let update_notice = UpdateNotice::from_cache(config.release.check, &cache);
+
         (
             Self {
                 backup_screen: screen::Backup::new(&config, &cache),
@@ -1660,6 +1704,7 @@ impl App {
                 flags,
                 screen,
                 pending_save,
+                update_notice,
                 ..Self::default()
             },
             Task::batch(commands),
@@ -1724,6 +1769,11 @@ impl App {
                     }
                     config::Event::CheckRelease(enabled) => {
                         self.config.release.check = enabled;
+                        self.update_notice = if enabled {
+                            UpdateNotice::from_cache(true, &self.cache)
+                        } else {
+                            UpdateNotice::Silent
+                        };
                     }
                     config::Event::BackupTarget(text) => {
                         self.text_histories.backup_target.push(&text);
@@ -2214,23 +2264,33 @@ impl App {
                     Message::AppReleaseChecked(result.map_err(|x| x.to_string()))
                 })
             }
+            Message::ShowAppUpdate(release) => self.show_modal(Modal::AppUpdate { release }),
             Message::AppReleaseChecked(outcome) => {
                 self.save_cache();
                 self.cache.release.checked = chrono::offset::Utc::now();
 
+                if !self.config.release.check {
+                    self.update_notice = UpdateNotice::Silent;
+                    return Task::none();
+                }
+
                 match outcome {
                     Ok(release) => {
-                        let previous_latest = self.cache.release.latest.clone();
                         self.cache.release.latest = Some(release.version.clone());
-
-                        if previous_latest.as_ref() != Some(&release.version) {
-                            // The latest available version has changed (or this is our first time checking)
-                            if release.is_update() {
-                                return self.show_modal(Modal::AppUpdate { release });
+                        // The sidebar is the notice. A modal here would block the library the
+                        // moment the check returns.
+                        self.update_notice = if release.is_update() {
+                            UpdateNotice::Available {
+                                version: release.version.clone(),
+                                release: Some(release),
                             }
-                        }
+                        } else {
+                            UpdateNotice::Current
+                        };
                     }
                     Err(e) => {
+                        // Offline and any other failure stay quiet. A previous confident result
+                        // is kept; an unknown state does not become "Atualizado".
                         log::warn!("App update check failed: {e:?}");
                     }
                 }
@@ -3290,6 +3350,50 @@ impl App {
         iced::Subscription::batch(subscriptions)
     }
 
+    /// The line under the product name. A check in flight, a disabled check, and a failed check
+    /// all look the same: the version, and nothing else.
+    fn version_status(&self) -> Element {
+        match &self.update_notice {
+            UpdateNotice::Current => text(TRANSLATOR.app_version_current(&crate::prelude::VERSION))
+                .size(design::text::CAPTION)
+                .line_height(design::leading::TIGHT)
+                .class(style::Text::Muted)
+                .into(),
+            UpdateNotice::Available { version, release } => {
+                // A Windows build uses the installer that already lived on the old button. Without
+                // that asset, the existing release dialog opens the download page instead.
+                let action = if self.updating_app {
+                    None
+                } else if let Some(release) = release.clone() {
+                    if release.download.is_some() {
+                        Some(Message::UpdateApp)
+                    } else {
+                        Some(Message::ShowAppUpdate(release))
+                    }
+                } else {
+                    Some(Message::OpenUrl(format!(
+                        "https://github.com/mayccoisa/savevault/releases/tag/savevault-v{version}"
+                    )))
+                };
+                Column::new()
+                    .spacing(design::space::XS)
+                    .width(Length::Fill)
+                    .push(
+                        text(TRANSLATOR.app_version_available(&version.to_string()))
+                            .size(design::text::CAPTION)
+                            .line_height(design::leading::TIGHT),
+                    )
+                    .push(button::secondary(TRANSLATOR.apply_update_button(), action, None))
+                    .into()
+            }
+            UpdateNotice::Silent => text(format!("v{}", *crate::prelude::VERSION))
+                .size(design::text::CAPTION)
+                .line_height(design::leading::TIGHT)
+                .class(style::Text::Muted)
+                .into(),
+        }
+    }
+
     pub fn view(&self) -> Element {
         let sidebar = Container::new(
             Column::new()
@@ -3305,12 +3409,7 @@ impl App {
                                 .size(design::text::SUBTITLE)
                                 .line_height(design::leading::TITLE),
                         )
-                        .push(
-                            text(format!("v{}", *crate::prelude::VERSION))
-                                .size(design::text::CAPTION)
-                                .line_height(design::leading::TIGHT)
-                                .class(style::Text::Muted),
-                        ),
+                        .push(self.version_status()),
                 )
                 .push(iced::widget::space().height(design::space::LG))
                 .push(button::side_nav(Screen::Restore, self.screen))
@@ -3320,9 +3419,7 @@ impl App {
                 .push(button::side_nav(Screen::Emulators, self.screen))
                 .push(button::side_nav(Screen::Logs, self.screen))
                 .push(iced::widget::space().height(Length::Fill))
-                .push(button::side_nav(Screen::Other, self.screen))
-                // Configurações e atualização ficam no rodapé.
-                .push(button::check_for_update(&self.updating_app)),
+                .push(button::side_nav(Screen::Other, self.screen)),
         )
         .width(design::SIDEBAR_WIDTH)
         .height(Length::Fill)
@@ -3334,14 +3431,23 @@ impl App {
                 .height(design::TOPBAR_HEIGHT)
                 .spacing(design::space::MD)
                 .align_y(Alignment::Center)
-                .push(
-                    Column::new().spacing(design::space::XS).push(
-                        text(self.screen.title())
-                            .font(font::TEXT_STRONG)
-                            .size(design::text::TITLE)
-                            .line_height(design::leading::TITLE),
-                    ),
-                )
+                .push({
+                    let catalogue = self.screen == Screen::Restore
+                        && !self.restore_screen.library.operational
+                        && self.restore_screen.library.selected.is_none();
+                    Row::new()
+                        .spacing(design::space::SM)
+                        .align_y(Alignment::Center)
+                        .push(
+                            text(self.screen.title())
+                                .font(font::TEXT_STRONG)
+                                .size(design::text::TITLE)
+                                .line_height(design::leading::TITLE),
+                        )
+                        .push_if(catalogue, || {
+                            crate::gui::library::count_badge(self.restore_screen.inventory.len())
+                        })
+                })
                 .push(iced::widget::space().width(Length::Fill))
                 .push(match self.screen {
                     Screen::Backup => {
@@ -3425,5 +3531,43 @@ impl App {
             .push(stack)
             .push_if(self.progress.visible(), || self.progress.view(&self.operation))
             .into()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::UpdateNotice;
+    use crate::resource::cache::Cache;
+
+    fn cache_checked(latest: &str) -> Cache {
+        let mut cache = Cache::default();
+        cache.release.checked = chrono::Utc::now();
+        cache.release.latest = Some(semver::Version::parse(latest).unwrap());
+        cache
+    }
+
+    #[test]
+    fn versao_calada_sem_checagem_ou_com_checagem_pendente() {
+        let fresh = cache_checked("99.0.0");
+        assert!(matches!(UpdateNotice::from_cache(false, &fresh), UpdateNotice::Silent));
+
+        let mut due = fresh.clone();
+        due.release.checked = chrono::DateTime::UNIX_EPOCH;
+        assert!(matches!(UpdateNotice::from_cache(true, &due), UpdateNotice::Silent));
+    }
+
+    #[test]
+    fn versao_atualizada_so_depois_de_uma_checagem_recente() {
+        let current = cache_checked(*crate::prelude::VERSION);
+        assert!(matches!(
+            UpdateNotice::from_cache(true, &current),
+            UpdateNotice::Current
+        ));
+
+        let newer = cache_checked("99.0.0");
+        assert!(matches!(
+            UpdateNotice::from_cache(true, &newer),
+            UpdateNotice::Available { release: None, .. }
+        ));
     }
 }

@@ -316,9 +316,24 @@ impl Restore {
                 .find(|part| !part.is_empty())
                 .unwrap_or(&rendered)
                 .to_string();
-            return Row::new()
-                .spacing(design::space::SM)
-                .align_y(Alignment::Center)
+            let mut commands = Row::new().spacing(design::space::SM).align_y(Alignment::Center);
+            // Sort lives on the title line, to the left of the vault name. The menu opens under
+            // the (⋮) button, so it no longer covers this control.
+            if self.library.selected.is_none() && !self.inventory.is_empty() {
+                commands = commands.push(
+                    pick_list(
+                        [
+                            crate::gui::library::Sort::Recent,
+                            crate::gui::library::Sort::Name,
+                            crate::gui::library::Sort::Oldest,
+                        ],
+                        Some(self.library.sort),
+                        |sort| Message::Library(crate::gui::library::Event::Sort(sort)),
+                    )
+                    .width(Length::Fixed(design::library::SORT_WIDTH)),
+                );
+            }
+            return commands
                 .push(
                     text(format!("Cofre · {leaf}"))
                         .size(design::text::CAPTION)
@@ -719,6 +734,16 @@ impl std::fmt::Display for LibraryMenu {
             Self::Refresh => "Atualizar",
             Self::ChangeVault => "Trocar cofre",
             Self::Batch => "Restauração em lote",
+        })
+    }
+}
+
+impl crate::gui::popup_menu::Entry for LibraryMenu {
+    fn icon(&self) -> Option<crate::gui::icon::Icon> {
+        Some(match self {
+            Self::Refresh => crate::gui::icon::Icon::Refresh,
+            Self::ChangeVault => crate::gui::icon::Icon::FolderOpen,
+            Self::Batch => crate::gui::icon::Icon::PlayCircleOutline,
         })
     }
 }

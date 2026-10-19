@@ -1,8 +1,6 @@
 use std::collections::{BTreeSet, HashSet};
 
-use iced::{
-    Alignment, Length, alignment::Horizontal as HorizontalAlignment, keyboard::Modifiers, padding, widget::tooltip,
-};
+use iced::{Alignment, Length, alignment::Horizontal as HorizontalAlignment, keyboard::Modifiers, padding};
 
 use crate::{
     gui::{
@@ -19,7 +17,7 @@ use crate::{
         shortcuts::TextHistories,
         style,
         widget::{
-            Button, Column, Container, Element, IcedButtonExt, IcedParentExt, Row, Tooltip, checkbox, pick_list, text,
+            Button, Column, Container, Element, IcedButtonExt, IcedParentExt, Row, checkbox, hint, pick_list, text,
             text_editor,
         },
     },
@@ -174,13 +172,11 @@ impl GameListEntry {
                                 .as_ref()
                                 .and_then(|backup| backup.comment().cloned())
                                 .map(|comment| {
-                                    Tooltip::new(
+                                    hint(
                                         Icon::Comment.text().width(Length::Shrink),
-                                        text(comment).size(design::text::BODY),
-                                        tooltip::Position::Top,
+                                        comment,
+                                        iced::widget::tooltip::Position::Top,
                                     )
-                                    .gap(5)
-                                    .class(style::Container::Tooltip)
                                 })
                         })
                         .push({
@@ -282,15 +278,11 @@ impl GameListEntry {
                                             })
                                             .class(style::Button::GameActionPrimary)
                                             .padding(design::space::XS);
-                                        Container::new(
-                                            Tooltip::new(
-                                                button,
-                                                text(action.to_string()).size(design::text::BODY),
-                                                tooltip::Position::Top,
-                                            )
-                                            .gap(5)
-                                            .class(style::Container::Tooltip),
-                                        )
+                                        Container::new(hint(
+                                            button,
+                                            action.to_string(),
+                                            iced::widget::tooltip::Position::Top,
+                                        ))
                                     } else {
                                         let options = GameAction::options(
                                             scan_kind,

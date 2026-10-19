@@ -47,9 +47,8 @@ Campo e lista de opções têm a mesma altura 32, mas a caixa da linha tem 20 (`
 6 px que sobram são padding igual em cima e embaixo. Uma linha da altura do controle desenha o
 cursor encostado nas duas bordas.
 
-O menu (⋮) abre para baixo, alinhado à esquerda do botão. Quando não cabe à direita da janela, ele
-desliza para a esquerda até o rótulo inteiro aparecer. "Restauração em lote" é o rótulo que define
-a largura (240).
+O menu e a dica têm regra própria, mais abaixo. O que vale aqui é só o alinhamento: o menu abre
+para baixo do botão, e a dica fica afastada do controle que ela nomeia.
 
 ## Densidade
 
@@ -82,15 +81,23 @@ centralizada, sem corte. A miniatura da página e a lista continuam com o retrat
 
 ## Barra da biblioteca
 
-Duas linhas, e a busca não divide a linha com a ordenação.
+O nome da tela aparece uma vez, na barra de título. O conteúdo não repete "Biblioteca".
 
-1. "Biblioteca", um badge com o total de jogos no cofre, e a ordenação à direita.
-2. Campo de busca com ícone de lupa, depois os selects de plataforma e de status. Galeria e Lista
-   ficam no fim dessa linha.
+Na mesma linha do título: o badge com o total de jogos, e à direita a ordenação, o nome do cofre e
+o menu (⋮). A ordenação fica nessa linha de propósito: o menu abre para baixo e não pode cobri-la.
+
+Abaixo, a busca com ícone de lupa, os selects de plataforma e de status, e no fim Galeria e Lista.
+A busca não divide a linha com a ordenação.
 
 Plataforma lista o que o cofre realmente tem (PC e cada emulador). Status é "Qualquer", "Backup
 recente" (o mais novo tem até 30 dias) ou "Backup antigo". Quando o filtro reduz a lista, uma
 legenda diz quantos jogos estão visíveis. O badge continua sendo o total.
+
+As outras telas seguem a mesma regra. Backup, Jogos personalizados, Emuladores, Registros e
+Configurações não repetem o nome da tela no corpo. O que aparece abaixo em Configurações
+(Aparência, Atualizações) e em Emuladores (o resumo "N de M encontrados") é título de seção, não
+uma segunda cópia do nome da tela. O cofre vazio tem a frase "Seu progresso começa aqui", que é o
+estado vazio, não outro "Biblioteca".
 
 ## Página do jogo
 
@@ -101,6 +108,40 @@ escreve. "Fazer novo backup" e "Escolher capa" são secundárias.
 
 Abaixo, três abas — Visão geral, Versões, Registros — e uma coluna à direita com o que o cofre
 guarda. Versões lista cada cópia com "Revisar restauração". Registros mostra só as anotações.
+
+## Dica
+
+Toda dica passa por `widget::hint`. O texto é legenda (12), em uma frase curta, no idioma da
+interface. Ela explica o controle quando o rótulo não cabe (ícone, título cortado, selo) e não
+repete a palavra que já está no botão.
+
+- Atraso de 400 ms. Dica imediata pisca enquanto o ponteiro só atravessa o controle.
+- 8 px de distância do controle e 8 px de respiro interno. Distância zero faz a dica cobrir o
+  elemento.
+- Abaixo do controle na barra de título. Acima, quando o controle está no meio da lista ou do card,
+  para não cair em cima da linha seguinte.
+- A superfície é a cor de navegação, com fio de 1 px e sombra de sobreposição. O texto é o texto
+  do tema, não um cinza em cima de um campo da mesma família.
+- Se não couber na janela, ela entra na área visível, sem cobrir o controle quando ainda há espaço
+  do lado combinado.
+
+O menu (⋮) não leva dica. A dica e o menu aberto disputariam o mesmo lugar.
+
+## Menu
+
+O menu (⋮) é o lugar das ações secundárias que não precisam estar sempre visíveis. Largura 240.
+Cada linha tem 36 px, ícone de 16 e rótulo, com o mesmo recuo. "Restauração em lote" é o rótulo
+que define a largura.
+
+Abre para baixo do botão, com 4 px de folga. Se não cabe à direita da janela, desliza para a
+esquerda até o painel inteiro aparecer. Se não cabe embaixo, abre para cima.
+
+O item sob o ponteiro usa um véu da cor de destaque (o mesmo tratamento do item ativo da sidebar),
+com o texto normal por cima. Preencher a linha com a cor de destaque sólida faz o menu gritar mais
+alto que a tela. O painel tem superfície de campo, fio e sombra de sobreposição.
+
+Atualizar, trocar o cofre e a restauração em lote são as três linhas da biblioteca, cada uma com
+ícone. O nome do cofre permanece visível, como legenda, ao lado do menu.
 
 ## Qual botão usar
 

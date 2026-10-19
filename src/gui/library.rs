@@ -14,7 +14,7 @@ use crate::{
         design, font,
         icon::Icon,
         style, vault,
-        widget::{Button, Column, Container, Element, Row, Stack, TextInput, Tooltip, pick_list, text},
+        widget::{Button, Column, Container, Element, Row, Stack, TextInput, hint, pick_list, text},
     },
     resource::config::Config,
     scan::layout::{Backup, BackupLayout},
@@ -343,16 +343,15 @@ impl Library {
                 .width(Length::Fill)
                 .padding(design::library::CARD_PAD),
             );
-        Tooltip::new(
+        hint(
             Button::new(body)
                 .padding(0)
                 .width(design::library::CARD_WIDTH)
                 .class(style::Button::LibraryCard)
                 .on_press(Message::Library(Event::Open(game.name.clone()))),
-            text(game.title.clone()),
+            game.title.clone(),
             iced::widget::tooltip::Position::Top,
         )
-        .into()
     }
 
     fn list_row<'a>(&'a self, game: &'a vault::Game) -> Element<'a> {
@@ -421,17 +420,6 @@ impl Library {
             .find(|item| *item == &self.platform)
             .cloned()
             .unwrap_or_default();
-        let heading = Row::new()
-            .spacing(design::space::SM)
-            .align_y(Alignment::Center)
-            .push(text("Biblioteca").size(design::text::SUBTITLE).font(font::TEXT_STRONG))
-            .push(count_badge(games.len()))
-            .push(iced::widget::space().width(Length::Fill))
-            .push(pick_list(
-                [Sort::Recent, Sort::Name, Sort::Oldest],
-                Some(self.sort),
-                |s| Message::Library(Event::Sort(s)),
-            ));
         let filters = Row::new()
             .spacing(design::space::SM)
             .align_y(Alignment::Center)
@@ -471,15 +459,15 @@ impl Library {
                 self.view == View::List,
                 Message::Library(Event::View(View::List)),
             ));
-        let mut body = Column::new()
-            .spacing(design::space::MD)
-            .push(heading)
-            .push(filters)
-            .push((filtered.len() != games.len()).then(|| {
-                text(format!("{} de {} jogos", filtered.len(), games.len()))
-                    .size(design::text::CAPTION)
-                    .class(style::Text::Muted)
-            }));
+        let mut body =
+            Column::new()
+                .spacing(design::space::MD)
+                .push(filters)
+                .push((filtered.len() != games.len()).then(|| {
+                    text(format!("{} de {} jogos", filtered.len(), games.len()))
+                        .size(design::text::CAPTION)
+                        .class(style::Text::Muted)
+                }));
         if let Some(notice) = &self.notice {
             body = body.push(text(notice));
         }
@@ -995,7 +983,7 @@ fn chip<'a>(label: impl Into<String>) -> Element<'a> {
         .into()
 }
 
-fn count_badge<'a>(count: usize) -> Element<'a> {
+pub fn count_badge<'a>(count: usize) -> Element<'a> {
     Container::new(
         text(count.to_string())
             .size(design::text::CAPTION)

@@ -254,8 +254,8 @@ redirect-bidirectional = Bidirectional
 reverse-redirects-when-restoring = Reverse sequence of redirects when restoring
 
 show-disabled-games = Show disabled games
-show-unchanged-games = Show unchanged games
-hide-unchanged-games = Hide unchanged games
+show-unchanged-games = Show unchanged
+hide-unchanged-games = Hide unchanged
 show-unscanned-games = Show unscanned games
 override-max-threads = Override max threads
 synchronize-automatically = Synchronize automatically
@@ -338,15 +338,18 @@ restore-specific-game =
 new-version-check = Check for application updates automatically
 new-version-available = An application update is available: {$version}. Would you like to view the release notes?
 
-custom-game-will-override = This custom game overrides a manifest entry
-custom-game-will-extend = This custom game extends a manifest entry
+custom-game-will-override = Overrides the manifest
+custom-game-will-extend = Extends the manifest
 
-operation-will-only-include-listed-games = This will only process the games that are currently listed
+operation-will-only-include-listed-games = Only the listed games
 
 button-nav-emulators = Emulators
 button-add-emulator-folder = Add folder
 button-recheck-emulators = Check again
 button-check-for-update = Check for update
+button-apply-update = Update
+app-version-current = v{ $version } · Up to date
+app-version-available = New version v{ $version } available
 emulators-explanation = Point at each emulator's data folder. Saves are backed up and restored from there, even if the folder moves.
 emulators-summary = { $found } of { $total } found on this system
 emulator-coming-soon = Coming soon

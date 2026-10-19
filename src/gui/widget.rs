@@ -67,6 +67,28 @@ pub fn text<'a>(content: impl iced::widget::text::IntoFragment<'a>) -> Text<'a> 
     Text::new(content).shaping(w::text::Shaping::Advanced)
 }
 
+/// One hint style for the whole app: caption type, a gap so it does not cover the control, and a
+/// short delay so crossing the control does not flash a tip.
+pub fn hint<'a>(
+    content: impl Into<Element<'a>>,
+    label: impl Into<String>,
+    position: w::tooltip::Position,
+) -> Element<'a> {
+    Tooltip::new(
+        content,
+        text(label.into())
+            .size(design::text::CAPTION)
+            .line_height(design::leading::TIGHT),
+        position,
+    )
+    .gap(design::tooltip::GAP)
+    .padding(design::tooltip::PADDING)
+    .delay(std::time::Duration::from_millis(design::tooltip::DELAY_MS))
+    .snap_within_viewport(true)
+    .class(style::Container::Tooltip)
+    .into()
+}
+
 pub mod id {
     use iced::widget::Id;
     use std::sync::LazyLock;

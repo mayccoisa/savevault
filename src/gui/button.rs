@@ -8,7 +8,7 @@ use crate::{
         design,
         icon::Icon,
         style,
-        widget::{Button, Container, Element, Row, Text, Tooltip, text},
+        widget::{Button, Container, Element, Row, Text, hint, text},
     },
     lang::TRANSLATOR,
     prelude::{EditAction, Finality, SyncDirection},
@@ -64,9 +64,7 @@ fn template_extended(
     };
 
     match tooltip {
-        Some(tooltip) => Tooltip::new(button, text(tooltip), iced::widget::tooltip::Position::Top)
-            .class(style::Container::Tooltip)
-            .into(),
+        Some(tooltip) => hint(button, tooltip, iced::widget::tooltip::Position::Bottom),
         None => button,
     }
 }
@@ -182,9 +180,7 @@ pub fn secondary<'a>(content: String, action: Option<Message>, tooltip: Option<S
         .into();
 
     match tooltip {
-        Some(tooltip) => Tooltip::new(button, text(tooltip), iced::widget::tooltip::Position::Bottom)
-            .class(style::Container::Tooltip)
-            .into(),
+        Some(tooltip) => hint(button, tooltip, iced::widget::tooltip::Position::Bottom),
         None => button,
     }
 }
@@ -199,9 +195,7 @@ pub fn primary_bar<'a>(content: String, action: Option<Message>, tooltip: Option
         .into();
 
     match tooltip {
-        Some(tooltip) => Tooltip::new(button, text(tooltip), iced::widget::tooltip::Position::Bottom)
-            .class(style::Container::Tooltip)
-            .into(),
+        Some(tooltip) => hint(button, tooltip, iced::widget::tooltip::Position::Bottom),
         None => button,
     }
 }
@@ -220,9 +214,7 @@ pub fn bar_icon<'a>(icon: Icon, action: Option<Message>, active: bool, tooltip: 
         .into();
 
     match tooltip {
-        Some(tooltip) => Tooltip::new(button, text(tooltip), iced::widget::tooltip::Position::Bottom)
-            .class(style::Container::Tooltip)
-            .into(),
+        Some(tooltip) => hint(button, tooltip, iced::widget::tooltip::Position::Bottom),
         None => button,
     }
 }
@@ -579,18 +571,6 @@ pub fn add_emulator_root<'a>(app: crate::scan::emulator::App) -> Element<'a> {
         text(TRANSLATOR.add_emulator_folder_button()),
         Some(config::Event::AddEmulatorRoot(app).into()),
         Some(style::Button::Secondary),
-    )
-}
-
-/// Verifica e instala a atualização num clique.
-///
-/// Fica desabilitado enquanto a atualização corre, para o usuário não disparar dois downloads
-/// que iriam mexer no mesmo arquivo ao mesmo tempo.
-pub fn check_for_update<'a>(updating: &bool) -> Element<'a> {
-    template(
-        text(TRANSLATOR.check_for_update_button()).size(design::text::BODY),
-        (!*updating).then_some(Message::UpdateApp),
-        None,
     )
 }
 

@@ -994,6 +994,24 @@ impl Translator {
         translate("button-check-for-update")
     }
 
+    pub fn apply_update_button(&self) -> String {
+        translate("button-apply-update")
+    }
+
+    /// "v0.13.0 · Atualizado". Only after a check that found nothing newer.
+    pub fn app_version_current(&self, version: &str) -> String {
+        let mut args = FluentArgs::new();
+        args.set("version", version);
+        translate_args("app-version-current", &args)
+    }
+
+    /// "Nova versão vX disponível". The version is the one on the release, not the one installed.
+    pub fn app_version_available(&self, version: &str) -> String {
+        let mut args = FluentArgs::new();
+        args.set("version", version);
+        translate_args("app-version-available", &args)
+    }
+
     pub fn updating_app(&self) -> String {
         translate("updating-app")
     }

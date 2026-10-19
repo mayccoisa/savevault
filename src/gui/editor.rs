@@ -1,6 +1,6 @@
 use iced::{
     Alignment, Length, keyboard, padding,
-    widget::{Space, space, tooltip},
+    widget::{Space, space},
 };
 
 use crate::{
@@ -13,7 +13,7 @@ use crate::{
         search::CustomGamesFilter,
         shortcuts::TextHistories,
         style,
-        widget::{Column, Container, IcedParentExt, Row, Tooltip, checkbox, field_label, pick_list, text},
+        widget::{Column, Container, IcedParentExt, Row, checkbox, field_label, hint, pick_list, text},
     },
     lang::TRANSLATOR,
     resource::{
@@ -361,24 +361,20 @@ pub fn custom_games<'a>(
                             .class(style::PickList::Primary)
                             .width(100),
                         )
-                        .push(
-                            Tooltip::new(
-                                button::refresh_custom_game(
-                                    Message::Backup(BackupPhase::Start {
-                                        games: Some(GameSelection::single(config.custom_games[i].name.clone())),
-                                        preview: true,
-                                        jump: true,
-                                        repair: false,
-                                    }),
-                                    operating,
-                                    config.is_custom_game_individually_scannable(i),
-                                ),
-                                text(TRANSLATOR.preview_button_in_custom_mode()).size(design::text::BODY),
-                                tooltip::Position::Top,
-                            )
-                            .gap(5)
-                            .class(style::Container::Tooltip),
-                        )
+                        .push(hint(
+                            button::refresh_custom_game(
+                                Message::Backup(BackupPhase::Start {
+                                    games: Some(GameSelection::single(config.custom_games[i].name.clone())),
+                                    preview: true,
+                                    jump: true,
+                                    repair: false,
+                                }),
+                                operating,
+                                config.is_custom_game_individually_scannable(i),
+                            ),
+                            TRANSLATOR.preview_button_in_custom_mode(),
+                            iced::widget::tooltip::Position::Top,
+                        ))
                         .push(button::delete(Message::config(config::Event::CustomGame), i)),
                 );
 

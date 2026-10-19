@@ -196,14 +196,16 @@ impl iced::widget::overlay::menu::Catalog for Theme {
         iced::overlay::menu::Style {
             background: self.field.into(),
             border: Border {
-                color: self.text.alpha(0.5),
+                color: self.text.alpha(design::alpha::HALF),
                 width: 1.0,
                 radius: design::RADIUS.into(),
             },
             text_color: self.text,
-            selected_background: self.positive.into(),
-            selected_text_color: self.accent_ink,
-            shadow: Shadow::default(),
+            // A veil of the accent, the same treatment as the active sidebar item. A solid accent
+            // turns the row under the pointer into the loudest thing on the screen.
+            selected_background: self.positive.alpha(design::alpha::SOFT).into(),
+            selected_text_color: self.text,
+            shadow: design::elevation::OVERLAY,
         }
     }
 }
@@ -444,7 +446,8 @@ impl container::Catalog for Theme {
                 Container::Sidebar => self.panel.into(),
                 Container::Topbar => self.background.into(),
                 Container::ModalForeground => self.panel.into(),
-                Container::Tooltip => self.field.into(),
+                // Lifted off the page, so a hint reads as a hint and not as another field.
+                Container::Tooltip => self.navigation.into(),
                 Container::DisabledBackup => self.disabled.into(),
                 Container::Card => self.panel.into(),
                 Container::LogoTile => self.field.into(),
@@ -486,6 +489,7 @@ impl container::Catalog for Theme {
                     Container::Card | Container::LogoTile => Color::TRANSPARENT,
                     Container::Chip { .. } => Color::TRANSPARENT,
                     Container::ModalForeground | Container::BadgeFaded => self.disabled,
+                    Container::Tooltip => self.text.alpha(design::alpha::HALF),
                     _ => self.text,
                 },
                 // A block gets a surface or an outline, never both. The sidebar, the top bar and
@@ -497,7 +501,8 @@ impl container::Catalog for Theme {
                     | Container::Badge
                     | Container::BadgeActivated
                     | Container::BadgeFaded
-                    | Container::ChangeBadge { .. } => design::stroke::HAIRLINE,
+                    | Container::ChangeBadge { .. }
+                    | Container::Tooltip => design::stroke::HAIRLINE,
                     _ => 0.0,
                 },
                 radius: match class {

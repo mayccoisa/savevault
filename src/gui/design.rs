@@ -208,6 +208,31 @@ pub mod control {
     pub const SEARCH_WIDTH: f32 = 280.0;
 }
 
+/// Tooltip geometry. One delay, one gap, one padding, so a hint never sits on the control it names.
+pub mod tooltip {
+    /// Space between the control and the hint. Zero lets the hint cover the thing being pointed at.
+    pub const GAP: f32 = super::space::SM;
+
+    /// Padding inside the hint. The same inset as a chip, so a two-word tip is not a cramped strip.
+    pub const PADDING: f32 = super::space::SM;
+
+    /// How long the pointer rests before the hint appears. Immediate hints flash while the pointer
+    /// is only crossing the control.
+    pub const DELAY_MS: u64 = 400;
+}
+
+/// The secondary-action menu opened from (⋮).
+pub mod menu {
+    /// Wide enough for "Restauração em lote" plus its icon.
+    pub const WIDTH: f32 = 240.0;
+
+    /// One row. Taller than a bare line so the icon and the label have the same inset.
+    pub const ITEM_HEIGHT: f32 = 36.0;
+
+    /// Inset between the panel edge and the rows, so a hover does not paint the border.
+    pub const PAD: f32 = super::space::XS;
+}
+
 /// Icon sizes.
 ///
 /// The Material Icons face is drawn for 16 to 24 pixels. Blowing one up past that is what makes an
@@ -283,4 +308,8 @@ pub mod library {
 
     /// "Backup recente" means the newest copy is inside this many days.
     pub const RECENT_DAYS: i64 = 30;
+
+    /// The sort control on the title line. Wide enough for "Nome do jogo" without resizing the bar
+    /// when the choice changes.
+    pub const SORT_WIDTH: f32 = 168.0;
 }

@@ -5,6 +5,10 @@ Everything under "Inherited from Ludusavi" is the upstream history, with its own
 
 ## SaveVault (não publicado)
 
+- A biblioteca tem um título só. O contador fica ao lado de "Biblioteca" na barra, e a ordenação fica nessa mesma linha.
+- O menu (⋮) abre com ícone em cada linha e um destaque discreto. Ele não cobre mais a ordenação.
+- As dicas esperam um instante, ficam afastadas do controle e usam um texto curto.
+- A checagem de atualização saiu da barra lateral. O app verifica sozinho ao abrir e mostra o resultado ao lado da versão. Sem rede, a versão continua lá e nada mais aparece.
 - A biblioteca mostra cards largos: capa em quadro horizontal, plataforma, título, quantidade de versões e a data do último backup. A busca ficou separada dos filtros.
 - A página do jogo abre em tela cheia, com a arte de fundo, a ação de restaurar a última versão e as abas de visão geral, versões e registros.
 - Um cofre novo abre em português. A barra lateral deixou de misturar inglês com o resto da tela.

@@ -123,6 +123,8 @@ pub enum Message {
     },
     CheckAppRelease,
     AppReleaseChecked(Result<crate::metadata::Release, String>),
+    /// Abre o diálogo de atualização que já existia, com o link da página da release.
+    ShowAppUpdate(crate::metadata::Release),
     UpdateManifest {
         force: bool,
     },
@@ -934,6 +936,12 @@ impl GameAction {
             GameAction::Unlock => Icon::LockOpen,
             GameAction::MakeAlias => Icon::Edit,
         }
+    }
+}
+
+impl crate::gui::popup_menu::Entry for GameAction {
+    fn icon(&self) -> Option<crate::gui::icon::Icon> {
+        Some(self.icon())
     }
 }
 
