@@ -1,6 +1,14 @@
 # Referência visual RepackHub
 
-Em 19/10/2026, a pedido do usuário, a fundação v5 passa a seguir o RepackHub instalado localmente.
+A fundação v5 descrita abaixo foi aposentada. A escala ativa é a de
+[design-system.md](design-system.md), num único módulo (`src/gui/design.rs`). Não há mais
+interruptor entre v4 e v5.
+
+O que se aproveitou da comparação: corpo 14, uma cor de destaque escolhida pelo usuário, capa em
+proporção 2:3. O que se descartou: título 25, sidebar 264, barra 96, raio 12 e capa de 192 px,
+que numa grelha cabiam poucos jogos por linha.
+
+Em 19/10/2026, a pedido do usuário, a fundação v5 passou a seguir o RepackHub instalado localmente.
 Referência medida em `resources/app.asar`, arquivo `src/renderer/styles.css`.
 
 | Elemento | RepackHub | SaveVault v5 |
@@ -16,9 +24,7 @@ Referência medida em `resources/app.asar`, arquivo `src/renderer/styles.css`.
 | Texto | #eef1f8, #9aa3b7 | mesmos valores |
 | Acento | #ff3d81 | opção Rosa, preferências existentes preservadas |
 
-A v4 permanece nos arquivos anteriores. Para restaurar a fundação, trocar somente
-`#[path = "gui/visual_v5.rs"]` por `#[path = "gui/visual_v4.rs"]` em `src/gui.rs`.
-O layout da biblioteca e os ícones continuam funcionais com ambas as fundações.
+O layout da biblioteca e os ícones não dependem mais dessa fundação.
 Nenhum mecanismo de backup ou restauração foi alterado por esta rodada visual.
 
 ## Validação

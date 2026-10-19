@@ -1,6 +1,8 @@
-//! Versão 3 preservada em 18/10/2026. A versão ativa é design_v4.rs.
-//! Para restaurar, remova o atributo path do módulo design em src/gui.rs.
-//! Save Vault's visual foundation, version 3.
+//! Save Vault's visual foundation.
+//!
+//! One file, on purpose. The v4/v5 experiments (`design_v4`, `design_v5`, `visual_v4`,
+//! `visual_v5`) each carried a second copy of these numbers and a switch in `gui.rs`.
+//! Screens drifted between them. This module is the only scale the widgets read.
 //!
 //! # Why this file exists
 //!
@@ -62,6 +64,15 @@ pub mod text {
     pub const TITLE: f32 = 20.0;
 }
 
+/// How many characters of a single-line label fit in `width` at `font_size`.
+///
+/// Noto Sans averages a little over half an em for Latin text. The factor is deliberately
+/// high so a title is ellipsized before it paints past the box that is supposed to hold it.
+pub fn text_budget(width: f32, font_size: f32, lines: usize) -> usize {
+    let per_line = (width / (font_size * 0.62)).floor() as usize;
+    per_line.saturating_mul(lines).max(4)
+}
+
 /// Line height, as a multiplier of the font size.
 ///
 /// Inversely proportional to the size: small text needs air between lines, large text needs less or
@@ -98,7 +109,7 @@ pub mod space {
 }
 
 /// The one corner radius.
-pub const RADIUS: f32 = 6.0;
+pub const RADIUS: f32 = 8.0;
 
 /// The pill, for badges and chips.
 ///
@@ -171,11 +182,27 @@ pub mod control {
     /// them.
     pub const HEIGHT: f32 = 32.0;
 
+    /// The line box inside a field or a pick list.
+    ///
+    /// Shorter than [`HEIGHT`]. The difference is [`PAD_Y`] above and below, so the ink and the
+    /// caret sit in the middle of the control. A line box as tall as the control draws a caret that
+    /// touches both borders.
+    pub const LINE: f32 = 20.0;
+
+    /// Vertical padding that centers [`LINE`] inside [`HEIGHT`].
+    pub const PAD_Y: f32 = (HEIGHT - LINE) / 2.0;
+
     /// Horizontal padding inside a control that carries a label.
     pub const PAD_X: f32 = 12.0;
 
     /// Horizontal padding inside a control that carries only an icon, so it comes out square.
     pub const PAD_X_ICON: f32 = 8.0;
+
+    /// A disclosure chevron in a list row. Not a labelled control: those stay at [`HEIGHT`].
+    pub const COMPACT: f32 = 24.0;
+
+    /// Search fields do not span the screen. A full-bleed field reads as a second toolbar.
+    pub const SEARCH_WIDTH: f32 = 280.0;
 }
 
 /// Icon sizes.
@@ -213,4 +240,32 @@ pub mod emulator_card {
     /// The logo inside the tile. Smaller than the tile, so every logo gets the same optical weight
     /// no matter how much padding its own artwork already carries.
     pub const LOGO: f32 = 28.0;
+}
+
+/// The library gallery.
+///
+/// Covers keep the 2:3 ratio of a portrait, at a size where the minimum window (1036px, sidebar
+/// included) still fits a full row of them. A cover that dominates the row is a poster, not a
+/// catalogue.
+pub mod library {
+    /// Portrait, 2:3.
+    pub const COVER_WIDTH: f32 = 128.0;
+    pub const COVER_HEIGHT: f32 = 192.0;
+
+    /// The cover on a game's own page. Larger than the grid, still the same ratio.
+    pub const DETAIL_WIDTH: f32 = 160.0;
+    pub const DETAIL_HEIGHT: f32 = 240.0;
+
+    /// Padding inside the text block under a cover.
+    pub const CARD_PAD: f32 = super::space::SM;
+
+    /// Two lines of body type. Anything longer is ellipsized, not wrapped out of the card.
+    pub const TITLE_BLOCK: f32 = 36.0;
+
+    pub const THUMB_WIDTH: f32 = 36.0;
+    pub const THUMB_HEIGHT: f32 = 54.0;
+
+    /// Gap between cards. Tighter than the space between sections, because a row of covers is
+    /// one group.
+    pub const GAP: f32 = super::space::MD;
 }

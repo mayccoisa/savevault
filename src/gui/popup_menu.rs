@@ -18,6 +18,9 @@ use iced::{
     window,
 };
 
+/// Wide enough for "Restauração em lote", the longest label this menu carries.
+const MENU_WIDTH: f32 = 240.0;
+
 /// A widget for selecting a single value from a list of options.
 #[allow(missing_debug_implementations)]
 pub struct PopupMenu<'a, T, Message, Theme = crate::gui::style::Theme, Renderer = iced::Renderer>
@@ -126,7 +129,7 @@ where
                 .expand(self.padding)
         };
 
-        layout::Node::new(Size::new(size.width, 24.0))
+        layout::Node::new(Size::new(size.width, crate::gui::design::control::HEIGHT))
     }
 
     fn update(
@@ -257,7 +260,7 @@ where
                 },
                 align_x: advanced::text::Alignment::Center,
                 align_y: alignment::Vertical::Center,
-                line_height: text::LineHeight::default(),
+                line_height: text::LineHeight::Relative(crate::gui::design::leading::TIGHT),
                 shaping: text::Shaping::Advanced,
                 wrapping: text::Wrapping::Word,
             },
@@ -292,21 +295,30 @@ where
                 None,
                 &self.menu_style,
             )
-            .width(150.0)
-            .padding(self.padding)
+            .width(MENU_WIDTH)
+            .padding([crate::gui::design::control::PAD_Y, crate::gui::design::control::PAD_X])
             .font(self.font.unwrap_or_else(|| renderer.default_font()))
             .text_shaping(text::Shaping::Advanced);
 
             if let Some(text_size) = self.text_size {
                 menu = menu.text_size(text_size);
+            } else {
+                menu = menu.text_size(crate::gui::design::text::BODY);
+            }
+            menu = menu.text_line_height(text::LineHeight::Absolute(iced::Pixels(
+                crate::gui::design::control::LINE,
+            )));
+
+            // The menu grows to the right of the button. Against the right edge of the window that
+            // clips the labels, so slide it left until the whole menu fits.
+            let menu_width = MENU_WIDTH;
+            let mut position = layout.position() + translation;
+            let room = viewport.x + viewport.width - position.x;
+            if room < menu_width {
+                position.x = (viewport.x + viewport.width - menu_width).max(viewport.x);
             }
 
-            Some(menu.overlay(
-                layout.position() + translation,
-                *viewport,
-                bounds.height,
-                Length::Shrink,
-            ))
+            Some(menu.overlay(position, *viewport, bounds.height, Length::Shrink))
         } else {
             None
         }

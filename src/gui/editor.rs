@@ -158,7 +158,15 @@ pub fn manifest<'a>(
                     .spacing(0)
                     .class(style::Checkbox),
                 )
-                .push(iced::widget::TextInput::new("", config.manifest.url()).width(Length::Fill))
+                .push(
+                    iced::widget::TextInput::new("", config.manifest.url())
+                        .width(Length::Fill)
+                        .size(design::text::BODY)
+                        .line_height(iced::widget::text::LineHeight::Absolute(iced::Pixels(
+                            design::control::LINE,
+                        )))
+                        .padding([design::control::PAD_Y, design::control::PAD_X]),
+                )
                 .push(get_checked(Some(config.manifest.url()), cache))
                 .push(get_updated(Some(config.manifest.url()), cache))
                 .push_if(!config.manifest.secondary.is_empty(), || {

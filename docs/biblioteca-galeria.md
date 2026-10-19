@@ -9,6 +9,13 @@ O padrão é mais recentes primeiro; nome e mais antigos são alternativas.
 Busca encontra título, identidade interna e emulador.
 O clique abre detalhes, histórico e ações. A restauração passa pela revisão e confirmação existentes.
 
+## Densidade
+
+A capa da grelha é 128×192. Título com mais de duas linhas é cortado com reticências; o nome
+inteiro fica na dica. Busca, ordenação e o par Galeria/Lista ficam na faixa da grelha. Atualizar,
+trocar o cofre e a restauração em lote ficam no menu da barra de título. As regras de tamanho e de
+qual botão usar estão em [design-system.md](design-system.md).
+
 ## Capas
 
 Busca automática pelo ID Steam exato do manifesto, sem correspondência aproximada por título.

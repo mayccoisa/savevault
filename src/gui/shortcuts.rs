@@ -516,7 +516,11 @@ impl TextHistories {
                     .on_input(event)
                     .class(style::TextInput)
                     .width(Length::Fill)
-                    .padding(design::space::XS);
+                    .size(design::text::BODY)
+                    .line_height(iced::widget::text::LineHeight::Absolute(iced::Pixels(
+                        design::control::LINE,
+                    )))
+                    .padding([design::control::PAD_Y, design::control::PAD_X]);
 
                 if let Some(icon) = icon {
                     input = input.icon(icon);

@@ -1,4 +1,4 @@
-//! Fundação v4 substituída pela v5 em 19/10/2026. Retorno: selecionar visual_v4.rs em gui.rs.
+//! Colours and widget classes. Every length this file uses comes from [`crate::gui::design`].
 use iced::{
     Background, Border, Color, Shadow,
     widget::{button, checkbox, container, pick_list, scrollable, text_editor, text_input},
@@ -240,7 +240,10 @@ impl button::Catalog for Theme {
                 Button::GameListEntryTitleDisabled => Some(self.skipped.into()),
                 Button::GameListEntryTitleUnscanned => None,
                 Button::Negative => Some(self.negative.into()),
-                Button::NavButtonActive | Button::SideNavActive => Some(self.navigation.alpha(0.9).into()),
+                Button::NavButtonActive => Some(self.navigation.into()),
+                // A tint of the accent, not a second gray. Gray-on-gray is how the active item
+                // disappeared into the sidebar.
+                Button::SideNavActive => Some(self.positive.alpha(0.18).into()),
                 Button::NavButtonInactive | Button::SideNavInactive | Button::Secondary | Button::Danger => None,
                 Button::Badge => None,
                 Button::Bare => None,
@@ -249,7 +252,10 @@ impl button::Catalog for Theme {
             border: Border {
                 color: match class {
                     Button::NavButtonActive | Button::NavButtonInactive => self.navigation,
-                    Button::Secondary => self.field,
+                    // A hairline the text colour can carry. `field` on the dark theme is one step
+                    // off the background, which is a border that only shows up in a screenshot
+                    // if you go looking for it.
+                    Button::Secondary => self.text.alpha(0.18),
                     // Neutral at rest, like any other quiet button. The trash icon already says what
                     // it does; the red is what the pointer reveals, and it is the whole warning.
                     Button::Danger => self.field,
@@ -296,7 +302,8 @@ impl button::Catalog for Theme {
             button::Status::Active => active,
             button::Status::Hovered => button::Style {
                 background: match class {
-                    Button::NavButtonActive | Button::SideNavActive => Some(self.navigation.alpha(0.95).into()),
+                    Button::NavButtonActive => Some(self.navigation.into()),
+                    Button::SideNavActive => Some(self.positive.alpha(0.28).into()),
                     Button::NavButtonInactive | Button::SideNavInactive => Some(self.navigation.alpha(0.5).into()),
                     Button::Secondary | Button::LibraryCard => Some(self.field.into()),
                     // Under the pointer it becomes what it does. Anywhere else it stays quiet.

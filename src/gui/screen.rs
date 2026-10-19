@@ -306,26 +306,26 @@ impl Restore {
     /// Eles moram lá porque a barra já existe e já reserva 62px carregando uma palavra só. Uma
     /// faixa própria de ações abaixo dela reporia o empilhamento que esta rodada veio desfazer.
     pub fn commands<'a>(&'a self, config: &Config, _manifest: &Manifest, operation: &Operation) -> Row<'a> {
-        use crate::gui::library::Event;
         if !self.library.operational {
+            // The vault name stays visible. Changing it, refreshing, and the batch restore are
+            // secondary: they used to be three buttons the same weight as the title.
+            let rendered = config.restore.path.render();
+            let leaf = rendered
+                .replace('\\', "/")
+                .rsplit('/')
+                .find(|part| !part.is_empty())
+                .unwrap_or(&rendered)
+                .to_string();
             return Row::new()
                 .spacing(design::space::SM)
-                .push(target_chip(
-                    "Cofre:".into(),
-                    &config.restore.path,
-                    Self::SCAN_KIND,
-                    operation,
-                ))
-                .push(button::secondary(
-                    "Atualizar".into(),
-                    operation.idle().then_some(Message::Library(Event::Refresh)),
-                    None,
-                ))
-                .push(button::secondary(
-                    "Restauração em lote".into(),
-                    operation.idle().then_some(Message::Library(Event::Operational)),
-                    None,
-                ));
+                .align_y(Alignment::Center)
+                .push(
+                    text(format!("Cofre · {leaf}"))
+                        .size(design::text::CAPTION)
+                        .line_height(design::leading::TIGHT)
+                        .class(style::Text::Muted),
+                )
+                .push(library_menu(operation.idle()));
         }
         let scanned = !self.log.entries.is_empty();
         if let Some(game) = &self.library.selected {
@@ -703,6 +703,45 @@ impl Emulators {
 
         template(Column::new().push(ScrollSubject::Emulators.into_widget(content.padding([0.0, design::space::XL]))))
     }
+}
+
+/// Secondary actions of the library. One control, not a row of peers.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum LibraryMenu {
+    Refresh,
+    ChangeVault,
+    Batch,
+}
+
+impl std::fmt::Display for LibraryMenu {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            Self::Refresh => "Atualizar",
+            Self::ChangeVault => "Trocar cofre",
+            Self::Batch => "Restauração em lote",
+        })
+    }
+}
+
+fn library_menu<'a>(idle: bool) -> Element<'a> {
+    use crate::gui::library::Event;
+    use crate::scan::ScanKind;
+
+    let options = if idle {
+        vec![LibraryMenu::Refresh, LibraryMenu::ChangeVault, LibraryMenu::Batch]
+    } else {
+        Vec::new()
+    };
+    crate::gui::popup_menu::PopupMenu::new(options, |action| match action {
+        LibraryMenu::Refresh => Message::Library(Event::Refresh),
+        LibraryMenu::ChangeVault => Message::ToggleTargetEditor {
+            scan_kind: ScanKind::Restore,
+        },
+        LibraryMenu::Batch => Message::Library(Event::Operational),
+    })
+    .width(design::control::HEIGHT)
+    .class(style::PickList::Popup)
+    .into()
 }
 
 /// O estado de um emulador nesta máquina, resumido em uma palavra para o chip do card.

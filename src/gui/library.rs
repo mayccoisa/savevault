@@ -147,8 +147,8 @@ impl Library {
                 .height(height)
                 .content_fit(iced::ContentFit::Cover)
                 .border_radius(iced::border::Radius {
-                    top_left: 16.0,
-                    top_right: 16.0,
+                    top_left: design::RADIUS,
+                    top_right: design::RADIUS,
                     bottom_left: 0.0,
                     bottom_right: 0.0,
                 })
@@ -160,11 +160,15 @@ impl Library {
                     .align_x(Alignment::Center)
                     .push(
                         text(game.title.chars().next().unwrap_or('?').to_string())
-                            .size(design::text::TITLE)
+                            .size(if width >= design::library::COVER_WIDTH {
+                                design::text::SUBTITLE
+                            } else {
+                                design::text::BODY
+                            })
                             .font(font::TEXT_STRONG),
                     )
                     .push(
-                        (width >= geometry::COVER_WIDTH)
+                        (width >= design::library::COVER_WIDTH)
                             .then(|| text("Sem capa").size(design::text::CAPTION).class(style::Text::Muted)),
                     ),
             )
@@ -176,21 +180,26 @@ impl Library {
     }
 
     fn card<'a>(&'a self, game: &'a vault::Game) -> Element<'a> {
+        let inner = design::library::COVER_WIDTH - 2.0 * design::library::CARD_PAD;
+        let title = ellipsize(&game.title, design::text_budget(inner, design::text::BODY, 2));
         let body = Column::new()
+            .width(design::library::COVER_WIDTH)
             .spacing(design::space::SM)
-            .push(self.cover(game, geometry::COVER_WIDTH, geometry::COVER_HEIGHT))
+            .push(self.cover(game, design::library::COVER_WIDTH, design::library::COVER_HEIGHT))
             .push(
                 Container::new(
                     Column::new()
                         .spacing(design::space::XS)
                         .push(
                             Container::new(
-                                text(game.title.clone())
+                                text(title)
                                     .font(font::TEXT_STRONG)
-                                    .size(13)
-                                    .line_height(1.38),
+                                    .size(design::text::BODY)
+                                    .line_height(design::leading::TIGHT)
+                                    .wrapping(iced::widget::text::Wrapping::Word),
                             )
-                            .height(geometry::TITLE_HEIGHT)
+                            .width(Length::Fill)
+                            .height(design::library::TITLE_BLOCK)
                             .clip(true),
                         )
                         .push(
@@ -205,12 +214,13 @@ impl Library {
                                 .class(style::Text::Muted),
                         ),
                 )
-                .padding(design::space::MD),
+                .width(Length::Fill)
+                .padding(design::library::CARD_PAD),
             );
         Tooltip::new(
             Button::new(body)
                 .padding(0)
-                .width(geometry::COVER_WIDTH)
+                .width(design::library::COVER_WIDTH)
                 .class(style::Button::LibraryCard)
                 .on_press(Message::Library(Event::Open(game.name.clone()))),
             text(game.title.clone()),
@@ -224,12 +234,16 @@ impl Library {
             Row::new()
                 .spacing(design::space::MD)
                 .align_y(Alignment::Center)
-                .push(self.cover(game, geometry::THUMB_WIDTH, geometry::THUMB_HEIGHT))
+                .push(self.cover(game, design::library::THUMB_WIDTH, design::library::THUMB_HEIGHT))
                 .push(
                     Column::new()
                         .spacing(design::space::XS)
                         .width(Length::Fill)
-                        .push(text(game.title.clone()).font(font::TEXT_STRONG))
+                        .push(
+                            text(ellipsize(&game.title, 72))
+                                .font(font::TEXT_STRONG)
+                                .wrapping(iced::widget::text::Wrapping::Word),
+                        )
                         .push(text(game.emulator.clone().unwrap_or_else(|| "PC".into())).class(style::Text::Muted)),
                 )
                 .push(text(version_count(game.backups)))
@@ -275,16 +289,29 @@ impl Library {
             .push(
                 TextInput::new("Buscar jogo ou emulador", &self.query)
                     .on_input(|q| Message::Library(Event::Search(q)))
-                    .padding(design::space::SM)
-                    .width(Length::Fill),
+                    .size(design::text::BODY)
+                    .line_height(iced::widget::text::LineHeight::Absolute(iced::Pixels(
+                        design::control::LINE,
+                    )))
+                    .padding([design::control::PAD_Y, design::control::PAD_X])
+                    .width(Length::Fixed(design::control::SEARCH_WIDTH)),
             )
             .push(pick_list(
                 [Sort::Recent, Sort::Name, Sort::Oldest],
                 Some(self.sort),
                 |s| Message::Library(Event::Sort(s)),
             ))
-            .push(self.view_button("Galeria", View::Gallery))
-            .push(self.view_button("Lista", View::List));
+            .push(iced::widget::space().width(Length::Fill))
+            .push(button::segment(
+                "Galeria".into(),
+                self.view == View::Gallery,
+                Message::Library(Event::View(View::Gallery)),
+            ))
+            .push(button::segment(
+                "Lista".into(),
+                self.view == View::List,
+                Message::Library(Event::View(View::List)),
+            ));
         let mut body = Column::new().spacing(design::space::LG).push(toolbar).push(
             text(format!(
                 "{} de {} jogos · {} versões no cofre",
@@ -301,11 +328,11 @@ impl Library {
         if filtered.is_empty() {
             body = body.push(text("Nenhum jogo encontrado. Tente outro nome ou emulador."));
         } else if self.view == View::Gallery {
-            let mut grid = Row::new().spacing(design::space::LG);
+            let mut grid = Row::new().spacing(design::library::GAP);
             for game in filtered {
                 grid = grid.push(self.card(game));
             }
-            body = body.push(grid.wrap());
+            body = body.push(grid.wrap().vertical_spacing(design::library::GAP));
         } else {
             for game in filtered {
                 body = body.push(self.list_row(game));
@@ -316,18 +343,6 @@ impl Library {
             .into()
     }
 
-    fn view_button(&self, label: &str, view: View) -> Element<'static> {
-        Button::new(text(label.to_string()))
-            .padding(design::space::SM)
-            .class(if self.view == view {
-                style::Button::NavButtonActive
-            } else {
-                style::Button::Bare
-            })
-            .on_press(Message::Library(Event::View(view)))
-            .into()
-    }
-
     fn details<'a>(&'a self, game: &'a vault::Game, idle: bool) -> Element<'a> {
         let mut info = Column::new()
             .spacing(design::space::MD)
@@ -335,7 +350,9 @@ impl Library {
             .push(
                 text(game.title.clone())
                     .size(design::text::TITLE)
-                    .font(font::TEXT_STRONG),
+                    .font(font::TEXT_STRONG)
+                    .width(Length::Fill)
+                    .wrapping(iced::widget::text::Wrapping::Word),
             )
             .push(text(game.emulator.clone().unwrap_or_else(|| "PC".into())).class(style::Text::Muted))
             .push(text(format!("{} para restaurar", version_count(game.backups))))
@@ -378,7 +395,7 @@ impl Library {
             .push(
                 Row::new()
                     .spacing(design::space::XL)
-                    .push(self.cover(game, geometry::COVER_WIDTH, geometry::COVER_HEIGHT))
+                    .push(self.cover(game, design::library::DETAIL_WIDTH, design::library::DETAIL_HEIGHT))
                     .push(info),
             )
             .push(
@@ -592,10 +609,42 @@ fn version_count(count: usize) -> String {
     }
 }
 
-mod geometry {
-    pub const COVER_WIDTH: f32 = 192.0;
-    pub const COVER_HEIGHT: f32 = 288.0;
-    pub const TITLE_HEIGHT: f32 = 36.0;
-    pub const THUMB_WIDTH: f32 = 40.0;
-    pub const THUMB_HEIGHT: f32 = 60.0;
+/// Cuts a title so it stays inside the card. The full name stays on the tooltip.
+fn ellipsize(title: &str, max_chars: usize) -> String {
+    if title.chars().count() <= max_chars {
+        return title.to_string();
+    }
+    let keep = max_chars.saturating_sub(1).max(1);
+    let mut end = title.len();
+    for (index, (byte, _)) in title.char_indices().enumerate() {
+        if index == keep {
+            end = byte;
+            break;
+        }
+    }
+    if let Some(word) = title[..end].rfind(' ')
+        && word >= end / 2
+    {
+        end = word;
+    }
+    format!("{}…", title[..end].trim_end())
+}
+
+#[cfg(test)]
+mod ellipsize_tests {
+    use super::ellipsize;
+
+    #[test]
+    fn titulo_curto_permanece() {
+        assert_eq!(ellipsize("Hades", 24), "Hades");
+    }
+
+    #[test]
+    fn titulo_longo_ganha_reticencias_e_nao_passa_do_limite() {
+        let title = "Jogo de teste com um título muito longo para verificar o comportamento da biblioteca";
+        let cut = ellipsize(title, 24);
+        assert!(cut.ends_with('…'));
+        assert!(cut.chars().count() <= 24);
+        assert!(title.starts_with(cut.trim_end_matches('…').trim_end()));
+    }
 }

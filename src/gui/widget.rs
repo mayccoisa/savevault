@@ -58,7 +58,9 @@ where
 {
     PickList::new(options, selected, on_selected)
         .text_shaping(w::text::Shaping::Advanced)
-        .padding(design::space::XS)
+        .text_size(design::text::BODY)
+        .text_line_height(w::text::LineHeight::Absolute(iced::Pixels(design::control::LINE)))
+        .padding([design::control::PAD_Y, design::control::PAD_X])
 }
 
 pub fn text<'a>(content: impl iced::widget::text::IntoFragment<'a>) -> Text<'a> {
@@ -138,14 +140,14 @@ pub fn number_input<'a>(
             // styling by semantics, and by the wrong semantics at that — lowering how many backups
             // to keep is not destruction, and raising it is not the primary action of the screen.
             .push({
-                Button::new(Icon::Remove.text().width(Length::Shrink))
+                Button::new(Container::new(Icon::Remove.text().width(Length::Shrink)).center_y(Length::Fill))
                     .on_press_if(&value > range.start(), || (change)(value - 1))
                     .class(style::Button::Secondary)
                     .height(design::control::HEIGHT)
                     .padding([0.0, design::control::PAD_X_ICON])
             })
             .push({
-                Button::new(Icon::Add.text().width(Length::Shrink))
+                Button::new(Container::new(Icon::Add.text().width(Length::Shrink)).center_y(Length::Fill))
                     .on_press_if(&value < range.end(), || (change)(value + 1))
                     .class(style::Button::Secondary)
                     .height(design::control::HEIGHT)

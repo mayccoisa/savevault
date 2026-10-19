@@ -5,6 +5,9 @@ Everything under "Inherited from Ludusavi" is the upstream history, with its own
 
 ## SaveVault (não publicado)
 
+- A biblioteca cabe mais jogos por linha. As capas ficaram menores, o título longo termina em reticências, e a busca deixou de ocupar a largura da janela.
+- Atualizar, trocar o cofre e a restauração em lote saíram da fileira de botões e foram para um menu. O nome do cofre continua visível.
+- O texto dos botões e do item ativo da barra lateral ficou centralizado no controle.
 - Biblioteca em galeria ou lista compacta, com busca, ordenação, último backup e quantidade de versões.
 - Detalhes por jogo com histórico e revisão da versão escolhida antes de restaurar.
 - Capas Steam pelo ID do manifesto, cache local e substituição manual por PNG ou JPEG.

@@ -18,12 +18,23 @@ use crate::{
 
 const WIDTH: u32 = 125;
 
+/// A label drawn inside a control.
+///
+/// Default leading is 1.3, which reserves a strip under the ink for a second line that a button
+/// never has. Tight leading makes the line box the em square, and vertical centering then lands
+/// on the ink instead of on that empty strip.
+fn tighten(content: Text) -> Text {
+    content
+        .line_height(design::leading::TIGHT)
+        .align_y(alignment::Vertical::Center)
+}
+
 fn template(content: Text, action: Option<Message>, style: Option<style::Button>) -> Element {
-    template_complex(content.align_x(alignment::Horizontal::Center), action, style)
+    template_complex(tighten(content).align_x(alignment::Horizontal::Center), action, style)
 }
 
 fn template_bare(content: Text, action: Option<Message>, style: Option<style::Button>) -> Element {
-    Button::new(content.align_x(alignment::Horizontal::Center))
+    Button::new(tighten(content).align_x(alignment::Horizontal::Center))
         .on_press_maybe(action)
         .class(style.unwrap_or(style::Button::Secondary))
         .padding(0)
@@ -81,16 +92,17 @@ fn template_complex<'a>(
 
 /// Centres a button's content in the fixed control height.
 ///
-/// This wrapper is not optional. `Button` gives its child the content box and lets the child decide
-/// where to sit in it, and a `Text` or a `Row` is only as tall as it needs to be — so the moment the
-/// button got a declared height, every label went to the top of it and the buttons looked broken.
-/// Before the declared height the padding happened to produce the centring by accident.
+/// `Button` lays its child out at the top of the content box (`layout::padded` does not align).
+/// A label is only as tall as its line, so a button with [`design::control::HEIGHT`] and no wrapper
+/// draws the highlight across the whole control and the ink in the top quarter of it. That is the
+/// sidebar item whose highlight sits below the word. Measured on a 36px control: the ink occupied
+/// y 93–102 of a highlight that ran y 90–125.
 fn centered<'a>(content: impl Into<Element<'a>>) -> Container<'a> {
     Container::new(content).center_y(Length::Fill)
 }
 
 pub fn primary<'a>(content: String, action: Option<Message>) -> Element<'a> {
-    Button::new(centered(text(content).align_x(alignment::Horizontal::Center)))
+    Button::new(centered(tighten(text(content)).align_x(alignment::Horizontal::Center)))
         .on_press_maybe(action)
         .class(style::Button::Primary)
         .height(design::control::HEIGHT)
@@ -100,7 +112,7 @@ pub fn primary<'a>(content: String, action: Option<Message>) -> Element<'a> {
 }
 
 pub fn negative<'a>(content: String, action: Option<Message>) -> Element<'a> {
-    Button::new(centered(text(content).align_x(alignment::Horizontal::Center)))
+    Button::new(centered(tighten(text(content)).align_x(alignment::Horizontal::Center)))
         .on_press_maybe(action)
         .class(style::Button::Negative)
         .width(WIDTH)
@@ -162,7 +174,7 @@ pub fn hide<'a>(action: Message) -> Element<'a> {
 /// The fixed 125px of `primary` is what made the old row of actions read like a form. In a
 /// command bar the width has to come from the word.
 pub fn secondary<'a>(content: String, action: Option<Message>, tooltip: Option<String>) -> Element<'a> {
-    let button: Element<'a> = Button::new(centered(text(content).align_x(alignment::Horizontal::Center)))
+    let button: Element<'a> = Button::new(centered(tighten(text(content)).align_x(alignment::Horizontal::Center)))
         .on_press_maybe(action)
         .class(style::Button::Secondary)
         .height(design::control::HEIGHT)
@@ -179,7 +191,7 @@ pub fn secondary<'a>(content: String, action: Option<Message>, tooltip: Option<S
 
 /// The primary action of the bar: filled, and as wide as its label.
 pub fn primary_bar<'a>(content: String, action: Option<Message>, tooltip: Option<String>) -> Element<'a> {
-    let button: Element<'a> = Button::new(centered(text(content).align_x(alignment::Horizontal::Center)))
+    let button: Element<'a> = Button::new(centered(tighten(text(content)).align_x(alignment::Horizontal::Center)))
         .on_press_maybe(action)
         .class(style::Button::Primary)
         .height(design::control::HEIGHT)
@@ -278,7 +290,7 @@ pub fn scan<'a>(ongoing: &Operation, scan_kind: crate::scan::ScanKind, scanned: 
     if !scanned && !scanning && !cancelling {
         primary_bar(label, action, None)
     } else if scanning || cancelling {
-        let button: Element<'a> = Button::new(centered(text(label).align_x(alignment::Horizontal::Center)))
+        let button: Element<'a> = Button::new(centered(tighten(text(label)).align_x(alignment::Horizontal::Center)))
             .on_press_maybe(action)
             .class(style::Button::Negative)
             .height(design::control::HEIGHT)
@@ -319,7 +331,7 @@ pub fn backup_main<'a>(ongoing: &Operation, filtered: bool, has_changes: bool) -
     }
     if running {
         let button: Element<'a> = Button::new(centered(
-            text(TRANSLATOR.cancel_button()).align_x(alignment::Horizontal::Center),
+            tighten(text(TRANSLATOR.cancel_button())).align_x(alignment::Horizontal::Center),
         ))
         .on_press(Message::CancelOperation)
         .class(style::Button::Negative)
@@ -370,7 +382,7 @@ pub fn restore_main<'a>(ongoing: &Operation, filtered: bool) -> Element<'a> {
     }
     if running {
         let button: Element<'a> = Button::new(centered(
-            text(TRANSLATOR.cancel_button()).align_x(alignment::Horizontal::Center),
+            tighten(text(TRANSLATOR.cancel_button())).align_x(alignment::Horizontal::Center),
         ))
         .on_press(Message::CancelOperation)
         .class(style::Button::Negative)
@@ -592,7 +604,7 @@ pub fn refresh_emulators<'a>() -> Element<'a> {
             .spacing(design::space::SM)
             .align_y(alignment::Vertical::Center)
             .push(Icon::Refresh.text_narrow().size(design::icon::SM))
-            .push(text(TRANSLATOR.recheck_emulators_button()).width(Length::Shrink)),
+            .push(tighten(text(TRANSLATOR.recheck_emulators_button())).width(Length::Shrink)),
         Some(Message::RefreshEmulators),
         Some(style::Button::Primary),
     )
@@ -620,9 +632,9 @@ pub fn side_nav<'a>(screen: Screen, current_screen: Screen) -> Button<'a> {
         Screen::Other => TRANSLATOR.nav_settings_button(),
     };
 
-    Button::new(
+    Button::new(centered(
         Row::new()
-            .spacing(design::space::MD)
+            .spacing(design::space::SM)
             .align_y(iced::Alignment::Center)
             .push(
                 match screen {
@@ -635,8 +647,8 @@ pub fn side_nav<'a>(screen: Screen, current_screen: Screen) -> Button<'a> {
                 }
                 .text_small(),
             )
-            .push(text(label).size(13)),
-    )
+            .push(tighten(text(label)).size(design::text::BODY)),
+    ))
     .on_press(Message::SwitchScreen(screen))
     .width(Length::Fill)
     .height(design::control::HEIGHT)
@@ -723,18 +735,32 @@ pub fn show_game_notes<'a>(game: String, notes: Vec<manifest::Note>) -> Element<
 }
 
 pub fn expand<'a>(expanded: bool, on_press: Message) -> Element<'a> {
-    Button::new(
+    Button::new(centered(
         (if expanded {
             Icon::KeyboardArrowDown
         } else {
             Icon::KeyboardArrowRight
         })
         .text_small(),
-    )
+    ))
     .on_press(on_press)
     .class(style::Button::Bare)
-    .padding(design::space::XS)
-    .height(25)
-    .width(25)
+    .padding(0)
+    .height(design::control::COMPACT)
+    .width(design::control::COMPACT)
     .into()
+}
+
+/// A segmented choice: the same height as every other control, filled only while it is the one on.
+pub fn segment<'a>(label: String, active: bool, action: Message) -> Element<'a> {
+    Button::new(centered(tighten(text(label)).align_x(alignment::Horizontal::Center)))
+        .on_press(action)
+        .height(design::control::HEIGHT)
+        .padding([0.0, design::control::PAD_X])
+        .class(if active {
+            style::Button::NavButtonActive
+        } else {
+            style::Button::Secondary
+        })
+        .into()
 }
