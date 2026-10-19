@@ -1,3 +1,5 @@
+//! Versão 3 preservada em 18/10/2026. A versão ativa é design_v4.rs.
+//! Para restaurar, remova o atributo path do módulo design em src/gui.rs.
 //! Save Vault's visual foundation, version 3.
 //!
 //! # Why this file exists

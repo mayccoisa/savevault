@@ -278,6 +278,7 @@ pub struct Restore {
     /// Restauração abrir respondendo "o que eu tenho e de quando é" em vez de uma lista de nomes
     /// sem dado nenhum esperando alguém apertar Escanear.
     pub inventory: Vec<vault::Game>,
+    pub library: crate::gui::library::Library,
 }
 
 impl Restore {
@@ -295,6 +296,7 @@ impl Restore {
     pub fn new(config: &Config, _cache: &Cache) -> Self {
         Self {
             inventory: vault::games(config),
+            library: crate::gui::library::Library::load(),
             ..Default::default()
         }
     }
@@ -304,7 +306,38 @@ impl Restore {
     /// Eles moram lá porque a barra já existe e já reserva 62px carregando uma palavra só. Uma
     /// faixa própria de ações abaixo dela reporia o empilhamento que esta rodada veio desfazer.
     pub fn commands<'a>(&'a self, config: &Config, _manifest: &Manifest, operation: &Operation) -> Row<'a> {
+        use crate::gui::library::Event;
+        if !self.library.operational {
+            return Row::new()
+                .spacing(design::space::SM)
+                .push(target_chip(
+                    "Cofre:".into(),
+                    &config.restore.path,
+                    Self::SCAN_KIND,
+                    operation,
+                ))
+                .push(button::secondary(
+                    "Atualizar".into(),
+                    operation.idle().then_some(Message::Library(Event::Refresh)),
+                    None,
+                ))
+                .push(button::secondary(
+                    "Restauração em lote".into(),
+                    operation.idle().then_some(Message::Library(Event::Operational)),
+                    None,
+                ));
+        }
         let scanned = !self.log.entries.is_empty();
+        if let Some(game) = &self.library.selected {
+            return Row::new().push(button::primary_bar(
+                "Restaurar esta versão".into(),
+                (scanned && operation.idle()).then(|| Message::GameAction {
+                    action: crate::gui::common::GameAction::Restore { confirm: true },
+                    game: game.clone(),
+                }),
+                None,
+            ));
+        }
 
         Row::new()
             .spacing(design::space::SM)
@@ -340,6 +373,22 @@ impl Restore {
         histories: &TextHistories,
         modifiers: &keyboard::Modifiers,
     ) -> Element {
+        if !self.library.operational {
+            if self.target_editor_open {
+                return template(
+                    Column::new()
+                        .push(target_drawer(
+                            histories.input(UndoSubject::RestoreSource),
+                            button::choose_folder(BrowseSubject::RestoreSource, modifiers),
+                            Self::SCAN_KIND,
+                        ))
+                        .push(text(
+                            "Escolha a pasta do cofre e clique em Concluído para carregar os jogos.",
+                        )),
+                );
+            }
+            return self.library.view(&self.inventory, operation.idle());
+        }
         let duplicatees = self.log.duplicatees(&self.duplicate_detector);
 
         let status = self.log.compute_operation_status(
@@ -351,6 +400,13 @@ impl Restore {
         );
 
         let content = Column::new()
+            .push(button::secondary(
+                "Voltar à biblioteca".into(),
+                operation
+                    .idle()
+                    .then_some(Message::Library(crate::gui::library::Event::Back)),
+                None,
+            ))
             .push(context_strip(
                 scan_summary(&self.log, operation, &status),
                 &status,
@@ -372,7 +428,9 @@ impl Restore {
             // Antes de varrer, a tela mostra o ACERVO. Varrer troca para a lista operacional, que é
             // a que sabe restaurar; o acervo só responde o que existe guardado, e é ele que faz a
             // tela abrir com conteúdo em vez de esperar alguém apertar Escanear.
-            .push_if(self.log.entries.is_empty(), || self.view_inventory())
+            .push_if(self.log.entries.is_empty(), || {
+                text("Escaneie o cofre para revisar os arquivos e restaurar vários jogos.")
+            })
             .push_if(!self.log.entries.is_empty(), || {
                 self.log.view(
                     Self::SCAN_KIND,
@@ -387,67 +445,6 @@ impl Restore {
             });
 
         template(content)
-    }
-
-    /// O acervo: um card por jogo guardado, do backup mais antigo para o mais novo.
-    fn view_inventory(&self) -> Element<'_> {
-        if self.inventory.is_empty() {
-            return Container::new(text(TRANSLATOR.vault_empty()).size(design::text::BODY))
-                .padding(design::space::XXL)
-                .width(Length::Fill)
-                .into();
-        }
-
-        let mut content = Column::new()
-            .width(Length::Fill)
-            .spacing(design::space::MD)
-            .padding([0.0, design::space::XL])
-            .push(
-                text(TRANSLATOR.vault_stored_games(self.inventory.len()))
-                    .size(design::text::CAPTION)
-                    .class(style::Text::Muted),
-            );
-
-        for game in &self.inventory {
-            content = content.push(
-                Container::new(
-                    Row::new()
-                        .spacing(design::space::MD)
-                        .align_y(Alignment::Center)
-                        .push(emulator_art::game_tile(game))
-                        .push(
-                            Column::new()
-                                .spacing(design::space::XS)
-                                .width(Length::Fill)
-                                .push(
-                                    text(game.name.clone())
-                                        .font(font::TEXT_STRONG)
-                                        .size(design::text::SUBTITLE)
-                                        .line_height(design::leading::TITLE),
-                                )
-                                .push(game.emulator.clone().map(|emulator| {
-                                    text(emulator).size(design::text::CAPTION).class(style::Text::Muted)
-                                })),
-                        )
-                        .push(
-                            Column::new()
-                                .spacing(design::space::XS)
-                                .align_x(Alignment::End)
-                                .push(text(game.last_backup.format("%Y-%m-%d %H:%M").to_string()))
-                                .push(
-                                    text(format!("{} · {}", game.files, TRANSLATOR.adjusted_size(game.bytes)))
-                                        .size(design::text::CAPTION)
-                                        .class(style::Text::Muted),
-                                ),
-                        ),
-                )
-                .padding(design::space::MD)
-                .width(Length::Fill)
-                .class(style::Container::Card),
-            );
-        }
-
-        ScrollSubject::Restore.into_widget(content).into()
     }
 }
 

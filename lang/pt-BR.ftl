@@ -323,3 +323,5 @@ emulator-folder-wrong = Isto não parece a pasta de dados do { $name }. Falta: {
 emulator-folder-without-saves = Pasta certa, mas não há save nenhum nela. Procurei em: { $areas }. Se os seus jogos estão em outro disco, aponte aquela instalação.
 emulator-folder-ready = Pasta reconhecida: { $saves } arquivo(s) de save encontrados.
 emulator-using-folder-without-saves = Usando { $path }, mas não há save nenhum nela. Se os seus jogos estão em outro disco, acrescente aquela instalação como pasta abaixo.
+
+accent-pink = Rosa

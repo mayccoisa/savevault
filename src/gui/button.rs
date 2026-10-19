@@ -613,23 +613,39 @@ pub fn open_url_icon<'a>(url: String) -> Element<'a> {
 pub fn side_nav<'a>(screen: Screen, current_screen: Screen) -> Button<'a> {
     let label = match screen {
         Screen::Backup => TRANSLATOR.nav_backup_button(),
-        Screen::Restore => TRANSLATOR.nav_restore_button(),
+        Screen::Restore => "Biblioteca".into(),
         Screen::CustomGames => TRANSLATOR.nav_custom_games_button(),
         Screen::Emulators => TRANSLATOR.nav_emulators_button(),
         Screen::Logs => TRANSLATOR.nav_logs_button(),
         Screen::Other => TRANSLATOR.nav_settings_button(),
     };
 
-    Button::new(centered(text(label).align_x(alignment::Horizontal::Left)))
-        .on_press(Message::SwitchScreen(screen))
-        .width(Length::Fill)
-        .height(design::control::HEIGHT)
-        .padding([0.0, design::control::PAD_X_ICON])
-        .class(if current_screen == screen {
-            style::Button::SideNavActive
-        } else {
-            style::Button::SideNavInactive
-        })
+    Button::new(
+        Row::new()
+            .spacing(design::space::MD)
+            .align_y(iced::Alignment::Center)
+            .push(
+                match screen {
+                    Screen::Backup => Icon::Upload,
+                    Screen::Restore => Icon::FolderOpen,
+                    Screen::CustomGames => Icon::AddCircle,
+                    Screen::Emulators => Icon::VideogameAsset,
+                    Screen::Logs => Icon::Comment,
+                    Screen::Other => Icon::Settings,
+                }
+                .text_small(),
+            )
+            .push(text(label).size(13)),
+    )
+    .on_press(Message::SwitchScreen(screen))
+    .width(Length::Fill)
+    .height(design::control::HEIGHT)
+    .padding([0.0, design::space::MD])
+    .class(if current_screen == screen {
+        style::Button::SideNavActive
+    } else {
+        style::Button::SideNavInactive
+    })
 }
 
 pub fn upload<'a>(operation: &Operation) -> Element<'a> {

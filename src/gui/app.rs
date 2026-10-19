@@ -1322,6 +1322,134 @@ impl App {
         Task::none()
     }
 
+    fn load_library_covers(&mut self) -> Task<Message> {
+        use crate::gui::library::{self, Event};
+        let mut tasks = vec![];
+        for game in &self.restore_screen.inventory {
+            if !self.restore_screen.library.requested.insert(game.name.clone()) {
+                continue;
+            }
+            let name = game.name.clone();
+            let steam = self.manifest.extended.0.get(&name).and_then(|entry| entry.steam.id);
+            tasks.push(Task::future(async move {
+                let result = library::fetch_cover(name.clone(), steam).await;
+                Message::Library(Event::CoverReady(name, result))
+            }));
+        }
+        Task::batch(tasks)
+    }
+
+    fn handle_library(&mut self, event: crate::gui::library::Event) -> Task<Message> {
+        use crate::gui::library::{self, Event};
+        match event {
+            Event::Search(value) => {
+                self.restore_screen.library.query = value;
+                self.reset_scroll_position(ScrollSubject::Restore);
+                return self.refresh_scroll_position();
+            }
+            Event::View(value) => {
+                self.restore_screen.library.view = value;
+                self.restore_screen.library.save_preferences();
+                self.reset_scroll_position(ScrollSubject::Restore);
+                return self.refresh_scroll_position();
+            }
+            Event::Sort(value) => {
+                self.restore_screen.library.sort = value;
+                self.restore_screen.library.save_preferences();
+                self.reset_scroll_position(ScrollSubject::Restore);
+                return self.refresh_scroll_position();
+            }
+            Event::Open(name) => {
+                self.restore_screen.library.open(name, &self.config);
+                self.reset_scroll_position(ScrollSubject::Restore);
+                return self.refresh_scroll_position();
+            }
+            Event::Back => {
+                if !self.operation.idle() {
+                    return Task::none();
+                }
+                self.restore_screen.library.operational = false;
+                self.restore_screen.library.selected = None;
+                self.restore_screen.inventory = crate::gui::vault::games(&self.config);
+                self.reset_scroll_position(ScrollSubject::Restore);
+                return Task::batch([self.load_library_covers(), self.refresh_scroll_position()]);
+            }
+            Event::Refresh => {
+                if !self.operation.idle() {
+                    return Task::none();
+                }
+                self.restore_screen.inventory = crate::gui::vault::games(&self.config);
+                if let Some(name) = self.restore_screen.library.selected.clone() {
+                    self.restore_screen.library.open(name, &self.config);
+                }
+                self.restore_screen.library.requested.clear();
+                return self.load_library_covers();
+            }
+            Event::Operational => {
+                if !self.operation.idle() {
+                    return Task::none();
+                }
+                self.restore_screen.library.operational = true;
+                self.restore_screen.library.selected = None;
+                self.restore_screen.log.clear();
+                self.restore_screen.duplicate_detector.clear();
+                return self.handle_restore(RestorePhase::Start {
+                    preview: true,
+                    games: None,
+                });
+            }
+            Event::Preview(game, backup) => {
+                if !self.operation.idle() {
+                    return Task::none();
+                }
+                self.restore_screen.library.operational = true;
+                self.restore_screen.log.clear();
+                self.restore_screen.duplicate_detector.clear();
+                self.backups_to_restore.insert(game.clone(), backup.id());
+                return self.handle_restore(RestorePhase::Start {
+                    preview: true,
+                    games: Some(GameSelection::single(game)),
+                });
+            }
+            Event::Backup(game) => {
+                if !self.operation.idle() {
+                    return Task::none();
+                }
+                self.screen = Screen::Backup;
+                return self.handle_backup(BackupPhase::Confirm {
+                    games: Some(GameSelection::single(game)),
+                });
+            }
+            Event::ChooseCover(game) => {
+                return Task::future(async move {
+                    let file = rfd::AsyncFileDialog::new()
+                        .set_title("Escolher capa do jogo")
+                        .add_filter("Imagem", &["png", "jpg", "jpeg"])
+                        .pick_file()
+                        .await;
+                    Message::Library(Event::CoverChosen(game, file.map(|file| file.path().to_path_buf())))
+                });
+            }
+            Event::CoverChosen(game, Some(path)) => {
+                return Task::future(async move {
+                    let result = library::import_cover(&game, path);
+                    Message::Library(Event::CoverReady(game, result))
+                });
+            }
+            Event::CoverChosen(_, None) => {}
+            Event::CoverReady(game, result) => match result {
+                Ok(Some(handle)) => {
+                    self.restore_screen.library.covers.insert(game, handle);
+                }
+                Ok(None) => {}
+                Err(message) => {
+                    self.restore_screen.library.notice = Some(message);
+                }
+            },
+        }
+        Task::none()
+    }
+
     fn switch_screen(&mut self, screen: Screen) -> Task<Message> {
         self.screen = screen;
 
@@ -1341,6 +1469,9 @@ impl App {
         // guardado, que é diferente do que a última varredura encontrou.
         if screen == Screen::Restore {
             self.restore_screen.inventory = crate::gui::vault::games(&self.config);
+            self.restore_screen.library.operational = false;
+            self.restore_screen.library.selected = None;
+            return Task::batch([self.refresh_scroll_position(), self.load_library_covers()]);
         }
 
         self.refresh_scroll_position()
@@ -1397,6 +1528,7 @@ impl App {
     pub fn new(flags: Flags) -> (Self, Task<Message>) {
         let mut errors = vec![];
         let mut commands = vec![
+            Task::done(Message::Library(crate::gui::library::Event::Refresh)),
             iced::font::load(std::borrow::Cow::Borrowed(crate::gui::font::TEXT_DATA)).map(|_| Message::Ignore),
             iced::font::load(std::borrow::Cow::Borrowed(crate::gui::font::ICONS_DATA)).map(|_| Message::Ignore),
             iced::font::load(std::borrow::Cow::Borrowed(crate::gui::font::TEXT_STRONG_DATA)).map(|_| Message::Ignore),
@@ -1531,6 +1663,7 @@ impl App {
     pub fn update(&mut self, message: Message) -> Task<Message> {
         match message {
             Message::Ignore => Task::none(),
+            Message::Library(event) => self.handle_library(event),
             Message::RefreshEmulators => {
                 self.emulators_screen.refresh(&self.config);
                 Task::none()
@@ -2185,7 +2318,11 @@ impl App {
                     }
                 }
 
-                let mut tasks = vec![self.close_specific_modal(modal::Kind::UpdatingManifest)];
+                self.restore_screen.library.requested.clear();
+                let mut tasks = vec![
+                    self.close_specific_modal(modal::Kind::UpdatingManifest),
+                    self.load_library_covers(),
+                ];
                 if !errors.is_empty() {
                     tasks.push(self.show_modal(Modal::Errors { errors }));
                 }
@@ -2236,6 +2373,10 @@ impl App {
                     }
                     crate::scan::ScanKind::Restore => {
                         self.restore_screen.target_editor_open = !self.restore_screen.target_editor_open;
+                        if !self.restore_screen.target_editor_open && !self.restore_screen.library.operational {
+                            self.restore_screen.library.selected = None;
+                            return self.handle_library(crate::gui::library::Event::Refresh);
+                        }
                     }
                 }
                 Task::none()
@@ -3157,14 +3298,16 @@ impl App {
                                 .class(style::Text::Muted),
                         ),
                 )
-                .push(button::side_nav(Screen::Backup, self.screen))
+                .push(iced::widget::space().height(design::space::LG))
                 .push(button::side_nav(Screen::Restore, self.screen))
+                .push(button::side_nav(Screen::Backup, self.screen))
+                .push(iced::widget::space().height(design::space::LG))
                 .push(button::side_nav(Screen::CustomGames, self.screen))
                 .push(button::side_nav(Screen::Emulators, self.screen))
                 .push(button::side_nav(Screen::Logs, self.screen))
-                .push(button::side_nav(Screen::Other, self.screen))
-                // O rodape da coluna fica colado embaixo, como no desenho.
                 .push(iced::widget::space().height(Length::Fill))
+                .push(button::side_nav(Screen::Other, self.screen))
+                // Configurações e atualização ficam no rodapé.
                 .push(button::check_for_update(&self.updating_app)),
         )
         .width(design::SIDEBAR_WIDTH)
@@ -3173,15 +3316,24 @@ impl App {
 
         let topbar = Container::new(
             Row::new()
-                .padding([0.0, design::space::XL])
+                .padding([0.0, design::space::XXL])
                 .height(design::TOPBAR_HEIGHT)
                 .spacing(design::space::MD)
                 .align_y(Alignment::Center)
                 .push(
-                    text(self.screen.title())
-                        .font(font::TEXT_STRONG)
-                        .size(design::text::TITLE)
-                        .line_height(design::leading::TITLE),
+                    Column::new()
+                        .spacing(design::space::XS)
+                        .push(
+                            text(self.screen.title())
+                                .font(font::TEXT_STRONG)
+                                .size(design::text::TITLE)
+                                .line_height(design::leading::TITLE),
+                        )
+                        .push((self.screen == Screen::Restore).then(|| {
+                            text("Seus jogos, versões e progresso protegido")
+                                .size(design::text::CAPTION)
+                                .class(style::Text::Muted)
+                        })),
                 )
                 .push(iced::widget::space().width(Length::Fill))
                 .push(match self.screen {

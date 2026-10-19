@@ -1,3 +1,18 @@
+# Sistema visual do SaveVault · v5
+
+A referência atual é o RepackHub. Medidas, diferenças e cores estão em [visual-repackhub.md](visual-repackhub.md).
+A fundação ativa reúne `design_v5.rs`, `font_v5.rs` e `style_v5.rs` em `visual_v5.rs`.
+Para restaurar a fundação v4, trocar apenas `#[path = "gui/visual_v5.rs"]` por
+`#[path = "gui/visual_v4.rs"]` em `src/gui.rs`.
+
+## Histórico da v4, substituída em 19/10/2026
+
+A v4 preserva a escala tipográfica 12, 14, 16 e 20, o corpo 14 e a grade de espaços existente.
+O raio passa de 6 para 8. As dimensões das capas ficam no componente da biblioteca, com proporção 2:3.
+Cards usam superfície e realce no hover, sem faixas de seleção. Texto e dados ficam fora da imagem.
+
+## Registro da fundação anterior
+
 # Save Vault's visual system
 
 The whole foundation lives in one file: **`src/gui/design.rs`**. Colours stay in `src/gui/style.rs`,

@@ -369,3 +369,5 @@ emulator-folder-wrong = This does not look like { $name }'s data folder. It is m
 emulator-folder-without-saves = Right folder, but there are no saves in it. Looked in: { $areas }. If your games are on another drive, point at that installation instead.
 emulator-folder-ready = Folder recognised: { $saves } save file(s) found.
 emulator-using-folder-without-saves = Using { $path }, but there are no saves in it. If your games are on another drive, add that installation as a folder below.
+
+accent-pink = Pink

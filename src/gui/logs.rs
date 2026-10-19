@@ -362,6 +362,7 @@ mod tests {
         Entry {
             when,
             game: game.to_string(),
+            title: game.to_string(),
             full: true,
             added: 1,
             changed: 0,

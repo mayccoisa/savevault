@@ -1,3 +1,4 @@
+//! Fundação v4 substituída pela v5 em 19/10/2026. Retorno: selecionar visual_v4.rs em gui.rs.
 use iced::{
     Background, Border, Color, Shadow,
     widget::{button, checkbox, container, pick_list, scrollable, text_editor, text_input},
@@ -62,6 +63,7 @@ impl Theme {
         // Every accent carries its own ink: the text drawn on top of the accent itself. A single
         // ink for all of them would be unreadable on at least one, since they differ in lightness.
         let (accent, accent_ink) = match choice {
+            config::Accent::Pink => (rgb8!(0xff, 0x3d, 0x81), rgb8!(0x1a, 0x04, 0x10)),
             config::Accent::Green => (rgb8!(0x38, 0xe0, 0x8a), rgb8!(0x04, 0x16, 0x0c)),
             config::Accent::Blue => (rgb8!(0x5b, 0x8d, 0xef), rgb8!(0x04, 0x0d, 0x1e)),
             config::Accent::Purple => (rgb8!(0xc7, 0x7d, 0xff), rgb8!(0x18, 0x06, 0x2a)),
@@ -199,6 +201,7 @@ impl iced::widget::overlay::menu::Catalog for Theme {
 pub enum Button {
     #[default]
     Primary,
+    LibraryCard,
     Negative,
     GameActionPrimary,
     GameListEntryTitle,
@@ -241,6 +244,7 @@ impl button::Catalog for Theme {
                 Button::NavButtonInactive | Button::SideNavInactive | Button::Secondary | Button::Danger => None,
                 Button::Badge => None,
                 Button::Bare => None,
+                Button::LibraryCard => Some(self.field.alpha(design::alpha::HALF).into()),
             },
             border: Border {
                 color: match class {
@@ -266,7 +270,7 @@ impl button::Catalog for Theme {
                 Button::GameListEntryTitleDisabled => self.text_skipped.alpha(0.8),
                 Button::GameListEntryTitleUnscanned => self.text.alpha(0.8),
                 Button::NavButtonActive | Button::NavButtonInactive | Button::Bare | Button::SideNavActive => self.text,
-                Button::Secondary => self.text,
+                Button::Secondary | Button::LibraryCard => self.text,
                 Button::Danger => self.text_skipped,
                 Button::SideNavInactive => self.text_skipped,
                 Button::Primary | Button::GameActionPrimary => self.accent_ink,
@@ -294,7 +298,7 @@ impl button::Catalog for Theme {
                 background: match class {
                     Button::NavButtonActive | Button::SideNavActive => Some(self.navigation.alpha(0.95).into()),
                     Button::NavButtonInactive | Button::SideNavInactive => Some(self.navigation.alpha(0.5).into()),
-                    Button::Secondary => Some(self.field.into()),
+                    Button::Secondary | Button::LibraryCard => Some(self.field.into()),
                     // Under the pointer it becomes what it does. Anywhere else it stays quiet.
                     Button::Danger => Some(self.negative.into()),
                     _ => active.background,
@@ -320,7 +324,7 @@ impl button::Catalog for Theme {
                     | Button::SideNavActive
                     | Button::SideNavInactive => self.text,
                     Button::Bare => self.text.alpha(0.9),
-                    Button::Secondary => self.text,
+                    Button::Secondary | Button::LibraryCard => self.text,
                     Button::Danger => self.text_button,
                     Button::Primary | Button::GameActionPrimary => self.accent_ink,
                     _ => self.text_button,

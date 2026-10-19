@@ -1345,6 +1345,7 @@ impl Translator {
     pub fn accent_name(&self, accent: &Accent) -> String {
         translate(match accent {
             Accent::Green => "accent-green",
+            Accent::Pink => "accent-pink",
             Accent::Blue => "accent-blue",
             Accent::Purple => "accent-purple",
             Accent::Orange => "accent-orange",

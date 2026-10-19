@@ -360,6 +360,7 @@ impl ToString for Theme {
 pub enum Accent {
     #[default]
     Green,
+    Pink,
     Blue,
     Purple,
     Orange,
@@ -367,7 +368,14 @@ pub enum Accent {
 }
 
 impl Accent {
-    pub const ALL: &'static [Self] = &[Self::Green, Self::Blue, Self::Purple, Self::Orange, Self::Red];
+    pub const ALL: &'static [Self] = &[
+        Self::Green,
+        Self::Pink,
+        Self::Blue,
+        Self::Purple,
+        Self::Orange,
+        Self::Red,
+    ];
 }
 
 impl ToString for Accent {

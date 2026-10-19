@@ -3,6 +3,12 @@
 SaveVault is a fork of [Ludusavi](https://github.com/mtkennerly/ludusavi) by Michael Kennerly.
 Everything under "Inherited from Ludusavi" is the upstream history, with its own version numbers.
 
+## SaveVault (não publicado)
+
+- Biblioteca em galeria ou lista compacta, com busca, ordenação, último backup e quantidade de versões.
+- Detalhes por jogo com histórico e revisão da versão escolhida antes de restaurar.
+- Capas Steam pelo ID do manifesto, cache local e substituição manual por PNG ou JPEG.
+
 ## SaveVault v0.13.0 (2026-09-08)
 
 * Added:

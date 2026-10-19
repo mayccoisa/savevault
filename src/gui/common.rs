@@ -105,6 +105,7 @@ pub enum ValidatePhase {
 
 #[derive(Debug, Clone)]
 pub enum Message {
+    Library(crate::gui::library::Event),
     /// Abre ou fecha a gaveta do caminho do cofre, na tela indicada.
     ToggleTargetEditor {
         scan_kind: crate::scan::ScanKind,
@@ -685,8 +686,8 @@ impl Operation {
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub enum Screen {
-    #[default]
     Backup,
+    #[default]
     Restore,
     CustomGames,
     Emulators,
@@ -700,7 +701,7 @@ impl Screen {
     pub fn title(&self) -> String {
         match self {
             Self::Backup => TRANSLATOR.nav_backup_button(),
-            Self::Restore => TRANSLATOR.nav_restore_button(),
+            Self::Restore => "Biblioteca".into(),
             Self::CustomGames => TRANSLATOR.nav_custom_games_button(),
             Self::Emulators => TRANSLATOR.nav_emulators_button(),
             Self::Logs => TRANSLATOR.nav_logs_button(),

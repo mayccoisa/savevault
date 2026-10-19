@@ -1,3 +1,4 @@
+//! Fundação v4 substituída pela v5 em 19/10/2026. Retorno: selecionar visual_v4.rs em gui.rs.
 use iced::{Font, font};
 
 pub const TEXT_DATA: &[u8] = include_bytes!("../../assets/NotoSans-Regular.ttf");
