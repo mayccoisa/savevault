@@ -591,6 +591,14 @@ Se esta sessão está rodando sem o Maycon acompanhando:
 - **Não** faça push em `master` com teste vermelho. O baseline é **363 verdes no `--lib`** (24
   filtrados, os de registro) e **32 no `--bin ludusavi`**. Os dois: `--lib` não vê a interface,
   porque o `gui` mora no `main.rs` e não no `lib.rs`, e passa dizendo "ok" sem ter rodado nada dela.
+- Seis testes já falham no Ubuntu desde pelo menos a `savevault-v0.14.0` (no CI do master: 369
+  passaram, os mesmos 6 falharam). São `an_emulator_backup_folder_carries_the_title`,
+  `an_emulator_backup_goes_under_the_emulator_folder`, `an_older_emulator_backup_is_moved_and_still_found`,
+  `re_anchors_onto_the_current_data_folder`, `re_anchors_each_area_onto_its_own_subfolder` e
+  `matches_the_recorded_folder_ignoring_case`. Comparam caminho com a semântica de maiúsculas do
+  Windows. O produto é Windows-first: não mude o comportamento da restauração só para deixar o
+  Linux verde. No macOS o CI ainda reescreve `/var` para `/private/var` e falha um conjunto maior
+  pelo mesmo motivo de identidade de caminho.
 - **Não** toque em pasta real de emulador de ninguém. Todo teste usa pasta sintética em diretório
   temporário, e modo portátil (`ludusavi.portable` ao lado do executável) para não mexer na
   configuração real.

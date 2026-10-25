@@ -3309,6 +3309,9 @@ impl App {
                 Task::none()
             }
             Message::OpenRegistry(item) => {
+                // Read on Windows only. Other targets still bind the name, and CI denies it.
+                #[cfg(not(windows))]
+                let _ = item;
                 #[cfg(windows)]
                 {
                     use windows::{
