@@ -1322,12 +1322,26 @@ pub fn run(sub: Subcommand, no_manifest_update: bool, try_manifest_update: bool)
             };
             println!("{serialized}");
         }
-        Subcommand::Emulators { api } => {
-            let report = crate::scan::emulator::diagnose(&config.roots);
-            if api {
-                println!("{}", serde_json::to_string_pretty(&report).unwrap());
+        Subcommand::Emulators { api, scan, apply } => {
+            if let Some(path) = scan {
+                let directory = crate::scan::emulator::scan_directory(&path);
+                let plan = directory.plan(&config.roots);
+                if apply {
+                    crate::scan::emulator::extend_roots(&mut config.roots, &plan);
+                    config.save();
+                }
+                if api {
+                    println!("{}", serde_json::to_string_pretty(&plan.api_report(apply)).unwrap());
+                } else {
+                    print!("{}", plan.render(apply));
+                }
             } else {
-                print!("{}", report.render());
+                let report = crate::scan::emulator::diagnose(&config.roots);
+                if api {
+                    println!("{}", serde_json::to_string_pretty(&report).unwrap());
+                } else {
+                    print!("{}", report.render());
+                }
             }
         }
         Subcommand::Sources { api } => {

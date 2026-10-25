@@ -475,6 +475,27 @@ outra máquina): backup dos dois jogos, restauração numa instalação com **ou
 reancorando os 4 arquivos sozinha, recusa com dois perfis, e recusa com nenhum, sempre com saída 1 e
 **nenhuma pasta fantasma**.
 
+### 5.11 Varredura de uma pasta pai — FEITO
+
+O contrato era "aponte a pasta do emulador". A aba só aceitava a pasta de dados exata, uma por
+emulador, e `data_root_at` não olhava para dentro. Quem apontava `D:\Emulators`, ou a pasta do
+programa do PPSSPP, não tinha o que fazer.
+
+Agora `scan_directory` percorre a pasta apontada com teto de profundidade (4) e de diretórios
+(4096), sem seguir link simbólico. A assinatura que já existia decide o que é pasta de dados.
+A pasta do programa não é proposta quando o dado mora um nível abaixo (`memstick` no PPSSPP,
+`user` no shadPS4). No RPCS3, `portable/` existente substitui a pasta do executável, como
+`fs::get_config_dir` faz. Empate (Eden/Sudachi sem nome que separe, ou duas pastas do mesmo
+emulador) não vira escolha: a tela lista e não grava, e `--apply` também não grava.
+
+A tela é a aba Emuladores, botão **Varrer uma pasta**, com confirmação no molde de
+`ConfirmAddMissingRoots`. O comando é `emulators --scan <pasta>` e `--apply`.
+
+Provado com árvore sintética: descoberta positiva (container com DuckStation, PCSX2, Eden,
+PPSSPP, RPCS3, shadPS4 e Xenia, inclusive instalação versus pasta de dados), negativa (pasta
+que não é emulador), ambígua (dois DuckStation, e pasta Switch sem nome), e o teto de
+profundidade e de diretórios.
+
 ## 6. Pendências de verificação, herdadas
 
 Confirmado na documentação oficial: pasta de dados do DuckStation, `portable.txt`, e o formato do

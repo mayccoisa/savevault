@@ -7,6 +7,12 @@ or view info for specific subcommands, such as `ludusavi manifest update --help`
 
 You can also view the help text in [the CLI docs](/docs/cli.md).
 
+`emulators` prints what SaveVault knows about the emulators on this system.
+`emulators --scan <folder>` walks that folder (a parent that holds several emulators, or one
+emulator's folder) and proposes each data folder it recognizes.
+`emulators --scan <folder> --apply` stores only the proposals that are unambiguous.
+See [Roots](/docs/help/roots.md) for which folder is the data folder.
+
 ## Demo
 > ![CLI demo of previewing a backup](/docs/demo-cli.gif)
 

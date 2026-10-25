@@ -574,6 +574,22 @@ pub fn add_emulator_root<'a>(app: crate::scan::emulator::App) -> Element<'a> {
     )
 }
 
+/// Walk a folder the user points at and propose the emulator data folders inside it.
+///
+/// Secondary on purpose: "Check again" stays the filled action of this screen. This one is how
+/// a parent folder, or one install, gets read.
+pub fn scan_emulator_directory<'a>() -> Element<'a> {
+    template_complex(
+        Row::new()
+            .spacing(design::space::SM)
+            .align_y(alignment::Vertical::Center)
+            .push(Icon::Search.text_narrow().size(design::icon::SM))
+            .push(tighten(text(TRANSLATOR.scan_emulator_folder_button())).width(Length::Shrink)),
+        Some(Message::ScanEmulatorDirectory),
+        Some(style::Button::Secondary),
+    )
+}
+
 /// The one action that leads the Emulators screen, so it is the one filled button on it.
 ///
 /// It carries its label now. As a bare circular-arrow icon it was the loudest thing on the screen

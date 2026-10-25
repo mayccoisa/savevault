@@ -1032,6 +1032,85 @@ impl Translator {
         translate("emulators-explanation")
     }
 
+    pub fn scan_emulator_folder_button(&self) -> String {
+        translate("button-scan-emulator-folder")
+    }
+
+    /// What a directory scan found, in the language of the interface.
+    ///
+    /// The facts come from the scan. This only chooses the sentences.
+    pub fn emulator_directory_scan(&self, plan: &crate::scan::emulator::ScanPlan) -> String {
+        use std::fmt::Write;
+
+        if plan.not_a_directory {
+            let mut args = FluentArgs::new();
+            args.set("path", plan.root.render());
+            return translate_args("emulator-scan-not-a-directory", &args);
+        }
+
+        let mut out = String::new();
+        if plan.add.is_empty() {
+            if plan.already.is_empty() && plan.ambiguous.is_empty() && plan.tied.is_empty() {
+                let _ = writeln!(out, "{}", translate("emulator-scan-nothing"));
+            } else {
+                let _ = writeln!(out, "{}", translate("emulator-scan-nothing-to-add"));
+            }
+        } else {
+            let _ = writeln!(out, "{}", translate("emulator-scan-add"));
+            for found in &plan.add {
+                let _ = writeln!(
+                    out,
+                    "{}",
+                    self.emulator_scan_folder_line(found.app.name(), &found.path.render(), found.saves)
+                );
+            }
+        }
+
+        if !plan.already.is_empty() {
+            let _ = writeln!(out);
+            let _ = writeln!(out, "{}", translate("emulator-scan-already"));
+            for found in &plan.already {
+                let _ = writeln!(out, "{}: {}", found.app.name(), found.path.render());
+            }
+        }
+
+        if !plan.ambiguous.is_empty() {
+            let _ = writeln!(out);
+            let _ = writeln!(out, "{}", translate("emulator-scan-ambiguous"));
+            for group in &plan.ambiguous {
+                let _ = writeln!(out, "{}", group.app.name());
+                for path in &group.paths {
+                    let _ = writeln!(out, "  {}", path.render());
+                }
+            }
+        }
+
+        if !plan.tied.is_empty() {
+            let _ = writeln!(out);
+            let _ = writeln!(out, "{}", translate("emulator-scan-tied"));
+            for tied in &plan.tied {
+                let names = tied.apps.iter().map(|app| app.name()).collect::<Vec<_>>().join(", ");
+                let _ = writeln!(out, "{}", tied.path.render());
+                let _ = writeln!(out, "  {names}");
+            }
+        }
+
+        if plan.truncated {
+            let _ = writeln!(out);
+            let _ = writeln!(out, "{}", translate("emulator-scan-truncated"));
+        }
+
+        out
+    }
+
+    fn emulator_scan_folder_line(&self, name: &str, path: &str, saves: usize) -> String {
+        let mut args = FluentArgs::new();
+        args.set("name", name);
+        args.set("path", path);
+        args.set("saves", saves.to_string());
+        translate_args("emulator-scan-folder", &args)
+    }
+
     pub fn emulator_coming_soon(&self) -> String {
         translate("emulator-coming-soon")
     }
