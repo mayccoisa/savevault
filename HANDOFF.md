@@ -475,6 +475,27 @@ outra máquina): backup dos dois jogos, restauração numa instalação com **ou
 reancorando os 4 arquivos sozinha, recusa com dois perfis, e recusa com nenhum, sempre com saída 1 e
 **nenhuma pasta fantasma**.
 
+### 5.11 Varredura de uma pasta pai — FEITO
+
+O contrato era "aponte a pasta do emulador". A aba só aceitava a pasta de dados exata, uma por
+emulador, e `data_root_at` não olhava para dentro. Quem apontava `D:\Emulators`, ou a pasta do
+programa do PPSSPP, não tinha o que fazer.
+
+Agora `scan_directory` percorre a pasta apontada com teto de profundidade (4) e de diretórios
+(4096), sem seguir link simbólico. A assinatura que já existia decide o que é pasta de dados.
+A pasta do programa não é proposta quando o dado mora um nível abaixo (`memstick` no PPSSPP,
+`user` no shadPS4). No RPCS3, `portable/` existente substitui a pasta do executável, como
+`fs::get_config_dir` faz. Empate (Eden/Sudachi sem nome que separe, ou duas pastas do mesmo
+emulador) não vira escolha: a tela lista e não grava, e `--apply` também não grava.
+
+A tela é a aba Emuladores, botão **Varrer uma pasta**, com confirmação no molde de
+`ConfirmAddMissingRoots`. O comando é `emulators --scan <pasta>` e `--apply`.
+
+Provado com árvore sintética: descoberta positiva (container com DuckStation, PCSX2, Eden,
+PPSSPP, RPCS3, shadPS4 e Xenia, inclusive instalação versus pasta de dados), negativa (pasta
+que não é emulador), ambígua (dois DuckStation, e pasta Switch sem nome), e o teto de
+profundidade e de diretórios.
+
 ## 6. Pendências de verificação, herdadas
 
 Confirmado na documentação oficial: pasta de dados do DuckStation, `portable.txt`, e o formato do
@@ -570,6 +591,14 @@ Se esta sessão está rodando sem o Maycon acompanhando:
 - **Não** faça push em `master` com teste vermelho. O baseline é **363 verdes no `--lib`** (24
   filtrados, os de registro) e **32 no `--bin ludusavi`**. Os dois: `--lib` não vê a interface,
   porque o `gui` mora no `main.rs` e não no `lib.rs`, e passa dizendo "ok" sem ter rodado nada dela.
+- Seis testes já falham no Ubuntu desde pelo menos a `savevault-v0.14.0` (no CI do master: 369
+  passaram, os mesmos 6 falharam). São `an_emulator_backup_folder_carries_the_title`,
+  `an_emulator_backup_goes_under_the_emulator_folder`, `an_older_emulator_backup_is_moved_and_still_found`,
+  `re_anchors_onto_the_current_data_folder`, `re_anchors_each_area_onto_its_own_subfolder` e
+  `matches_the_recorded_folder_ignoring_case`. Comparam caminho com a semântica de maiúsculas do
+  Windows. O produto é Windows-first: não mude o comportamento da restauração só para deixar o
+  Linux verde. No macOS o CI ainda reescreve `/var` para `/private/var` e falha um conjunto maior
+  pelo mesmo motivo de identidade de caminho.
 - **Não** toque em pasta real de emulador de ninguém. Todo teste usa pasta sintética em diretório
   temporário, e modo portátil (`ludusavi.portable` ao lado do executável) para não mexer na
   configuração real.

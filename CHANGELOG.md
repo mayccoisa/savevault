@@ -3,6 +3,12 @@
 SaveVault is a fork of [Ludusavi](https://github.com/mtkennerly/ludusavi) by Michael Kennerly.
 Everything under "Inherited from Ludusavi" is the upstream history, with its own version numbers.
 
+## SaveVault (não publicado)
+
+* Added:
+  * **Aponte uma pasta e os emuladores dentro dela são encontrados.** Na aba Emuladores, "Varrer uma pasta" aceita a pasta onde vários emuladores convivem, ou a pasta de um só. O programa reconhece as pastas de dados — o memory stick do PPSSPP, a pasta `user` do shadPS4, a `portable` do RPCS3 — e pede confirmação antes de gravar. Se houver mais de uma pasta para o mesmo emulador, ou uma pasta que serve a dois, nenhuma é escolhida.
+  * O comando `emulators --scan <pasta>` mostra o mesmo resultado. `--apply` grava só as pastas que não deixam dúvida.
+
 ## SaveVault v0.14.0 (2026-10-19)
 
 * Changed:

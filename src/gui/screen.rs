@@ -645,6 +645,7 @@ impl Emulators {
         Row::new()
             .spacing(design::space::SM)
             .align_y(Alignment::Center)
+            .push(button::scan_emulator_directory())
             .push(button::refresh_emulators())
     }
 

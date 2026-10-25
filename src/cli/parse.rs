@@ -430,13 +430,24 @@ pub enum Subcommand {
     },
     /// Report what is known about the emulators on this system.
     ///
-    /// Prints, for each supported emulator, the candidate data folders, whether each one matched
-    /// the folder signature, and the games found with their media code and title. Use this to
-    /// check what the app detects before trusting a backup or a restore.
+    /// Without `--scan`, prints every candidate data folder, whether it matched the folder
+    /// signature, and the games found. With `--scan`, walks that folder — a parent that holds
+    /// several emulators, one emulator's install folder, or a data folder — and proposes the
+    /// data folders the signatures recognize. A tie, or two folders for one emulator, is
+    /// reported and not chosen. `--apply` writes only the unambiguous proposals.
     Emulators {
         /// Print information to stdout in machine-readable JSON.
         #[clap(long)]
         api: bool,
+
+        /// Folder to walk in search of emulator data folders.
+        #[clap(long, value_parser = parse_strict_path)]
+        scan: Option<StrictPath>,
+
+        /// Add the unambiguous data folders from `--scan` to the config.
+        /// Ambiguous matches are left untouched.
+        #[clap(long, requires = "scan")]
+        apply: bool,
     },
     /// Report where each game comes from: an emulator, a store, or nowhere we could tell.
     ///

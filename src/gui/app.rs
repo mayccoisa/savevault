@@ -1747,6 +1747,42 @@ impl App {
                 self.emulators_screen.refresh(&self.config);
                 Task::none()
             }
+            Message::ScanEmulatorDirectory => Task::future(async move {
+                let choice = async move { rfd::AsyncFileDialog::new().pick_folder().await }.await;
+                match choice {
+                    Some(folder) => {
+                        let path = crate::prelude::StrictPath::from(folder.path().to_path_buf());
+                        Message::EmulatorDirectoryScanned(crate::scan::emulator::scan_directory(&path))
+                    }
+                    None => Message::Ignore,
+                }
+            }),
+            Message::EmulatorDirectoryScanned(scan) => {
+                let plan = scan.plan(&self.config.roots);
+                self.show_modal(Modal::EmulatorDirectoryScan(plan))
+            }
+            Message::ConfirmEmulatorDirectoryScan(missing) => {
+                for root in missing {
+                    let path = root.path().render();
+                    let lutris_database = root.lutris_database().map(|x| x.render()).unwrap_or_default();
+
+                    if let Some(updated) = self.config.merge_root(&root) {
+                        self.text_histories.roots[updated].path.push(&path);
+                        self.text_histories.roots[updated]
+                            .lutris_database
+                            .push(&lutris_database);
+                    } else {
+                        self.text_histories.roots.push(RootHistory {
+                            path: TextHistory::raw(&path),
+                            lutris_database: TextHistory::raw(&lutris_database),
+                        });
+                        self.config.roots.push(root);
+                    }
+                }
+                self.save_config();
+                self.emulators_screen.refresh(&self.config);
+                self.close_specific_modal(modal::Kind::EmulatorDirectoryScan)
+            }
             Message::CloseModal => self.close_modal(),
             Message::Exit { user } => {
                 if self.operation.idle() || (user && self.exiting) {
@@ -3273,6 +3309,9 @@ impl App {
                 Task::none()
             }
             Message::OpenRegistry(item) => {
+                // Read on Windows only. Other targets still bind the name, and CI denies it.
+                #[cfg(not(windows))]
+                let _ = item;
                 #[cfg(windows)]
                 {
                     use windows::{

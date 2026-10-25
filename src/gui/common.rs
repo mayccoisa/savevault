@@ -143,6 +143,12 @@ pub enum Message {
     /// É explícito, e não recalculado a cada quadro, porque o diagnóstico lista pastas em disco:
     /// fazer isso no laço de desenho travaria a interface.
     RefreshEmulators,
+    /// Pick a folder and look inside it for emulator data folders.
+    ScanEmulatorDirectory,
+    /// The walk finished. The plan against the current config is built on the UI thread.
+    EmulatorDirectoryScanned(crate::scan::emulator::DirectoryScan),
+    /// Store the unambiguous data folders from a directory scan.
+    ConfirmEmulatorDirectoryScan(Vec<Root>),
     ConfirmAddMissingRoots(Vec<Root>),
     SwitchScreen(Screen),
     ToggleGameListEntryExpanded {

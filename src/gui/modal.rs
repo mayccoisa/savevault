@@ -125,6 +125,7 @@ pub enum Kind {
     ConfirmRestore,
     NoMissingRoots,
     ConfirmAddMissingRoots,
+    EmulatorDirectoryScan,
     BackupValidation,
     AppUpdate,
     UpdatingManifest,
@@ -153,6 +154,7 @@ pub enum Modal {
     },
     NoMissingRoots,
     ConfirmAddMissingRoots(Vec<Root>),
+    EmulatorDirectoryScan(crate::scan::emulator::ScanPlan),
     BackupValidation {
         /// Any games with invalid backups.
         games: BTreeSet<String>,
@@ -191,6 +193,7 @@ impl Modal {
             Modal::ConfirmRestore { .. } => Kind::ConfirmRestore,
             Modal::NoMissingRoots => Kind::NoMissingRoots,
             Modal::ConfirmAddMissingRoots(..) => Kind::ConfirmAddMissingRoots,
+            Modal::EmulatorDirectoryScan(..) => Kind::EmulatorDirectoryScan,
             Modal::BackupValidation { .. } => Kind::BackupValidation,
             Modal::AppUpdate { .. } => Kind::AppUpdate,
             Modal::UpdatingManifest => Kind::UpdatingManifest,
@@ -213,6 +216,7 @@ impl Modal {
             Modal::ConfirmRestore { .. } => false,
             Modal::NoMissingRoots => false,
             Modal::ConfirmAddMissingRoots(..) => false,
+            Modal::EmulatorDirectoryScan(..) => false,
             Modal::BackupValidation { .. } => false,
             Modal::AppUpdate { .. } => false,
             Modal::UpdatingManifest => false,
@@ -249,6 +253,13 @@ impl Modal {
             }
             Self::ConfirmCloudSync { state, .. } => {
                 if state.done() {
+                    ModalVariant::Info
+                } else {
+                    ModalVariant::Confirm
+                }
+            }
+            Self::EmulatorDirectoryScan(plan) => {
+                if plan.add.is_empty() {
                     ModalVariant::Info
                 } else {
                     ModalVariant::Confirm
@@ -298,6 +309,7 @@ impl Modal {
             Self::ConfigureWebDavRemote { .. } => RemoteChoice::WebDav.to_string(),
             Self::GameNotes { game, .. } => game.clone(),
             Self::ActiveScanGames => "".to_string(),
+            Self::EmulatorDirectoryScan(plan) => TRANSLATOR.emulator_directory_scan(plan),
         }
     }
 
@@ -321,6 +333,13 @@ impl Modal {
                 games: games.clone(),
             })),
             Self::ConfirmAddMissingRoots(missing) => Some(Message::ConfirmAddMissingRoots(missing.clone())),
+            Self::EmulatorDirectoryScan(plan) => {
+                if plan.add.is_empty() {
+                    Some(Message::CloseModal)
+                } else {
+                    Some(Message::ConfirmEmulatorDirectoryScan(plan.roots_to_add()))
+                }
+            }
             Self::AppUpdate { release } => Some(Message::OpenUrlAndCloseModal(release.url.clone())),
             Self::UpdatingManifest => None,
             Self::ConfirmCloudSync { direction, state, .. } => {
@@ -434,6 +453,7 @@ impl Modal {
             | Self::ConfigureSmbRemote { .. }
             | Self::ConfigureWebDavRemote { .. }
             | Self::GameNotes { .. }
+            | Self::EmulatorDirectoryScan(_)
             | Self::ActiveScanGames => vec![],
         }
     }
@@ -455,7 +475,8 @@ impl Modal {
             | Self::NoMissingRoots
             | Self::ConfirmAddMissingRoots(_)
             | Self::AppUpdate { .. }
-            | Self::UpdatingManifest => (),
+            | Self::UpdatingManifest
+            | Self::EmulatorDirectoryScan(_) => (),
             Self::BackupValidation { games } => {
                 for game in games.iter().sorted() {
                     col = col.push(text(game))
@@ -633,6 +654,7 @@ impl Modal {
             | Self::ConfigureSmbRemote { .. }
             | Self::ConfigureWebDavRemote { .. }
             | Self::GameNotes { .. }
+            | Self::EmulatorDirectoryScan(_)
             | Self::ActiveScanGames => (),
         }
     }
@@ -672,6 +694,7 @@ impl Modal {
             | Self::ConfigureSmbRemote { .. }
             | Self::ConfigureWebDavRemote { .. }
             | Self::GameNotes { .. }
+            | Self::EmulatorDirectoryScan(_)
             | Self::ActiveScanGames => (),
         }
     }
@@ -695,6 +718,7 @@ impl Modal {
             | Self::ConfigureSmbRemote { .. }
             | Self::ConfigureWebDavRemote { .. }
             | Self::GameNotes { .. }
+            | Self::EmulatorDirectoryScan(_)
             | Self::ActiveScanGames => (),
         }
     }
@@ -716,6 +740,7 @@ impl Modal {
             | Self::ConfigureSmbRemote { .. }
             | Self::ConfigureWebDavRemote { .. }
             | Self::GameNotes { .. }
+            | Self::EmulatorDirectoryScan(_)
             | Self::ActiveScanGames => false,
         }
     }
@@ -737,6 +762,7 @@ impl Modal {
             | Self::ConfigureSmbRemote { .. }
             | Self::ConfigureWebDavRemote { .. }
             | Self::GameNotes { .. }
+            | Self::EmulatorDirectoryScan(_)
             | Self::ActiveScanGames => 2,
         }
     }

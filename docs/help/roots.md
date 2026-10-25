@@ -74,4 +74,37 @@ The only case where it may make a difference is if Ludusavi finds secondary mani
 *and* those manfiests contain overlapping entries for the same game,
 in which case Ludusavi will merge the data together in the order that it finds them.
 
+## Emulator roots
+
+An emulator root is that emulator's **data folder**, not necessarily the folder that holds the
+program. SaveVault tells them apart with each emulator's folder signature:
+
+* PPSSPP's data folder is the memory stick (`memstick`, with `PSP` inside it), not the folder
+  that contains the executable. A non-portable install keeps that memory stick in Documents.
+* A portable shadPS4 keeps data in the `user` folder next to the executable.
+* RPCS3 keeps data in a `portable` folder when that folder exists, and otherwise in the
+  folder that contains the executable.
+* DuckStation, PCSX2, Xenia, Eden, and Sudachi are recognized when the folder you point at
+  (or a folder inside it) matches their signature. Eden and Sudachi share a layout; the folder
+  name (`eden`, `sudachi`) is what tells them apart.
+
+On the Emulators screen, **Scan a folder** accepts a parent directory (for example `D:/Emulators`)
+or a single emulator's folder. The scan is bounded: it does not walk the whole drive. It then
+asks before writing anything.
+
+When one data folder is found for an emulator, confirming adds it as an emulator root.
+When none is found, nothing is invented. When two or more match the same emulator, or one
+folder matches two emulators and its name does not say which, nothing is chosen — add the
+folder you want with **Add folder** on that emulator's card.
+
+The same walk is available from the command line:
+
+```
+ludusavi emulators --scan D:/Emulators
+ludusavi emulators --scan D:/Emulators --apply
+```
+
+`--apply` writes only the unambiguous folders. Ambiguous matches are printed and left untouched.
+Add `--api` for JSON.
+
 [globs]: https://en.wikipedia.org/wiki/Glob_(programming)

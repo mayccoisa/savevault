@@ -256,6 +256,14 @@ pub struct Profile {
     /// Arquivos que, ao lado do executável, marcam instalação portátil. Nesse caso a pasta de
     /// dados é a própria pasta do executável. Mais de um porque o PCSX2 aceita dois nomes.
     pub portable_markers: &'static [&'static str],
+    /// Subpasta que, quando existe, é a pasta de dados no lugar da pasta que casou a assinatura.
+    ///
+    /// O RPCS3 faz isso: `fs::get_config_dir` (`Utilities/File.cpp`) usa `portable/` sempre que
+    /// esse diretório existe, mesmo que a pasta do executável também pareça uma pasta de dados.
+    /// Os outros emuladores deixam isto vazio. A pasta do programa do PPSSPP não casa a
+    /// assinatura — quem casa é `memstick/` — e a do shadPS4 portátil também não: quem casa é
+    /// `user/`. As duas aparecem ao descer, sem regra extra.
+    pub portable_data_dir: Option<&'static str>,
     pub signature: Signature,
     pub areas: &'static [AreaSpec],
 }
@@ -268,6 +276,7 @@ const DUCKSTATION: Profile = Profile {
         Anchor::Common(CommonPath::Document, "DuckStation"),
     ],
     portable_markers: &["portable.txt"],
+    portable_data_dir: None,
     // A marca é a CONFIGURAÇÃO, não a pasta de saves. Ver a nota em `Signature`: exigir
     // `memcards/` faria o emulador desaparecer justamente na máquina onde o save se perdeu.
     signature: Signature {
@@ -309,6 +318,7 @@ const PCSX2: Profile = Profile {
     name: "PCSX2",
     data_roots: &[Anchor::Common(CommonPath::Document, "PCSX2")],
     portable_markers: &["portable.ini", "portable.txt"],
+    portable_data_dir: None,
     // `inis/` é a pasta de configuração, e é a marca própria do PCSX2. `memcards/` não entra:
     // é dado do usuário, e pode ter sumido justamente quando ele vai restaurar.
     signature: Signature {
@@ -385,6 +395,7 @@ const EDEN: Profile = Profile {
     // marcador. Como isso não está confirmado para o Eden, aqui não se promete portátil: o
     // usuário aponta a pasta como raiz e a assinatura decide.
     portable_markers: &[],
+    portable_data_dir: None,
     signature: SWITCH_SIGNATURE,
     areas: SWITCH_SAVE_AREAS,
 };
@@ -400,6 +411,7 @@ const SUDACHI: Profile = Profile {
     name: "Sudachi",
     data_roots: &[],
     portable_markers: &[],
+    portable_data_dir: None,
     signature: SWITCH_SIGNATURE,
     areas: SWITCH_SAVE_AREAS,
 };
@@ -421,6 +433,7 @@ const XENIA: Profile = Profile {
     // segunda depende de onde o usuário descompactou, ela é apontada à mão.
     data_roots: &[Anchor::Common(CommonPath::Document, "Xenia")],
     portable_markers: &["portable.txt"],
+    portable_data_dir: None,
     signature: Signature {
         all_of: &[Marker::Dir("content")],
         any_of: &[Marker::Dir("cache"), Marker::File("xenia.config.toml")],
@@ -451,6 +464,7 @@ const PPSSPP: Profile = Profile {
     // O `memstick` do modo portátil é uma PASTA ao lado do executável, e não um arquivo marcador,
     // então não cabe aqui: o usuário aponta essa pasta como raiz e a assinatura decide.
     portable_markers: &[],
+    portable_data_dir: None,
     // `PSP/SYSTEM` é a configuração; `PSP/SAVEDATA` é o dado, e serve só como alternativa para
     // quem ainda não abriu o emulador nesta máquina.
     signature: Signature {
@@ -494,6 +508,8 @@ const RPCS3: Profile = Profile {
     name: "RPCS3",
     data_roots: &[],
     portable_markers: &[],
+    // `portable/` existente substitui a pasta do executável. Ver `portable_data_dir`.
+    portable_data_dir: Some("portable"),
     signature: Signature {
         all_of: &[Marker::Dir("dev_hdd0")],
         any_of: &[Marker::Dir("dev_flash"), Marker::Dir("dev_hdd1"), Marker::Dir("config")],
@@ -541,6 +557,7 @@ const SHADPS4: Profile = Profile {
     // O modo portátil é uma PASTA `user` ao lado do executável, e não um arquivo marcador: a
     // pasta apontada É essa `user`, então não há o que marcar aqui.
     portable_markers: &[],
+    portable_data_dir: None,
     signature: Signature {
         all_of: &[Marker::Dir("shader"), Marker::Dir("sys_modules")],
         any_of: &[Marker::Dir("home"), Marker::Dir("log")],
@@ -563,6 +580,19 @@ const SHADPS4: Profile = Profile {
         },
     ],
 };
+
+/// What [`App::classify`] decided about one folder.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum FolderMatch {
+    /// No supported emulator's signature matches.
+    None,
+    /// Exactly one emulator, or a tie broken by the folder's own name.
+    One(App),
+    /// More than one emulator matches and the folder name does not say which.
+    ///
+    /// The list is every match, in [`App::ALL`] order. Nothing in it was chosen.
+    Tied(Vec<App>),
+}
 
 impl App {
     pub const ALL: &'static [Self] = &[
@@ -617,6 +647,18 @@ impl App {
     /// é evidência do disco, e não preferência: o nome da pasta de dados
     /// (`...\eden`, `...\sudachi`). Sem isso, continua `None`.
     pub fn detect(data_root: &StrictPath) -> Option<Self> {
+        match Self::classify(data_root) {
+            FolderMatch::One(app) => Some(app),
+            FolderMatch::None | FolderMatch::Tied(_) => None,
+        }
+    }
+
+    /// Same decision as [`Self::detect`], but a tie stays visible.
+    ///
+    /// `detect` collapses "nothing matched" and "several matched and the folder name did not say
+    /// which" into `None`. A directory scan has to tell those apart: the first is a miss, the
+    /// second is a refusal to guess.
+    pub fn classify(data_root: &StrictPath) -> FolderMatch {
         let matching: Vec<Self> = Self::ALL
             .iter()
             .copied()
@@ -624,18 +666,20 @@ impl App {
             .collect();
 
         match matching.as_slice() {
-            [] => None,
-            [only] => Some(*only),
+            [] => FolderMatch::None,
+            [only] => FolderMatch::One(*only),
             several => {
-                let leaf = data_root.leaf()?;
+                let Some(leaf) = data_root.leaf() else {
+                    return FolderMatch::Tied(several.to_vec());
+                };
                 let named: Vec<Self> = several
                     .iter()
                     .copied()
                     .filter(|app| app.name().eq_ignore_ascii_case(&leaf))
                     .collect();
                 match named.as_slice() {
-                    [only] => Some(*only),
-                    _ => None,
+                    [only] => FolderMatch::One(*only),
+                    _ => FolderMatch::Tied(several.to_vec()),
                 }
             }
         }
@@ -1460,6 +1504,461 @@ impl Diagnosis {
 
         out
     }
+}
+
+/// How many levels below the folder the user pointed at are still walked.
+///
+/// The pointed folder itself is depth 0. Four levels covers a container of installs
+/// (`Emulators/<app>`), the data folder one step inside an install (`PPSSPP/memstick`,
+/// `shadPS4/user`, `RPCS3/portable`), and one extra launcher directory in between.
+/// It does not walk a whole drive.
+pub const DIRECTORY_SCAN_MAX_DEPTH: usize = 4;
+
+/// Stop after this many directories so a huge tree cannot turn into a full-disk scan.
+pub const DIRECTORY_SCAN_MAX_DIRECTORIES: usize = 4_096;
+
+/// One folder the signature recognized as exactly one emulator's data root.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct FoundDataFolder {
+    pub app: App,
+    /// The data folder, not the program folder when those differ.
+    pub path: StrictPath,
+    pub saves: usize,
+}
+
+/// A folder that matched more than one emulator and could not be told apart.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct TiedDataFolder {
+    pub path: StrictPath,
+    pub apps: Vec<App>,
+}
+
+/// What a bounded walk found. Read-only: nothing here is written to the config.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct DirectoryScan {
+    pub root: StrictPath,
+    pub found: Vec<FoundDataFolder>,
+    pub tied: Vec<TiedDataFolder>,
+    /// The walk hit [`DIRECTORY_SCAN_MAX_DIRECTORIES`]. Results may be incomplete.
+    pub truncated: bool,
+    /// The pointed path is missing or is not a directory.
+    pub not_a_directory: bool,
+}
+
+/// Several data folders for one emulator. None of them was chosen.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct AmbiguousEmulator {
+    pub app: App,
+    pub paths: Vec<StrictPath>,
+}
+
+/// Which discoveries are safe to store as [`Root::Emulator`].
+///
+/// A single data folder for an emulator that does not already have a different one configured
+/// is safe. Zero folders is not a guess, and more than one is not a guess either: both stay
+/// out of `add`. That is the same rule [`Roots::data_root`] already enforces at restore time.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ScanPlan {
+    pub root: StrictPath,
+    pub add: Vec<FoundDataFolder>,
+    /// The only discovered folder is already a configured root.
+    pub already: Vec<FoundDataFolder>,
+    pub ambiguous: Vec<AmbiguousEmulator>,
+    pub tied: Vec<TiedDataFolder>,
+    pub truncated: bool,
+    pub not_a_directory: bool,
+}
+
+/// Walk `root` and recognize emulator data folders by the existing signatures.
+///
+/// Accepts a parent that holds several emulators, or one emulator's install folder, or the
+/// data folder itself. The program folder is not proposed when the data lives one level down
+/// (`memstick` for PPSSPP, `user` for a portable shadPS4). For RPCS3, an existing `portable/`
+/// directory replaces the executable folder, matching `fs::get_config_dir`.
+pub fn scan_directory(root: &StrictPath) -> DirectoryScan {
+    scan_directory_limited(root, DIRECTORY_SCAN_MAX_DEPTH, DIRECTORY_SCAN_MAX_DIRECTORIES)
+}
+
+fn scan_directory_limited(root: &StrictPath, max_depth: usize, max_directories: usize) -> DirectoryScan {
+    let root = root.interpreted().unwrap_or_else(|_| root.clone());
+
+    if root.raw().trim().is_empty() || !root.is_dir() {
+        return DirectoryScan {
+            root,
+            found: vec![],
+            tied: vec![],
+            truncated: false,
+            not_a_directory: true,
+        };
+    }
+
+    let mut found = vec![];
+    let mut tied = vec![];
+    let mut queue = std::collections::VecDeque::new();
+    queue.push_back((root.clone(), 0usize));
+    let mut visited = 0usize;
+    let mut truncated = false;
+
+    while let Some((path, depth)) = queue.pop_front() {
+        if visited >= max_directories {
+            truncated = true;
+            break;
+        }
+        visited += 1;
+
+        match App::classify(&path) {
+            FolderMatch::One(app) => match portable_data_choice(app, &path) {
+                PortableDataChoice::Itself => push_found(&mut found, found_folder(app, path)),
+                PortableDataChoice::Child(child) => push_found(&mut found, found_folder(app, child)),
+                // The emulator's own rule says the data lives in the override directory, and
+                // that directory is not a recognizable data folder yet. The parent is not it.
+                PortableDataChoice::Suppressed => {}
+            },
+            FolderMatch::Tied(apps) => tied.push(TiedDataFolder { path, apps }),
+            FolderMatch::None => {
+                if depth < max_depth {
+                    for child in walk_child_dirs(&path) {
+                        queue.push_back((child, depth + 1));
+                    }
+                }
+            }
+        }
+    }
+
+    if !queue.is_empty() {
+        truncated = true;
+    }
+
+    found.sort_by(|a, b| {
+        a.path
+            .render()
+            .cmp(&b.path.render())
+            .then_with(|| a.app.name().cmp(b.app.name()))
+    });
+    tied.sort_by_key(|folder| folder.path.render());
+
+    DirectoryScan {
+        root,
+        found,
+        tied,
+        truncated,
+        not_a_directory: false,
+    }
+}
+
+/// Where the data folder is, once a directory has matched one emulator.
+enum PortableDataChoice {
+    Itself,
+    Child(StrictPath),
+    Suppressed,
+}
+
+fn portable_data_choice(app: App, path: &StrictPath) -> PortableDataChoice {
+    let Some(name) = app.profile().portable_data_dir else {
+        return PortableDataChoice::Itself;
+    };
+    let child = path.joined(name);
+    if !child.is_dir() {
+        return PortableDataChoice::Itself;
+    }
+    if app.matches_data_root(&child) {
+        PortableDataChoice::Child(child)
+    } else {
+        PortableDataChoice::Suppressed
+    }
+}
+
+fn found_folder(app: App, path: StrictPath) -> FoundDataFolder {
+    let saves = discover_saves(app, &path).len();
+    FoundDataFolder { app, path, saves }
+}
+
+fn push_found(found: &mut Vec<FoundDataFolder>, folder: FoundDataFolder) {
+    if found
+        .iter()
+        .any(|known| known.app == folder.app && known.path.equivalent(&folder.path))
+    {
+        return;
+    }
+    found.push(folder);
+}
+
+/// Direct child directories, in a stable order.
+///
+/// Symlinks are not followed: a link back to a parent would walk forever, and a link out of
+/// the tree the user pointed at is not part of that tree. Dot-directories are skipped so a
+/// `.git` or similar is not treated as an emulator install.
+fn walk_child_dirs(path: &StrictPath) -> Vec<StrictPath> {
+    let Ok(entries) = path.read_dir() else {
+        return vec![];
+    };
+    let mut dirs = vec![];
+    for entry in entries.flatten() {
+        let Ok(kind) = entry.file_type() else {
+            continue;
+        };
+        if kind.is_symlink() || !kind.is_dir() {
+            continue;
+        }
+        let name = entry.file_name();
+        let name = name.to_string_lossy();
+        if name.starts_with('.') {
+            continue;
+        }
+        dirs.push(StrictPath::from(entry.path()));
+    }
+    dirs.sort_by_key(|path| path.render());
+    dirs
+}
+
+impl DirectoryScan {
+    pub fn plan(&self, roots: &[Root]) -> ScanPlan {
+        let mut add = vec![];
+        let mut already = vec![];
+        let mut ambiguous = vec![];
+
+        for app in App::ALL {
+            let mut discovered: Vec<&FoundDataFolder> = self.found.iter().filter(|folder| folder.app == *app).collect();
+            discovered.sort_by_key(|folder| folder.path.render());
+
+            let configured = configured_data_roots(roots, *app);
+
+            match discovered.as_slice() {
+                [] => {}
+                [only] => {
+                    let same = configured.iter().any(|path| path.equivalent(&only.path));
+                    let different = configured.iter().any(|path| !path.equivalent(&only.path));
+                    if different {
+                        ambiguous.push(AmbiguousEmulator {
+                            app: *app,
+                            paths: union_paths(&configured, std::slice::from_ref(&only.path)),
+                        });
+                    } else if same {
+                        already.push((*only).clone());
+                    } else {
+                        add.push((*only).clone());
+                    }
+                }
+                several => {
+                    let discovered_paths: Vec<StrictPath> = several.iter().map(|folder| folder.path.clone()).collect();
+                    ambiguous.push(AmbiguousEmulator {
+                        app: *app,
+                        paths: union_paths(&configured, &discovered_paths),
+                    });
+                }
+            }
+        }
+
+        ScanPlan {
+            root: self.root.clone(),
+            add,
+            already,
+            ambiguous,
+            tied: self.tied.clone(),
+            truncated: self.truncated,
+            not_a_directory: self.not_a_directory,
+        }
+    }
+}
+
+/// Configured roots that this emulator will actually use.
+///
+/// A root whose path does not match the signature is ignored, same as [`Roots::for_config`].
+/// A system default that was never stored is not a configured root: pointing at a portable
+/// install is how the user replaces that default.
+fn configured_data_roots(roots: &[Root], app: App) -> Vec<StrictPath> {
+    let mut out: Vec<StrictPath> = vec![];
+    for root in roots {
+        let Root::Emulator(emulator) = root else {
+            continue;
+        };
+        if emulator.app.is_some_and(|configured| configured != app) {
+            continue;
+        }
+        let path = emulator.path.interpreted().unwrap_or_else(|_| emulator.path.clone());
+        if emulator.app.is_none() && App::detect(&path) != Some(app) {
+            continue;
+        }
+        if app.data_root_at(&path).is_none() {
+            continue;
+        }
+        if out.iter().any(|known| known.equivalent(&path)) {
+            continue;
+        }
+        out.push(path);
+    }
+    out
+}
+
+fn union_paths(configured: &[StrictPath], discovered: &[StrictPath]) -> Vec<StrictPath> {
+    let mut paths = configured.to_vec();
+    for path in discovered {
+        if !paths.iter().any(|known| known.equivalent(path)) {
+            paths.push(path.clone());
+        }
+    }
+    paths.sort_by_key(|path| path.render());
+    paths
+}
+
+impl ScanPlan {
+    /// Roots safe to append. Ambiguous and tied matches are absent on purpose.
+    pub fn roots_to_add(&self) -> Vec<Root> {
+        self.add
+            .iter()
+            .map(|found| {
+                Root::Emulator(crate::resource::config::root::Emulator {
+                    path: found.path.rendered(),
+                    app: Some(found.app),
+                })
+            })
+            .collect()
+    }
+
+    pub fn render(&self, apply: bool) -> String {
+        use std::fmt::Write;
+        let mut out = String::new();
+
+        if self.not_a_directory {
+            let _ = writeln!(out, "Not a directory: {}", self.root.render());
+            return out;
+        }
+
+        let _ = writeln!(out, "Scanned {}", self.root.render());
+        let _ = writeln!(out);
+
+        if self.add.is_empty() && self.already.is_empty() && self.ambiguous.is_empty() && self.tied.is_empty() {
+            let _ = writeln!(out, "No emulator data folder was recognized.");
+        }
+
+        for found in &self.add {
+            let _ = writeln!(
+                out,
+                "add  {}  {}  ({} save file(s))",
+                found.app.name(),
+                found.path.render(),
+                found.saves
+            );
+        }
+        for found in &self.already {
+            let _ = writeln!(out, "already configured  {}  {}", found.app.name(), found.path.render());
+        }
+        for group in &self.ambiguous {
+            let _ = writeln!(
+                out,
+                "AMBIGUOUS  {}  (not chosen; {} data folders)",
+                group.app.name(),
+                group.paths.len()
+            );
+            for path in &group.paths {
+                let _ = writeln!(out, "  {}", path.render());
+            }
+        }
+        for tied in &self.tied {
+            let names = tied.apps.iter().map(|app| app.name()).collect::<Vec<_>>().join(", ");
+            let _ = writeln!(out, "TIED  {}  matches {names}; none chosen", tied.path.render());
+        }
+
+        if self.truncated {
+            let _ = writeln!(out);
+            let _ = writeln!(
+                out,
+                "Scan stopped after {DIRECTORY_SCAN_MAX_DIRECTORIES} directories. A folder deeper in this tree may have been missed."
+            );
+        }
+
+        let _ = writeln!(out);
+        if apply {
+            let count = self.add.len();
+            let _ = writeln!(out, "Added {count} data folder(s) to the config.");
+        } else if !self.add.is_empty() {
+            let _ = writeln!(out, "Nothing was written. Pass --apply to add the unambiguous folders.");
+        }
+
+        out
+    }
+
+    /// Machine-readable form of [`Self::render`].
+    ///
+    /// `applied` lists the folders that were written. It is empty when the command only reported.
+    pub fn api_report(&self, applied: bool) -> ScanReport {
+        let folder = |found: &FoundDataFolder| ScanReportFolder {
+            app: found.app,
+            path: found.path.render(),
+            saves: found.saves,
+        };
+        ScanReport {
+            root: self.root.render(),
+            not_a_directory: self.not_a_directory,
+            truncated: self.truncated,
+            add: self.add.iter().map(folder).collect(),
+            already: self.already.iter().map(folder).collect(),
+            ambiguous: self
+                .ambiguous
+                .iter()
+                .map(|group| ScanReportAmbiguous {
+                    app: group.app,
+                    paths: group.paths.iter().map(|path| path.render()).collect(),
+                })
+                .collect(),
+            tied: self
+                .tied
+                .iter()
+                .map(|tied| ScanReportTied {
+                    path: tied.path.render(),
+                    apps: tied.apps.clone(),
+                })
+                .collect(),
+            applied: if applied {
+                self.add.iter().map(folder).collect()
+            } else {
+                vec![]
+            },
+        }
+    }
+}
+
+/// JSON shape of a directory scan, for `emulators --scan --api`.
+#[derive(Debug, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ScanReport {
+    pub root: String,
+    pub not_a_directory: bool,
+    pub truncated: bool,
+    pub add: Vec<ScanReportFolder>,
+    pub already: Vec<ScanReportFolder>,
+    pub ambiguous: Vec<ScanReportAmbiguous>,
+    pub tied: Vec<ScanReportTied>,
+    pub applied: Vec<ScanReportFolder>,
+}
+
+#[derive(Debug, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ScanReportFolder {
+    pub app: App,
+    pub path: String,
+    pub saves: usize,
+}
+
+#[derive(Debug, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ScanReportAmbiguous {
+    pub app: App,
+    pub paths: Vec<String>,
+}
+
+#[derive(Debug, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ScanReportTied {
+    pub path: String,
+    pub apps: Vec<App>,
+}
+
+/// Append the unambiguous proposals. Returns what was appended.
+pub fn extend_roots(roots: &mut Vec<Root>, plan: &ScanPlan) -> Vec<Root> {
+    let adding = plan.roots_to_add();
+    roots.extend(adding.iter().cloned());
+    adding
 }
 
 fn push_unique(entries: &mut Vec<(App, StrictPath)>, app: App, path: StrictPath) {
@@ -2345,5 +2844,281 @@ mod tests {
         let roots = Roots::for_config(&roots);
         assert_eq!(None, roots.data_root(App::DuckStation));
         assert_eq!(2, roots.candidates(App::DuckStation).len());
+    }
+
+    /// A parent folder, or one install, laid out the way the profiles describe it.
+    /// A trailing `/` is a directory. Anything else is an empty file.
+    fn fixture(entries: &[&str]) -> (tempfile::TempDir, StrictPath) {
+        let dir = tempfile::tempdir().unwrap();
+        let root = StrictPath::from(dir.path().to_path_buf());
+        for entry in entries {
+            let directory = entry.ends_with('/');
+            let relative = entry.trim_end_matches('/');
+            let path = root.joined(relative);
+            let std_path = path.as_std_path_buf().unwrap();
+            if directory {
+                std::fs::create_dir_all(&std_path).unwrap();
+            } else {
+                if let Some(parent) = std_path.parent() {
+                    std::fs::create_dir_all(parent).unwrap();
+                }
+                std::fs::write(&std_path, b"").unwrap();
+            }
+        }
+        (dir, root)
+    }
+
+    fn assert_added(plan: &ScanPlan, suffixes: &[&str]) {
+        let rendered: Vec<String> = plan.add.iter().map(|found| found.path.render()).collect();
+        assert_eq!(suffixes.len(), rendered.len(), "paths: {rendered:?}");
+        for (path, suffix) in rendered.iter().zip(suffixes) {
+            assert!(
+                path.ends_with(&format!("/{suffix}")),
+                "{path} should end with /{suffix}"
+            );
+        }
+    }
+
+    /// Pointing at a container finds each emulator's data folder, including when that folder
+    /// is one level inside the program folder rather than the program folder itself.
+    #[test]
+    fn scanning_a_parent_finds_each_emulator_data_folder() {
+        let (_dir, root) = fixture(&[
+            "noise/readme.txt",
+            "noise/bios/",
+            "noise/memcards/",
+            "DuckStation/settings.ini",
+            "PCSX2/inis/",
+            "eden/nand/",
+            "eden/config/",
+            "PPSSPP/PPSSPPWindows.exe",
+            "PPSSPP/memstick/PSP/SYSTEM/",
+            "RPCS3/dev_hdd0/",
+            "RPCS3/dev_flash/",
+            "shadPS4/shadPS4.exe",
+            "shadPS4/user/shader/",
+            "shadPS4/user/sys_modules/",
+            "shadPS4/user/home/",
+            "Xenia/content/",
+            "Xenia/xenia.config.toml",
+        ]);
+
+        let plan = scan_directory(&root).plan(&[]);
+
+        // Order follows App::ALL, not the directory listing.
+        assert_added(
+            &plan,
+            &[
+                "DuckStation",
+                "PCSX2",
+                "eden",
+                "PPSSPP/memstick",
+                "RPCS3",
+                "shadPS4/user",
+                "Xenia",
+            ],
+        );
+        assert!(plan.ambiguous.is_empty());
+        assert!(plan.tied.is_empty());
+        assert!(!plan.truncated);
+    }
+
+    /// The folder the user pointed at can itself be the data folder.
+    #[test]
+    fn scanning_one_emulator_folder_finds_that_folder() {
+        let (_dir, root) = fixture(&["settings.ini"]);
+
+        let plan = scan_directory(&root).plan(&[]);
+
+        assert_eq!(1, plan.add.len());
+        assert!(plan.add[0].path.equivalent(&root));
+        assert_eq!(App::DuckStation, plan.add[0].app);
+    }
+
+    /// Memory cards without the install marker are not a data folder. A random tree is not either.
+    #[test]
+    fn scanning_an_unrelated_tree_finds_nothing() {
+        let (_dir, root) = fixture(&["almost/memcards/", "almost/bios/", "readme.txt", "covers/"]);
+
+        let plan = scan_directory(&root).plan(&[]);
+
+        assert!(plan.add.is_empty());
+        assert!(plan.ambiguous.is_empty());
+        assert!(plan.tied.is_empty());
+        assert!(!plan.not_a_directory);
+    }
+
+    #[test]
+    fn scanning_a_missing_path_is_not_a_directory() {
+        let plan = scan_directory(&StrictPath::new("/tmp/savevault-does-not-exist-7409".to_string())).plan(&[]);
+
+        assert!(plan.not_a_directory);
+        assert!(plan.add.is_empty());
+    }
+
+    /// Two installs of one emulator are reported and not chosen.
+    #[test]
+    fn scanning_two_folders_for_one_emulator_stays_ambiguous() {
+        let (_dir, root) = fixture(&["old/settings.ini", "new/settings.ini"]);
+
+        let plan = scan_directory(&root).plan(&[]);
+
+        assert!(plan.add.is_empty());
+        assert_eq!(1, plan.ambiguous.len());
+        assert_eq!(App::DuckStation, plan.ambiguous[0].app);
+        let paths: Vec<String> = plan.ambiguous[0].paths.iter().map(|path| path.render()).collect();
+        assert!(paths[0].ends_with("/new"), "{paths:?}");
+        assert!(paths[1].ends_with("/old"), "{paths:?}");
+    }
+
+    /// Eden and Sudachi share a signature. Without a folder name that says which, neither is chosen.
+    #[test]
+    fn scanning_a_switch_folder_without_a_telling_name_is_a_tie() {
+        let (_dir, root) = fixture(&["machines/nand/", "machines/config/"]);
+
+        let plan = scan_directory(&root).plan(&[]);
+
+        assert!(plan.add.is_empty());
+        assert_eq!(1, plan.tied.len());
+        assert_eq!(vec![App::Eden, App::Sudachi], plan.tied[0].apps);
+        assert!(plan.tied[0].path.render().ends_with("machines"));
+    }
+
+    /// The same signature with the folder named `eden` is Eden, not a tie.
+    #[test]
+    fn scanning_a_folder_named_eden_is_not_a_tie() {
+        let (_dir, root) = fixture(&["eden/nand/", "eden/config/"]);
+
+        let plan = scan_directory(&root).plan(&[]);
+
+        assert_added(&plan, &["eden"]);
+        assert_eq!(App::Eden, plan.add[0].app);
+        assert!(plan.tied.is_empty());
+    }
+
+    /// RPCS3 uses `portable/` as the data folder whenever that directory exists.
+    #[test]
+    fn scanning_rpcs3_prefers_the_portable_directory_over_the_install() {
+        let (_dir, root) = fixture(&[
+            "rpcs3/dev_hdd0/",
+            "rpcs3/config/",
+            "rpcs3/portable/dev_hdd0/",
+            "rpcs3/portable/config/",
+        ]);
+
+        let plan = scan_directory(&root).plan(&[]);
+
+        assert_added(&plan, &["rpcs3/portable"]);
+        assert_eq!(App::Rpcs3, plan.add[0].app);
+    }
+
+    /// An empty `portable/` still means the executable folder is not the data folder.
+    /// The empty directory does not match the signature, so nothing is proposed.
+    #[test]
+    fn scanning_rpcs3_does_not_keep_the_install_when_portable_exists_but_does_not_match() {
+        let (_dir, root) = fixture(&["rpcs3/dev_hdd0/", "rpcs3/config/", "rpcs3/portable/"]);
+
+        let plan = scan_directory(&root).plan(&[]);
+
+        assert!(plan.add.is_empty());
+        assert!(plan.ambiguous.is_empty());
+    }
+
+    /// Saves live inside a data folder. A nested signature there is not a second emulator.
+    #[test]
+    fn scanning_does_not_walk_into_a_recognized_data_folder() {
+        let (_dir, root) = fixture(&["DuckStation/settings.ini", "DuckStation/memcards/inis/"]);
+
+        let plan = scan_directory(&root).plan(&[]);
+
+        assert_added(&plan, &["DuckStation"]);
+        assert!(plan.add.iter().all(|found| found.app == App::DuckStation));
+    }
+
+    #[test]
+    fn scanning_past_the_depth_limit_does_not_find_a_buried_install() {
+        let (_dir, root) = fixture(&["shallow/a/b/c/settings.ini", "deep/a/b/c/d/settings.ini"]);
+
+        let scan = scan_directory_limited(&root, DIRECTORY_SCAN_MAX_DEPTH, DIRECTORY_SCAN_MAX_DIRECTORIES);
+        let plan = scan.plan(&[]);
+
+        assert_added(&plan, &["shallow/a/b/c"]);
+        assert!(!plan.truncated);
+    }
+
+    #[test]
+    fn scanning_stops_when_the_directory_cap_is_hit() {
+        let (_dir, root) = fixture(&["a/", "b/", "c/", "m-duck/settings.ini"]);
+
+        let scan = scan_directory_limited(&root, DIRECTORY_SCAN_MAX_DEPTH, 3);
+        let plan = scan.plan(&[]);
+
+        assert!(plan.truncated);
+        assert!(plan.add.is_empty());
+    }
+
+    #[test]
+    fn a_folder_that_is_already_configured_is_not_proposed_again() {
+        let (_dir, root) = fixture(&["Duck/settings.ini"]);
+        let data = root.joined("Duck");
+        let roots = vec![Root::Emulator(crate::resource::config::root::Emulator {
+            path: data,
+            app: Some(App::DuckStation),
+        })];
+
+        let plan = scan_directory(&root).plan(&roots);
+
+        assert!(plan.add.is_empty());
+        assert_eq!(1, plan.already.len());
+        assert!(plan.ambiguous.is_empty());
+    }
+
+    /// A second folder beside one already configured would make the restore destination ambiguous.
+    #[test]
+    fn a_new_folder_beside_one_already_configured_is_not_chosen() {
+        let (_kept, kept) = fixture(&["settings.ini"]);
+        let (_dir, root) = fixture(&["other/settings.ini"]);
+        let roots = vec![Root::Emulator(crate::resource::config::root::Emulator {
+            path: kept,
+            app: Some(App::DuckStation),
+        })];
+
+        let plan = scan_directory(&root).plan(&roots);
+
+        assert!(plan.add.is_empty());
+        assert_eq!(1, plan.ambiguous.len());
+        assert_eq!(2, plan.ambiguous[0].paths.len());
+    }
+
+    #[test]
+    fn extend_roots_stores_only_the_unambiguous_folders() {
+        // Two DuckStation folders stay ambiguous. PCSX2 is the one folder that can be stored.
+        let (_dir, root) = fixture(&["PCSX2/inis/", "old/settings.ini", "new/settings.ini"]);
+        let scan = scan_directory(&root);
+        let plan = scan.plan(&[]);
+        let mut roots = vec![];
+
+        let added = extend_roots(&mut roots, &plan);
+
+        assert_eq!(1, added.len());
+        assert_eq!(App::Pcsx2, plan.add[0].app);
+        let again = scan.plan(&roots);
+        assert!(again.add.is_empty());
+        assert_eq!(1, again.already.len());
+        assert_eq!(App::Pcsx2, again.already[0].app);
+        assert_eq!(1, again.ambiguous.len());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn scanning_does_not_follow_a_symlink_out_of_the_tree() {
+        let (_real, real) = fixture(&["settings.ini"]);
+        let parent = tempfile::tempdir().unwrap();
+        std::os::unix::fs::symlink(real.as_std_path_buf().unwrap(), parent.path().join("link")).unwrap();
+
+        let plan = scan_directory(&StrictPath::from(parent.path().to_path_buf())).plan(&[]);
+
+        assert!(plan.add.is_empty());
+        assert!(plan.tied.is_empty());
     }
 }
